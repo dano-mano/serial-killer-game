@@ -1,0 +1,13 @@
+# ----------------- #
+# Organization Items
+# ----------------- #
+
+.primer
+.bytedragon/*
+!.bytedragon/session-notes
+
+# ----------------- #
+# AI Tooling
+# ----------------- #
+
+.playwright-mcp
