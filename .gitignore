@@ -5,6 +5,8 @@
 .primer
 .bytedragon/*
 !.bytedragon/session-notes
+!.bytedragon/TECH_RESEARCH.md
+!.bytedragon/RULES.md
 
 # ----------------- #
 # AI Tooling
