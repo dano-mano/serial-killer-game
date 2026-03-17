@@ -3,6 +3,8 @@
 > Browser-based video game technology stack evaluation
 > Research date: 2026-03-15
 
+> Updated: 2026-03-16 — Added testing, linting, logging, and error handling sections
+
 ---
 
 ## Table of Contents
@@ -15,11 +17,15 @@
 6. [Real-Time Communication](#real-time-communication)
 7. [Game State Management](#game-state-management)
 8. [Supporting Technologies](#supporting-technologies)
-9. [Architecture & Project Structure](#architecture--project-structure) (incl. [Centralization Principles](#centralization-principles), [Zero-Trust Security](#zero-trust-security-architecture))
-10. [Deployment Strategy](#deployment-strategy)
-11. [Cost Analysis](#cost-analysis)
-12. [Recommended Stack Summary](#recommended-stack-summary)
-13. [Sources](#sources)
+9. [Testing Infrastructure](#testing-infrastructure)
+10. [Code Quality Tooling](#code-quality-tooling)
+11. [Logging & Error Handling](#logging--error-handling)
+12. [Supabase Development Scripts](#supabase-development-scripts)
+13. [Architecture & Project Structure](#architecture--project-structure) (incl. [Centralization Principles](#centralization-principles), [Zero-Trust Security](#zero-trust-security-architecture))
+14. [Deployment Strategy](#deployment-strategy)
+15. [Cost Analysis](#cost-analysis)
+16. [Recommended Stack Summary](#recommended-stack-summary)
+17. [Sources](#sources)
 
 ---
 
@@ -49,6 +55,12 @@
 | **Monorepo** | Turborepo | Shared types, cached builds, clear boundaries |
 | **Analytics** | PostHog (free tier) | 1M events/month, session replay, feature flags |
 | **Error Tracking** | Sentry (free tier) | 5K errors/month, performance monitoring |
+| **Testing (Unit)** | Vitest 4.1.0 | ESM-native, Turborepo-compatible, fast |
+| **Testing (Component)** | React Testing Library 16.3.2 | Behavior-focused, React 19.2 compatible |
+| **Testing (E2E)** | Playwright 1.58.2 | Multi-browser, WebSocket support, multi-tab |
+| **Linting** | ESLint (flat config) with eslint-config-next | Constitution principle enforcement |
+| **Logging** | Pino 10.x | Structured JSON, 5-10x faster than Winston, Sentry integration |
+| **Error Handling** | neverthrow (Result type) + next-safe-action | Type-safe errors across Phaser, React, and Server Actions |
 
 ### Key Architectural Decision
 
@@ -537,6 +549,565 @@ Client A (Phaser + React)          Supabase            Client B (Phaser + React)
 | **Sentry** | 5K errors/month | Error tracking, performance monitoring |
 
 **Game-specific metrics to track**: Game completion rate, average game duration, player retention, popular game modes, connection drop rates during games.
+
+---
+
+## Testing Infrastructure
+
+All testing tooling versions verified compatible with Node.js 24, TypeScript 5.9.3/6.0, React 19.2, Next.js 16.1.6, and Turborepo as of March 2026.
+
+### Vitest 4.1.0 (Unit + Integration Testing)
+
+**Version**: `4.1.0` | **Status**: Active, latest stable | **Released**: March 12, 2026
+
+**Why Vitest over Jest**:
+
+| Factor | Vitest 4.1 | Jest 30 |
+|--------|-----------|---------|
+| ESM support | Native (Vite-powered) | Requires configuration, CommonJS-first |
+| TypeScript | Zero-config, native | Needs ts-jest or @swc/jest |
+| Speed | 2-3x faster for most workloads | Slower startup, requires transforms |
+| Next.js 16 integration | Official docs recommend Vitest | Supported but more config needed |
+| Configuration | Shares Vite config (resolve.alias, plugins) | Separate Jest config |
+| Browser testing | Built-in (stable in v4) | Experimental |
+
+**Verdict**: Vitest is the clear choice for a Vite/ESM-first project. Next.js 16 official docs recommend Vitest over Jest for new projects. Zero-config TypeScript and 2-3x speed advantage are significant for developer experience. Vitest 4.x requires Vite 6.0+ (Vite 8 based) and Node.js 20+.
+
+**Stack Compatibility**:
+
+| Requirement | Status | Details |
+|------------|--------|---------|
+| ESM-native | Yes | Vite-powered, ESM-first by design |
+| TypeScript 5.9/6.0 | Yes | Native TS support, no ts-jest needed |
+| Node.js 24 | Yes | Requires >= 20, Node 24 exceeds |
+| Next.js 16 | Yes | Official Next.js docs updated Feb 27, 2026 |
+| React 19.2 | Yes | Via @vitejs/plugin-react |
+| Turborepo | Yes | Official integration docs at turborepo.dev |
+
+**Turborepo Integration**: Per-package Vitest configs with Turborepo caching. Each package (`apps/web`, `packages/game-engine`, `packages/shared`) gets its own `vitest.config.mts` and Turborepo parallelizes and caches test runs independently.
+
+**Per-package vitest.config.mts** (example for apps/web):
+```typescript
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+import tsconfigPaths from 'vite-tsconfig-paths'
+
+export default defineConfig({
+  plugins: [tsconfigPaths(), react()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+  },
+})
+```
+
+**turbo.json tasks**:
+```json
+{
+  "tasks": {
+    "test": {
+      "dependsOn": ["^test"]
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
+```
+
+**Environment**: Use `jsdom` as default for React component tests (more complete browser API, better CSS support, aligns with Next.js official docs). Add `// @vitest-environment happy-dom` per-file for pure unit tests where speed matters.
+
+**Security**: No critical CVEs for vitest 4.x. Dev dependency only. Underlying Vite had CVE-2025-31125 (improper access control) — fixed in Vite 6.x+, which Vitest 4.x requires.
+
+### React Testing Library 16.3.2 (Component Testing)
+
+**React 19.2 compatible**: `@testing-library/react@16.3.2` peer-deps include `react@(^18 | ^19)`.
+
+**Exact Versions**:
+
+| Package | Version | React 19.2 Compatible | Notes |
+|---------|---------|:----:|-------|
+| `@testing-library/react` | 16.3.2 | Yes | Peer: `react@(^18 \| ^19)` |
+| `@testing-library/dom` | 10.x | Yes | Required peer dep |
+| `@testing-library/jest-dom` | 6.9.1 | Yes | Vitest-compatible via `/vitest` import |
+| `@testing-library/user-event` | 14.6.1 | Yes | Simulates real user interactions |
+
+**Vitest compatibility**: `@testing-library/jest-dom` has native Vitest support via the `/vitest` import path:
+
+```typescript
+// vitest.setup.ts
+import '@testing-library/jest-dom/vitest'
+```
+
+This adds DOM matchers (`toBeInTheDocument()`, `toHaveTextContent()`, `toBeVisible()`, `toBePressed()`) to Vitest's `expect`.
+
+**Important**: Vitest + RTL do NOT support testing async Server Components. Use Playwright E2E for those. Synchronous Server and Client Components work fine. React 19 async rendering means `render`, `renderHook`, `fireEvent`, `act` may return Promises and should be awaited.
+
+**Constitution alignment** (Principle XXVI): RTL's `getByRole`, `getByText`, and `userEvent` enforce behavior-focused testing. The `.test.ts` / `.test.tsx` suffix aligns with the Vitest `include` pattern.
+
+### Playwright 1.58.2 (E2E Testing)
+
+**Version**: `1.58.2` | **Status**: Active, latest stable | **Released**: ~February 2026
+
+**Stack Compatibility**:
+
+| Requirement | Status | Details |
+|------------|--------|---------|
+| WebSocket testing | Yes | `page.routeWebSocket()`, `browserContext.routeWebSocket()` |
+| Multi-tab testing | Yes | Multiple `Page` objects within `BrowserContext` |
+| Multi-user simulation | Yes | Multiple `BrowserContext` instances |
+| Headless Chromium for CI | Yes | Default mode |
+| TypeScript | Yes | Native support |
+| Next.js | Yes | First-class support |
+
+**WebSocket Testing (critical for Supabase Realtime)**: Playwright has built-in WebSocket support via `page.routeWebSocket()` (intercept per page) and `browserContext.routeWebSocket()` (intercept all pages in context). This is the primary mechanism for testing Supabase Realtime (Broadcast + Presence) in E2E scenarios.
+
+**Multi-Tab Testing (for multiplayer scenarios)**:
+```typescript
+const context1 = await browser.newContext()
+const context2 = await browser.newContext()
+const player1 = await context1.newPage()
+const player2 = await context2.newPage()
+// Both navigate to game lobby, test multiplayer interactions
+```
+
+**Placement**: Lives at monorepo root with `e2e/` test directory. Per-package E2E in `apps/web/e2e/` for app-level flows.
+
+**CI Configuration**:
+```typescript
+// playwright.config.ts
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './e2e',
+  use: {
+    baseURL: 'http://localhost:3000',
+  },
+  webServer: {
+    command: 'npm run dev',
+    port: 3000,
+    reuseExistingServer: !process.env.CI,
+  },
+})
+```
+
+**Security Advisories**:
+
+| CVE | Severity | Description | Status |
+|-----|----------|-------------|--------|
+| CVE-2025-59288 | Medium | Supply chain (SHA1-Hulud) in playwright-core | Fixed in recent versions |
+| CVE-2025-9611 | Medium | MCP Server DNS rebinding (playwright-mcp, not core) | Not applicable |
+
+Playwright is a dev dependency with limited production risk surface.
+
+### Test Organization (Constitution Principle XXVI)
+
+```
+apps/web/
+  src/
+    components/app/common/Button.tsx
+  tests/
+    components/app/common/Button.test.tsx    # Component test (Vitest + RTL)
+  e2e/
+    lobby.spec.ts                            # E2E test (Playwright)
+    multiplayer.spec.ts                      # Multi-user E2E (Playwright)
+
+packages/game-engine/
+  src/
+    scenes/GameScene.ts
+  tests/
+    scenes/GameScene.test.ts                 # Unit test (Vitest, no Phaser rendering)
+
+packages/shared/
+  src/
+    schemas/player.ts
+  tests/
+    schemas/player.test.ts                   # Schema validation test (Vitest)
+```
+
+**File suffixes**: `.test.ts` / `.test.tsx` for Vitest unit + component tests; `.spec.ts` for Playwright E2E. This distinction prevents Vitest from picking up E2E files.
+
+### Phaser Testing Strategy
+
+**Do NOT unit test Phaser rendering**. Phaser's rendering engine is a browser canvas concern — unit tests cannot and should not simulate it. Instead:
+
+- **Extract logic**: Move game logic (combat resolution, state transitions, voting tallies) into pure functions in `packages/game-engine/src/systems/` with zero Phaser dependency. These pure functions are unit-testable with Vitest.
+- **E2E for scene behavior**: Use Playwright to test that game scenes initialize, that UI overlays appear, that multiplayer state syncs. This exercises the full stack including Phaser canvas output.
+
+### Supabase Testing Strategy
+
+- **Local Supabase**: Use `supabase start` for RLS and integration tests against a real PostgreSQL instance. Confirms that policies block/allow the right operations.
+- **Mock clients**: For unit tests, mock the Supabase client to avoid real network calls. Keep unit tests fast and deterministic.
+- **Two-client pattern**: In integration tests, use `service_role` client to set up test data and `anon`/authenticated client to make assertions. This verifies that RLS behaves correctly from the client perspective.
+
+### Complete Package List
+
+```bash
+# Unit + Integration testing (per-package devDependencies)
+npm install -D vitest @vitejs/plugin-react vite-tsconfig-paths jsdom \
+  @testing-library/react @testing-library/dom @testing-library/jest-dom \
+  @testing-library/user-event
+
+# E2E testing (monorepo root devDependencies)
+npm install -D @playwright/test
+npx playwright install --with-deps chromium
+```
+
+**Exact versions to pin**:
+
+| Package | Version |
+|---------|---------|
+| `vitest` | `^4.1.0` |
+| `@vitejs/plugin-react` | `^5.1.3` |
+| `vite-tsconfig-paths` | `^5.x` |
+| `jsdom` | `^25.x` |
+| `@testing-library/react` | `^16.3.2` |
+| `@testing-library/dom` | `^10.x` |
+| `@testing-library/jest-dom` | `^6.9.1` |
+| `@testing-library/user-event` | `^14.6.1` |
+| `@playwright/test` | `^1.58.2` |
+
+---
+
+## Code Quality Tooling
+
+### ESLint Flat Config
+
+Next.js 16 completely removed the `next lint` command and the `eslint` option in `next.config.mjs`. ESLint must be run independently via npm scripts. The `eslint-config-next` package supports ESLint flat config natively (ESLint 9+).
+
+**Plugin List**:
+
+| Package | Purpose | Constitution Principle |
+|---------|---------|----------------------|
+| `eslint` | Core linter | Required |
+| `eslint-config-next` | Next.js + React + React Hooks + accessibility | Required |
+| `typescript-eslint` | TypeScript parser + rules (unified package) | Required |
+| `eslint-plugin-react-compiler` | React Compiler rules | Required (project uses React Compiler) |
+| `eslint-plugin-no-barrel-files` | Prevents barrel file authoring | Principle I |
+| `eslint-plugin-n` | Node.js rules including `n/no-process-env` | Principle II |
+| `eslint-config-prettier` | Disables formatting rules conflicting with Prettier | Recommended |
+
+**Note**: The core ESLint `no-process-env` rule is **deprecated** as of ESLint v7.0.0 and will be removed in v11.0.0. Use `n/no-process-env` from `eslint-plugin-n` instead.
+
+**eslint.config.mjs** (adapted for monorepo root):
+```javascript
+import { defineConfig, globalIgnores } from 'eslint/config'
+import nextVitals from 'eslint-config-next/core-web-vitals'
+import nextTs from 'eslint-config-next/typescript'
+import reactCompiler from 'eslint-plugin-react-compiler'
+import noBarrelFiles from 'eslint-plugin-no-barrel-files'
+import n from 'eslint-plugin-n'
+import prettier from 'eslint-config-prettier/flat'
+
+const eslintConfig = defineConfig([
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts',
+    'node_modules/**', 'dist/**', '.turbo/**']),
+
+  ...nextVitals,
+  ...nextTs,
+
+  reactCompiler.configs.recommended,
+  noBarrelFiles.flat,
+
+  {
+    plugins: { n },
+    rules: {
+      // Constitution II: Prevent direct process.env access
+      'n/no-process-env': 'error',
+      // Constitution V: Prevent feature code from importing vendor directly
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['**/components/vendor/**'],
+            message: 'Constitution V: Import from components/app/ instead.' },
+        ],
+      }],
+      // Constitution X: No console.log in production
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+    },
+  },
+
+  // Override: Allow process.env in config modules (Constitution II)
+  {
+    files: ['**/config/**/*.ts', '**/config/**/*.js'],
+    rules: { 'n/no-process-env': 'off' },
+  },
+
+  prettier,
+])
+
+export default eslintConfig
+```
+
+**Monorepo**: Set `settings.next.rootDir: 'apps/web/'` so `@next/eslint-plugin-next` resolves correctly from the monorepo root.
+
+**Constitution Enforcement Summary**:
+
+| Constitution Principle | ESLint Rule | Notes |
+|----------------------|-------------|-------|
+| I. No barrel files | `no-barrel-files/no-barrel-files` | Detects index.ts re-exports |
+| II. No direct process.env | `n/no-process-env` | Disabled only in `config/` directories |
+| V. No vendor direct imports | `no-restricted-imports` patterns | Feature code must import from `components/app/` |
+| VII. Client/server boundaries | `@next/next/no-async-client-component` | Included in eslint-config-next |
+| X. No console.log | `no-console` | Allows `warn` and `error` |
+| XXVIII. Accessibility | `jsx-a11y/*` rules | Included in eslint-config-next |
+
+### Build Script Pattern
+
+Adapted from a reference project using the same Next.js 16 + ESLint flat config stack:
+
+```json
+{
+  "scripts": {
+    "build": "rm -rf .next && tsc --noEmit && eslint . && next build",
+    "lint": "eslint --cache --cache-location .next/cache/eslint/ .",
+    "lint:fix": "eslint --fix ."
+  }
+}
+```
+
+**Sequence**: cache removal → type check → lint → build
+
+1. `rm -rf .next` — clears Next.js build cache before every production build
+2. `tsc --noEmit` — type-checks the entire project without emitting output
+3. `eslint .` — lints all files using the flat config
+4. `next build` — runs the actual Next.js build
+
+**Why NOT `next lint`**: Next.js 16 removed the `next lint` command entirely. ESLint must be invoked directly via `eslint .` in npm scripts. The build script pattern above reflects this.
+
+**Install command**:
+```bash
+npm i -D eslint eslint-config-next typescript-eslint eslint-plugin-react-compiler \
+  eslint-plugin-no-barrel-files eslint-plugin-n eslint-config-prettier
+```
+
+---
+
+## Logging & Error Handling
+
+### Pino v10.x (Structured Logging)
+
+**Why Pino over Winston**:
+
+| Factor | Pino v10.x | Winston v3.x |
+|--------|-----------|-------------|
+| Performance | ~50,000+ logs/sec | ~10,000 logs/sec (5-10x slower) |
+| Bundle size | ~25KB | ~200KB+ with dependencies |
+| TypeScript | First-class (official) | Community-maintained types |
+| JSON output | Native NDJSON | Requires formatter setup |
+| PII redaction | Built-in `redact` option | Must implement manually |
+| Sentry integration | Official `pinoIntegration()` | Community packages only |
+| Event loop | Non-blocking (external transport) | Can block (synchronous) |
+
+**Critical for games**: Pino never blocks the game/application loop. Performance is essential when logging must not affect game state processing.
+
+**Implementation** (server-only singleton, Constitution Principle VIII):
+```typescript
+// apps/web/src/lib/logger/index.ts
+import 'server-only'
+import pino from 'pino'
+
+export const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  timestamp: pino.stdTimeFunctions.isoTime,
+
+  // Redaction (Constitution X + XVIII: PII must never appear in logs)
+  redact: {
+    paths: ['password', 'token', 'authorization',
+      'req.headers.authorization', 'req.headers.cookie',
+      '*.password', '*.token', '*.secret', '*.apiKey'],
+    censor: '[REDACTED]',
+  },
+
+  // Pretty-print in development only
+  ...(process.env.NODE_ENV !== 'production' && {
+    transport: { target: 'pino-pretty', options: { colorize: true } },
+  }),
+})
+
+export function createLogger(context: string) {
+  return logger.child({ context })
+}
+```
+
+**Sentry Integration**:
+```typescript
+Sentry.init({
+  dsn: config.sentry.dsn,
+  enableLogs: true,
+  integrations: [
+    Sentry.pinoIntegration({
+      log: { levels: ['info', 'warn', 'error', 'fatal'] },
+      error: { levels: ['error', 'fatal'] },
+    }),
+  ],
+})
+```
+
+**Next.js Configuration** (required — pino uses Node.js native bindings):
+```typescript
+// next.config.ts
+const nextConfig = {
+  serverExternalPackages: ['pino', 'pino-pretty'],
+}
+```
+
+**Install command**:
+```bash
+npm i pino
+npm i -D pino-pretty  # dev-only, never in production bundle
+```
+
+**Security**: No known CVEs (verified via Snyk). Pure Node.js, no native binaries.
+
+### Error Handling (Hybrid Pattern)
+
+The three-layer architecture (Phaser → Zustand → Supabase) requires error handling that works both inside and outside React. A hybrid pattern serves each layer cleanly:
+
+```
+Layer             Error Pattern            Library
+-----             -------------            -------
+Phaser scenes     Result<T, E>             neverthrow (no React dependency)
+Zustand stores    Result<T, E> consumed    neverthrow (bridge layer)
+DAL functions     Result<T, E>             neverthrow (server-only)
+Server Actions    Typed action results     next-safe-action (Zod validation)
+React components  Error boundaries         Next.js error.tsx (uncaught)
+React forms       useActionState           React 19 built-in (expected)
+```
+
+**Why hybrid**: Each layer uses the error pattern native to its context. neverthrow works without any React dependency (critical for Phaser), while next-safe-action is purpose-built for Server Actions. Error boundaries catch only what slips through.
+
+#### neverthrow v8.x (DAL + Game Engine)
+
+**Status**: Active | **Downloads**: ~1.3M/week | **Stars**: 7.3k | **License**: MIT
+
+**Key API**:
+- `ok(value)` / `err(error)` — constructors
+- `Result<T, E>` — discriminated union type
+- `ResultAsync<T, E>` — wraps `Promise<Result<T, E>>`
+- `.map()`, `.mapErr()`, `.andThen()` — chainable transformations
+- `.match()` — exhaustive pattern matching
+- `Result.fromThrowable()` — wraps exception-throwing functions
+
+**Why it fits**: Zero React dependency means it works in `packages/game-engine`. Zero runtime dependencies (pure TypeScript). ESLint plugin (`eslint-plugin-neverthrow`) enforces result consumption — unchecked `Result` values become a compile-time error.
+
+#### next-safe-action v8.x (Server Actions)
+
+**Status**: Active (published March 2026) | **Stars**: 3k+ | **License**: MIT
+
+**Why it fits**:
+- Constitution XI: Zod validation built-in (shared schemas from `packages/shared`)
+- Constitution XIII: Purpose-built for Server Actions
+- Constitution XVI: Server-side validation enforced by design
+- Returns typed results without manual try/catch
+
+#### Shared Error Types (packages/shared)
+
+```typescript
+// packages/shared/src/types/errors.ts
+export const ErrorCode = {
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  INTERNAL: 'INTERNAL',
+  NETWORK: 'NETWORK',
+  TIMEOUT: 'TIMEOUT',
+  INVALID_GAME_STATE: 'INVALID_GAME_STATE',
+  INVALID_ACTION: 'INVALID_ACTION',
+} as const
+
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]
+
+export interface AppError {
+  code: ErrorCode
+  message: string
+  context?: Record<string, unknown>  // Never PII
+}
+```
+
+#### Error Flow
+
+```
+Phaser Scene
+  -> resolveCombat() returns Result<T, AppError>
+  -> .match(ok => updateVisuals, err => zustandStore.setError(err))
+  -> Zustand store holds error state
+  -> React UI reads error from store, displays to user
+
+DAL Function
+  -> getUserById() returns ResultAsync<T, AppError>
+  -> Server Action (next-safe-action) maps result
+  -> useActionState in React form displays validation/server errors
+  -> Unexpected throws caught by error.tsx boundary
+
+React Component
+  -> Uncaught exception during render
+  -> Caught by nearest error.tsx boundary
+  -> Sentry.captureException() for monitoring
+```
+
+**Install command**:
+```bash
+npm i neverthrow next-safe-action
+```
+
+**ESLint Integration** (enforce Result consumption):
+```javascript
+import neverthrowPlugin from 'eslint-plugin-neverthrow'
+
+{
+  plugins: { neverthrow: neverthrowPlugin },
+  rules: { 'neverthrow/must-use-result': 'error' },
+}
+```
+
+---
+
+## Supabase Development Scripts
+
+Standard scripts for the Turborepo monorepo. Adapted from a reference project using the same Supabase CLI version.
+
+### Scripts
+
+```json
+{
+  "scripts": {
+    "db:push": "supabase db push",
+    "db:push:dry": "supabase db push --dry-run",
+    "db:types": "supabase gen types --linked --lang=typescript > packages/shared/src/types/supabase.ts"
+  }
+}
+```
+
+**db:push**: Applies all pending migrations in `supabase/migrations/` to the linked remote Supabase project. Uses `supabase db push` which tracks which migrations have already been applied.
+
+**db:push:dry**: Previews what migrations would be applied without executing. Useful for CI validation before deployment.
+
+**db:types**: Generates TypeScript types from the linked remote project's schema (`--linked` flag). Outputs to `packages/shared/src/types/supabase.ts` so generated types are available to all packages (`apps/web`, `packages/game-engine`, `packages/shared` itself).
+
+**Critical monorepo adaptation**: The reference project generates types to `src/types/supabase.ts` (app-local). In this monorepo, the correct destination is `packages/shared/src/types/supabase.ts` — the shared package is the single source of truth for all database types (Constitution Principle III: Centralized Type Definitions).
+
+**Supabase CLI version**: `^2.78.1` (install as root devDependency for monorepo access).
+
+### CI/CD Integration
+
+Supabase migrations run as a dedicated step before app deployment in GitHub Actions:
+
+```yaml
+- name: Apply database migrations
+  run: npx supabase db push
+  env:
+    SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+- name: Build and push Docker image
+  # ... (after migrations succeed)
+```
+
+This ensures the database schema is always up to date before the new application code is deployed — preventing schema mismatch errors on startup.
 
 ---
 

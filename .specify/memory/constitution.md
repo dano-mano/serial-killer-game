@@ -1,35 +1,31 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: template → 1.0.0
-Type: INITIAL - Full constitution for browser-based game project.
+Version Change: 1.0.0 -> 1.1.0
+Type: MINOR - Two new principles added (CSP, Dependency Management),
+one principle strengthened (Database Schema), one principle clarified
+(Test Organization), technology decisions updated.
 
-Added Principles (30):
-- Core Architecture: I-X (Direct Imports, Config, Types, Branding,
-  Vendor Components, Domain Org, Client/Server, Singletons,
-  Runtime Version Consistency, Observability)
-- Data & State: XI-XV (Schema Validation, DAL, Server Actions,
-  Game Engine State Bridge, Database Schema)
-- Security & Compliance: XVI-XXI (Zero-Trust, Server-Side Enforcement,
-  Secrets, RLS, Input Validation, Rate Limiting)
-- Quality & Maintenance: XXII-XXVI (Zero Tech Debt, No Ephemeral Refs,
-  Test Organization & Quality, AI-Optimized Docs, Accessibility)
-- Performance & UX: XXVII-XXIX (Responsive, Progressive Enhancement,
-  Asset Loading)
-- Governance
+Current Principle Count: 31 (I-XXXI)
 
-Removed Principles: None (initial version)
-Modified Principles: None (initial version)
+Added Principles (2):
+- XXII. Content Security Policy (Security & Compliance section)
+- XXIV. Dependency Management (Quality & Maintenance section)
 
-Added Sections:
-- Core Architecture Principles (I-X)
-- Data & State Management (XI-XV)
-- Security & Compliance (XVI-XXI)
-- Quality & Maintenance (XXII-XXVI)
-- Performance & User Experience (XXVII-XXIX)
-- Governance
+Modified Principles (2):
+- XV. Database Schema Design: Strengthened to require 3NF as starting
+  point, JSONB usage now requires documented rationale (MUST), added
+  JSONB limitations note
+- XXVI (was XXIV). Centralized Test Organization & Quality: Added
+  canonical test directory name requirement (`tests/` at package root)
 
-Removed Sections: None (initial version)
+Renumbered Principles:
+- Old XXII-XXVI -> New XXIII-XXVIII (shifted by XXII CSP insertion
+  and XXIV Dependency Management insertion)
+- Old XXVII-XXIX -> New XXIX-XXXI (cascaded shift)
+
+Cross-Reference Updates:
+- Governance conflict resolution ranges updated to reflect new numbering
 
 Technology Decisions:
 - Runtime: Node.js 24 LTS
@@ -41,28 +37,28 @@ Technology Decisions:
 - Monorepo: Turborepo
 - Package Manager: npm (bundled with Node.js)
 - Deployment: Azure App Service via GitHub Actions + ghcr.io
-- Testing: To be researched and determined
+- Testing: Vitest (unit/integration), React Testing Library (component),
+  Playwright (E2E)
+- Linting: ESLint flat config with eslint-config-next
+- Logging: Pino (structured JSON)
+- Error Handling: neverthrow (Result type) + next-safe-action
+  (Server Actions)
 
 Templates Requiring Updates:
-✅ plan-template.md - Generic; Constitution Check filled at runtime
-✅ spec-template.md - Generic; no constitution-specific content
-✅ tasks-template.md - Generic; path conventions are advisory
-✅ checklist-template.md - Generic; no updates needed
-✅ agent-file-template.md - Generic; no updates needed
-
-Commands Verified:
-✅ speckit.plan.md - Loads constitution at runtime
-✅ speckit.analyze.md - Loads constitution for principle validation
-✅ speckit.implement.md - No direct reference needed
-✅ speckit.specify.md - No direct reference needed
-✅ speckit.tasks.md - No direct reference needed
-✅ speckit.checklist.md - No direct reference needed
-✅ speckit.clarify.md - No direct reference needed
-✅ speckit.constitution.md - Self-referential; no updates needed
+- None (templates are generic and load constitution at runtime)
 
 Follow-up TODOs:
-- Testing tooling (Vitest, Playwright, etc.) to be researched and
-  added as a MINOR amendment once evaluated
+- Update CLAUDE.md principle count from 29 to 31 and section ranges
+- Update CLAUDE.md Pending Decisions to remove testing tooling
+  (now decided)
+- Create docs/architecture/testing-strategy.md ADR with coverage
+  targets and mocking conventions
+
+=== Historical Record: v1.0.0 (Initial) ===
+Version Change: template -> 1.0.0
+Type: INITIAL - Full constitution for browser-based game project.
+Added Principles (29): I-XXIX across 6 sections.
+Ratified: 2026-03-15
 -->
 
 # Project Constitution
@@ -510,22 +506,37 @@ stores.
 ### XV. Database Schema Design
 
 Database schemas MUST use normalized tables with explicit columns
-for well-defined, queryable data. Schema design SHOULD start with
-the simplest normalized structure that satisfies current
-requirements.
+for well-defined, queryable data. Schema design MUST start from
+third normal form (3NF) as the baseline for all table designs.
+Denormalization is permitted only when justified by measured
+performance requirements, and the rationale MUST be documented in
+the corresponding migration file.
 
 **Rationale**: Normalized tables provide data integrity, enable
 efficient querying, and support Supabase Row Level Security
-policies. However, over-normalization at MVP stage adds
-unnecessary complexity.
+policies. Third normal form eliminates redundant data storage,
+prevents update anomalies, and ensures each column depends on the
+primary key, the whole key, and nothing but the key.
 
 **JSONB Usage Policy**:
-- JSONB is ALLOWED for semi-structured data with variable shape
-  (e.g., event metadata, settings blobs, flexible payloads)
-- JSONB SHOULD be avoided for data queried by WHERE, JOIN, or
-  GROUP BY clauses, or data requiring foreign key relationships
-- Schema design SHOULD anticipate migration from simple to
-  normalized structures as the product matures
+- JSONB MUST NOT be used as a convenience shortcut to avoid
+  designing a normalized schema. Every JSONB column MUST be
+  accompanied by a documented rationale (in the migration file or
+  schema documentation) explaining WHY normalization is not
+  possible or practical for that specific data.
+- JSONB is ALLOWED only for genuinely semi-structured data with
+  variable shape where the set of keys is not known at design
+  time (e.g., third-party webhook payloads, user-defined
+  settings with arbitrary keys, event metadata with
+  provider-specific fields).
+- JSONB MUST NOT be used for data queried by WHERE, JOIN, or
+  GROUP BY clauses, data requiring foreign key relationships, or
+  data where referential integrity matters. JSONB columns cannot
+  enforce referential integrity, are difficult to index
+  efficiently, and make ad-hoc querying and reporting
+  significantly harder.
+- Schema design SHOULD anticipate migration from JSONB to
+  normalized structures as data access patterns become clear.
 
 **Requirements**:
 - Every table MUST have RLS enabled with a default-deny posture
@@ -716,9 +727,57 @@ third-party APIs) from excessive load.
 
 ---
 
+### XXII. Content Security Policy
+
+The application MUST define Content Security Policy (CSP) headers
+in the Next.js proxy to control which resources the browser is
+permitted to load and execute. CSP MUST be enforced in production
+and MAY use report-only mode during development.
+
+**Rationale**: Even with server-side zero-trust architecture
+(Principle XVI), a cross-site scripting (XSS) attack via
+user-generated content, a compromised CDN, or a malicious
+third-party script can execute arbitrary code in the browser. CSP
+is the browser-level defense that limits the damage of any
+injection that bypasses server-side controls. For a game with
+real-time communication and user-facing content, this protection
+is essential.
+
+**Requirements**:
+- CSP headers MUST be defined in the Next.js proxy (`proxy.ts`),
+  not scattered across individual route handlers
+- The `script-src` directive MUST restrict script execution to
+  trusted sources. Inline scripts MUST be controlled via nonces
+  or hashes where required by the framework.
+- The `connect-src` directive MUST allowlist the application's
+  API endpoints and WebSocket connections (e.g., Supabase API
+  and Realtime endpoints)
+- The `img-src` directive MUST allowlist the application's asset
+  storage origins (e.g., the Azure Blob Storage domain used for
+  game assets)
+- The `style-src` directive MUST account for the styling approach
+  used by the application (e.g., inline styles generated by the
+  CSS framework)
+- The `default-src` directive MUST be set to `'self'` as a
+  fallback. Additional source origins MUST be explicitly added
+  only for the specific directives that require them.
+- CSP violation reports SHOULD be configured to send to the error
+  tracking service for monitoring
+- CSP directives MUST be reviewed when new third-party services
+  or asset origins are added to the application
+
+**Enforcement**:
+- CI SHOULD include a CSP validation check that verifies the
+  proxy defines a Content-Security-Policy header
+- Security audits MUST verify that CSP directives have not been
+  weakened (e.g., `unsafe-inline` or `unsafe-eval` added without
+  documented justification)
+
+---
+
 ## Quality & Maintenance
 
-### XXII. Zero Tech Debt Tolerance
+### XXIII. Zero Tech Debt Tolerance
 
 All code changes MUST include complete removal of obsolete code,
 outdated comments, and unused artifacts.
@@ -740,7 +799,47 @@ code.
 
 ---
 
-### XXIII. No Ephemeral References in Source Code
+### XXIV. Dependency Management
+
+All npm dependencies MUST be actively managed to prevent security
+vulnerabilities, version drift, and supply chain risks.
+
+**Rationale**: A project with numerous direct and transitive
+dependencies is exposed to security vulnerabilities through its
+supply chain. Without active dependency management, outdated
+packages accumulate silently, and known vulnerabilities persist in
+production. Consistent dependency hygiene is as important as code
+quality for maintaining a secure application.
+
+**Requirements**:
+- `npm audit` MUST pass in CI with zero critical or high severity
+  vulnerabilities. Builds MUST fail if critical or high
+  vulnerabilities are detected.
+- `package-lock.json` MUST be committed to version control and
+  MUST be used for all installations (`npm ci` in CI, not
+  `npm install`)
+- Dependencies MUST be installed at the most specific appropriate
+  level in the monorepo (shared dependencies at root, package-
+  specific dependencies in the consuming package)
+- A regular dependency update cadence SHOULD be established to
+  keep packages current and reduce the risk of large, disruptive
+  upgrades
+- Security advisories for direct dependencies SHOULD be monitored
+  and addressed promptly
+- New dependencies MUST be evaluated for maintenance status,
+  license compatibility, and security posture before adoption
+- Dev dependencies MUST be clearly separated from production
+  dependencies (no dev-only packages in `dependencies`)
+
+**Enforcement**:
+- CI pipelines MUST include an `npm audit` step that blocks
+  deployment on critical or high findings
+- PRs that add new dependencies SHOULD document the rationale
+  for the addition
+
+---
+
+### XXV. No Ephemeral References in Source Code
 
 Application source code MUST NOT contain references to ephemeral
 planning or tooling artifacts. This includes spec task identifiers
@@ -779,7 +878,7 @@ literals, and error messages. It does NOT apply to:
 
 ---
 
-### XXIV. Centralized Test Organization & Quality
+### XXVI. Centralized Test Organization & Quality
 
 All test files MUST be located in a centralized test directory
 that mirrors the source directory structure. Tests MUST NOT be
@@ -797,6 +896,9 @@ confidence.
 paths under a centralized test directory within each package.
 
 **Requirements (Organization)**:
+- The centralized test directory MUST be named `tests/` and MUST
+  be located at the package root (sibling to `src/`), not nested
+  within `src/`
 - Test file paths MUST mirror their corresponding source file
   paths
 - Test files MUST use the `.test.ts` or `.test.tsx` suffix
@@ -824,7 +926,7 @@ paths under a centralized test directory within each package.
 
 ---
 
-### XXV. AI-Optimized Documentation
+### XXVII. AI-Optimized Documentation
 
 All documentation MUST be organized in `docs/` with domain-based
 structure optimized for AI assistant discoverability and human
@@ -853,7 +955,7 @@ working memory.
 
 ---
 
-### XXVI. Accessibility Standards (WCAG AA)
+### XXVIII. Accessibility Standards (WCAG AA)
 
 All user interface elements outside the game canvas MUST meet
 WCAG 2.1 Level AA standards. Game canvas elements SHOULD provide
@@ -885,7 +987,7 @@ accessibility approaches distinct from standard web UI.
 
 ## Performance & User Experience
 
-### XXVII. Responsive Design & Cross-Device Support
+### XXIX. Responsive Design & Cross-Device Support
 
 All web UI components MUST be responsive and functional from 320px
 to 2560px+ viewport widths. The game canvas MUST adapt to
@@ -910,7 +1012,7 @@ constraints -- it must scale while preserving visual fidelity.
 
 ---
 
-### XXVIII. Progressive Enhancement
+### XXX. Progressive Enhancement
 
 Server-rendered HTML MUST provide a functional baseline experience.
 Client-side JavaScript enhancements MUST be layered on top of this
@@ -935,7 +1037,7 @@ gracefully.
 
 ---
 
-### XXIX. Asset Loading & Performance
+### XXXI. Asset Loading & Performance
 
 Game assets (sprites, audio, maps, fonts) MUST be managed through
 a tiered storage strategy with appropriate caching headers. Large
@@ -1014,15 +1116,15 @@ downstream template or tooling updates required.
 
 When principles conflict, apply in order of priority:
 
-1. **Security & Compliance (XVI-XXI)** -- Security MUST NOT be
+1. **Security & Compliance (XVI-XXII)** -- Security MUST NOT be
    compromised for any reason
 2. **Core Architecture (I-X)** -- Structural foundation MUST
    remain stable
 3. **Data & State Management (XI-XV)** -- Data integrity protects
    correctness
-4. **Quality & Maintenance (XXII-XXVI)** -- Maintainability
+4. **Quality & Maintenance (XXIII-XXVIII)** -- Maintainability
    protects long-term velocity
-5. **Performance & User Experience (XXVII-XXIX)** -- User
+5. **Performance & User Experience (XXIX-XXXI)** -- User
    experience within architectural constraints
 
 ### Documentation References
@@ -1034,4 +1136,4 @@ Canonical documentation locations:
   adopted)
 - **API Documentation**: `docs/api/`
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-15 | **Last Amended**: 2026-03-15
+**Version**: 1.1.0 | **Ratified**: 2026-03-15 | **Last Amended**: 2026-03-16
