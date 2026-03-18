@@ -287,7 +287,7 @@ interface BaseDto {
 | rate-limiter-flexible | 10.0.1 | Rate limiting in proxy.ts (in-memory MVP) |
 | next-safe-action | latest | Server Action validation (skeleton setup) |
 | Sentry | latest | @sentry/nextjs |
-| ESLint | 9.x | Flat config |
+| ESLint | 10.x | Flat config (eslintrc fully removed) |
 
 ### Testing Strategy
 

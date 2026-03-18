@@ -9,6 +9,8 @@
 
 > Updated: 2026-03-18 — TypeScript 6.0 released; staying on 5.9.x until stability confirmed. Added Rate Limiting section (rate-limiter-flexible v10.0.1).
 
+> Updated: 2026-03-18 — ESLint version updated from 9.x to 10 (released February 2026)
+
 ---
 
 ## Table of Contents
@@ -64,7 +66,7 @@
 | **Testing (Unit)** | Vitest 4.1.0 | ESM-native, Turborepo-compatible, fast |
 | **Testing (Component)** | React Testing Library 16.3.2 | Behavior-focused, React 19.2 compatible |
 | **Testing (E2E)** | Playwright 1.58.2 | Multi-browser, WebSocket support, multi-tab |
-| **Linting** | ESLint (flat config) with eslint-config-next | Constitution principle enforcement |
+| **Linting** | ESLint 10 (flat config) with eslint-config-next | Constitution principle enforcement, eslintrc fully removed |
 | **Logging** | Pino 10.x | Structured JSON, 5-10x faster than Winston, Sentry integration |
 | **Error Handling** | neverthrow (Result type) + next-safe-action | Type-safe errors across Phaser, React, and Server Actions |
 | **Rate Limiting** | rate-limiter-flexible v10.0.1 | In-memory MVP, PostgreSQL/Redis upgrade path, zero dependencies, ISC license |
@@ -783,7 +785,7 @@ npx playwright install --with-deps chromium
 
 ### ESLint Flat Config
 
-Next.js 16 completely removed the `next lint` command and the `eslint` option in `next.config.mjs`. ESLint must be run independently via npm scripts. The `eslint-config-next` package supports ESLint flat config natively (ESLint 9+).
+Next.js 16 completely removed the `next lint` command and the `eslint` option in `next.config.mjs`. ESLint must be run independently via npm scripts. The `eslint-config-next` package supports ESLint flat config natively. ESLint 10 (released February 2026) makes flat config the only option — eslintrc support is fully removed.
 
 **Plugin List**:
 
@@ -818,6 +820,15 @@ const eslintConfig = defineConfig([
 
   reactCompiler.configs.recommended,
   noBarrelFiles.flat,
+
+  // Exception: package entry points ARE barrel files by design
+  // These are the public API surface referenced by package.json "exports"
+  {
+    files: ['packages/*/src/index.ts'],
+    rules: {
+      'no-barrel-files/no-barrel-files': 'off',
+    },
+  },
 
   {
     plugins: { n },

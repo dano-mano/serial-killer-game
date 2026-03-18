@@ -48,7 +48,7 @@ Governance principles are in `.specify/memory/constitution.md`. See `.bytedragon
 | Testing (Unit) | Vitest | 4.1.0 | ESM-native, Turborepo-compatible |
 | Testing (Component) | React Testing Library | 16.3.2 | Behavior-focused, React 19.2 compatible |
 | Testing (E2E) | Playwright | 1.58.2 | Multi-browser, WebSocket, multi-tab |
-| Linting | ESLint (flat config) | — | eslint-config-next, barrel file prevention |
+| Linting | ESLint (flat config) | 10 | eslint-config-next, barrel file prevention |
 | Logging | Pino | 10.x | Structured JSON, Sentry integration |
 | Error Handling | neverthrow + next-safe-action | — | Type-safe Result pattern + Server Action validation |
 | Rate Limiting | rate-limiter-flexible | 10.0.1 | In-memory MVP, PostgreSQL upgrade path |
@@ -161,3 +161,10 @@ Speckit commands are at `.claude/commands/speckit.*.md` and skills at `.claude/s
 ## Pending Decisions
 
 - **Game design**: No gameplay mechanics, database tables, or routes have been defined yet. The architecture and constitution are intentionally generic to support any game design.
+
+## Active Technologies
+- TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.1.6, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest) (001-project-scaffold)
+- Supabase Cloud (PostgreSQL) -- no database tables in scaffold, connection config only (001-project-scaffold)
+
+## Recent Changes
+- 001-project-scaffold: Added TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.1.6, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)
