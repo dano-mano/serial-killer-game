@@ -376,6 +376,10 @@ interface FedStore {
 - Unit tests for fed heat thresholds: correct arrest cap applied per heat level
 - E2E: fed discovers evidence, interviews witness, builds case to STRONG, arrests killer (Playwright)
 
+### Art Style Integration
+
+Evidence discovery shows a blue pulse VFX. Investigation caption boxes use JetBrains Mono font in a comic-panel style. Fed-themed UI elements use blue color accents. See `art-style-guide.md` in the vision directory for full visual specifications including evidence discovery VFX, investigation caption box styling, and fed-themed UI color.
+
 ### Constitution Compliance
 
 - [x] No barrel files — all imports direct to specific files

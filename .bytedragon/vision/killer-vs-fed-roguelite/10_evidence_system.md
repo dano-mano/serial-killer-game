@@ -657,6 +657,10 @@ The balance between false evidence believability and detectability is the core t
 - Component tests for EvidencePanel: renders correct viability tier, evidence log items
 - Integration test: full scenario — killer kills, generates evidence, plants false trail, fed discovers both real and false, analyzes, discredits false, achieves AIRTIGHT viability
 
+### Art Style Integration
+
+Evidence markers use a shape-plus-color system for accessibility (colorblind support). Discovery pulse VFX plays on evidence find. See `art-style-guide.md` in the vision directory for full visual specifications including evidence marker shape+color system, discovery pulse VFX, and accessibility shape redundancy requirements.
+
 ### Constitution Compliance
 
 - [x] No barrel files — direct imports only

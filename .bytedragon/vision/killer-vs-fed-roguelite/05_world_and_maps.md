@@ -773,9 +773,9 @@ export const useMapStore = create<MapStore>((set) => ({
 }))
 ```
 
-### Updated Event Constants
+### Event Constants — `packages/shared/src/constants/events/map.ts`
 
-Add to `packages/shared/src/constants/events.ts`:
+Create `packages/shared/src/constants/events/map.ts`:
 ```typescript
 MAP_LOADED: 'game:map-loaded',
 ZONE_ENTERED: 'game:zone-entered',
@@ -808,7 +808,7 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 12. Create `packages/game-engine/src/world/minimap-data.ts`
 13. Create `packages/game-engine/src/scenes/map-scene.ts` — update `game-config.ts` to include it
 14. Create `apps/web/src/stores/map.ts`
-15. Update `packages/shared/src/constants/events.ts` to add MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+15. Create `packages/shared/src/constants/events/map.ts` with MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
 16. Update `packages/game-engine/src/scenes/scene-keys.ts` to add MAP
 17. Write tests
 
@@ -885,7 +885,7 @@ When this piece is fully implemented:
 - `packages/game-engine/src/world/minimap-data.ts` — `MinimapData` type, `exportMinimapData()`
 - `packages/game-engine/src/scenes/map-scene.ts` — `MapScene` class
 - `apps/web/src/stores/map.ts` — `useMapStore`
-- Updated `packages/shared/src/constants/events.ts` — adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+- `packages/shared/src/constants/events/map.ts` — MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
 - Updated `packages/game-engine/src/scenes/scene-keys.ts` — adds MAP key
 - Updated `packages/game-engine/src/config/game-config.ts` — adds MapScene to scene list
 
@@ -915,9 +915,8 @@ export function getAssetUrl(relativePath: string, baseUrl?: string): string
 // packages/shared/src/constants/game.ts
 export const GAME_CONFIG: { TILE_SIZE: 32; AI_TICK_RATE: 12; [key: string]: number }
 
-// packages/shared/src/constants/events.ts
-export const GAME_EVENTS: Record<string, string>
-// This piece adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+// packages/shared/src/constants/events/game.ts (from piece 04)
+// packages/shared/src/constants/events/map.ts (this piece adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED)
 ```
 
 ### Produces (for Downstream Pieces)

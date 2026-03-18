@@ -178,7 +178,7 @@ Salvage parts have only one source (equipment dismantling) and must always be 0 
 ## /speckit.plan Prompt
 
 > **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.specify ` (note the trailing space).
+> typing `/speckit.plan ` (note the trailing space).
 
 ----
 

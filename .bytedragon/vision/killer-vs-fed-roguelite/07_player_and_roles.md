@@ -549,7 +549,7 @@ type InteractionPrompt = {
 
 ### EventBus Event Types
 
-Added to `packages/shared/src/types/events.ts`:
+Defined in `packages/shared/src/types/events/player.ts` and `packages/shared/src/constants/events/player.ts`:
 
 ```typescript
 PLAYER_ACTION: { action: PlayerAction; playerId: string; timestamp: number }
@@ -620,6 +620,10 @@ apps/web/src/
     page.tsx     (game canvas page, updated to render HUD overlay)
     layout.tsx   (game layout, full-screen)
 ```
+
+### Art Style Integration
+
+Player character sprites use the same SpriteManager system as NPCs (see piece 06). Role-specific color accents: killer uses crimson tints, fed uses blue tints. See `art-style-guide.md` in the vision directory for full visual specifications including sprite dimensions, outline treatment rules, and color fill approach per role.
 
 ### Constitution Compliance
 

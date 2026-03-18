@@ -395,6 +395,10 @@ type KillerStore = {
 - Unit tests for DisposalSystem: location availability by biome, proximity check, evidence reduction calculation
 - E2E: killer executes strangulation kill on target, disposes body, heat meter updates in HUD (Playwright)
 
+### Art Style Integration
+
+Stealth kill actions display a silence effect VFX. Kill actions show comic-style onomatopoeia (CRUNCH!/SNAP!). Ink-splatter particles accompany stealth actions. See `art-style-guide.md` in the vision directory for full visual specifications including stealth kill silence effect, kill VFX, and ink-splatter particle style.
+
 ### Constitution Compliance
 
 - [x] No barrel files — all imports direct to specific files

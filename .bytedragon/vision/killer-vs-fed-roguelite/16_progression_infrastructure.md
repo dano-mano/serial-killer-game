@@ -14,9 +14,9 @@ depends_on:
   - "12: Killer content data files created and available for registration"
   - "13: FedRole types — ArrestCondition, FedRunState (for progression effects application)"
   - "14: Fed content data files created and available for registration"
-  - "15: PersistentCurrency types, material type constants (evidence_dust, blood_marks, ghost_tokens, case_files, shadow_coins, salvage_parts), RunHistoryDTO and getRunHistory"
+  - "15: PersistentCurrency types, material type constants (evidence_dust, blood_marks, ghost_tokens, case_files, shadow_coins, salvage_parts), RunHistoryDTO and getRunHistory, run_history table (consumed by UnlockResolver for evaluating unlock conditions)"
 produces:
-  - "Database migrations — skill_unlocks, trophy_unlocks, equipment_inventory, materials, loadouts, loadout_skills, loadout_equipment, crafting_unlocks, match_history, leaderboard tables with RLS"
+  - "Database migrations — skill_unlocks, trophy_unlocks, equipment_inventory, materials, loadouts, loadout_skills, loadout_equipment, crafting_unlocks, leaderboard tables with RLS"
   - "DAL modules — apps/web/src/dal/progression/ — skills-dal.ts, trophies-dal.ts, equipment-dal.ts, materials-dal.ts, loadouts-dal.ts, crafting-dal.ts, history-dal.ts"
   - "Server Actions — apps/web/src/app/actions/progression/ — unlock-skill.ts, unlock-trophy.ts, equip-item.ts, spend-materials.ts, save-loadout.ts, craft-item.ts, submit-score.ts"
   - "Progression shared types at packages/shared/src/types/progression.ts — SkillTree, Skill, SkillEffect, SkillRank, Trophy, TrophyEffect, Equipment, EquipmentStats, Loadout, Material, UnlockCondition"
@@ -81,7 +81,7 @@ Build the server-side infrastructure for all meta-progression: the database tabl
 
 **Crafting unlocks**: Records crafting recipe unlock state for a user. Fields: user ID, recipe ID (string), unlocked flag. Row-level security: users own their rows.
 
-**Match history**: Records completed run results. Fields: user ID, role played, biome, final score, duration in seconds, targets eliminated, evidence collected, outcome (win/lose/abandoned), materials earned map, timestamp. Row-level security: users own their rows.
+**Match history** (provided by session economy, piece 15): Stores completed run results including user ID, role played, biome, final score, duration, targets eliminated, evidence collected, outcome, materials earned, and timestamp. This piece reads match history to evaluate unlock conditions and populate the leaderboard — it does not create this table.
 
 **Leaderboard**: Stores high scores for matchmaking and display. Fields: user ID, role, biome, score, rank achieved, timestamp. Row-level security: read by all authenticated users; users can only insert/update their own rows.
 
@@ -224,23 +224,9 @@ ALTER TABLE user_equipment_mods ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "users own their mods" ON user_equipment_mods
   FOR ALL USING (auth.uid() = user_id);
 
--- Match history (owned here, also consumed by session economy system)
-CREATE TABLE match_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  biome TEXT NOT NULL,
-  score INT NOT NULL DEFAULT 0,
-  duration_secs INT NOT NULL,
-  targets_eliminated INT NOT NULL DEFAULT 0,
-  evidence_collected INT NOT NULL DEFAULT 0,
-  outcome TEXT NOT NULL CHECK (outcome IN ('WIN', 'LOSE', 'ABANDONED')),
-  materials_earned JSONB NOT NULL DEFAULT '{}',
-  played_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE match_history ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "users own their match history" ON match_history
-  FOR ALL USING (auth.uid() = user_id);
+-- Run history is owned by piece 15 (session economy) — consumed here by UnlockResolver.
+-- See run_history table in supabase/migrations/XXX_run_history.sql (produced by piece 15).
+-- getRunHistory() and RunHistoryDTO are imported from apps/web/src/dal/runs/history.ts.
 ```
 
 ### Progression Effects Engine
@@ -341,7 +327,6 @@ export const craftingRecipeRegistry = new ContentRegistry('CraftingRecipe', craf
 ### Expected Outputs
 
 - `supabase/migrations/YYYYMMDD_progression.sql` — all progression tables
-- `supabase/migrations/YYYYMMDD_match_history.sql` — match_history table
 - `supabase/seed/seed-content.ts` — upserts all content from TypeScript const objects
 - `packages/shared/src/types/progression.ts`
 - `packages/shared/src/schemas/progression.ts`

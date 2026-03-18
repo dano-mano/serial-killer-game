@@ -80,7 +80,7 @@ From piece 03: standard UI components (AppButton, AppCard, AppDialog, AppInput, 
 
 From piece 04: EventBus with emit and on methods; scene keys for boot, preload, map, combat, shop, and loading scenes.
 
-From piece 05: the 12 biomes (rural, city, cruise ship, office building, amusement park, shopping mall, airport, abandoned asylum, remote island, ghost town, concert venue, subway network).
+From piece 05: the 14 biomes (rural farmland, city streets, office building, cruise ship, amusement park, shopping mall, airport terminal, abandoned asylum, remote island, ghost town, concert venue, subway network, casino floor, university campus).
 
 From piece 07: player role (killer or fed).
 
@@ -234,7 +234,7 @@ A polished marketing landing page rendered server-side for SEO. Sections:
 
 **Asymmetric Gameplay**: Two side-by-side cards with hover effects. Killer card uses a dark theme with stealth visuals and a list of killer abilities. Fed card uses a blue theme with investigation visuals and a list of fed abilities. A note explains that both roles unlock counter-play abilities to undermine each other.
 
-**Biomes Section**: Horizontally scrolling marquee of biome screenshots with caption "12 procedurally generated biomes — each run is unique."
+**Biomes Section**: Horizontally scrolling marquee of biome screenshots with caption "14 procedurally generated biomes — each run is unique."
 
 **Progression**: An animated beam diagram showing the progression loop: Run → Materials → Skill Trees → Counter-Play Abilities → Next Run.
 
@@ -654,7 +654,7 @@ apps/web/src/app/page.tsx — Server Component (SSR for SEO)
 
 [Biomes Section]
   - Marquee of biome screenshots
-  - Caption: "12 procedurally generated biomes — each run is unique"
+  - Caption: "14 procedurally generated biomes — each run is unique"
 
 [Progression]
   - AnimatedBeam: Run → Materials → Skill Trees → Counter-Play Abilities → Next Run

@@ -502,7 +502,7 @@ Biome spawn distributions:
 
 ### EventBus Event Types
 
-Added to `packages/shared/src/types/events.ts`:
+Defined in `packages/shared/src/types/events/entity.ts` and `packages/shared/src/constants/events/entity.ts`:
 
 ```typescript
 NEARBY_NPC_CHANGED: { npcIds: string[]; interactable: boolean }

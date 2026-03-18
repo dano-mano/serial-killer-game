@@ -335,6 +335,10 @@ export type SyncPayload =
 - Integration test: simultaneous game-over conditions — verify server sequence number adjudicates correctly
 - E2E (Playwright): full lobby → game → win → results for two browser tabs
 
+### Art Style Integration
+
+Player sprite rendering must be deterministic across clients — both clients must use the same atlas key and animation frames for the opponent sprite. See `art-style-guide.md` in the vision directory for full visual specifications including sprite atlas format requirements and animation frame consistency requirements for multiplayer rendering.
+
 ### Constitution Compliance Checklist
 
 - [x] I: No barrel files — direct imports throughout
