@@ -549,7 +549,7 @@ type InteractionPrompt = {
 
 ### EventBus Event Types
 
-Added to `packages/shared/src/types/events.ts`:
+Defined in `packages/shared/src/types/events/player.ts` and `packages/shared/src/constants/events/player.ts`:
 
 ```typescript
 PLAYER_ACTION: { action: PlayerAction; playerId: string; timestamp: number }
@@ -621,6 +621,10 @@ apps/web/src/
     layout.tsx   (game layout, full-screen)
 ```
 
+### Art Style Integration
+
+Player character sprites use the same SpriteManager system as NPCs (see piece 06). Role-specific color accents: killer uses crimson tints, fed uses blue tints. See `art-style-guide.md` in the vision directory for full visual specifications including sprite dimensions, outline treatment rules, and color fill approach per role.
+
 ### Constitution Compliance
 
 - [x] No barrel files — all imports direct to specific files
@@ -676,6 +680,6 @@ apps/web/src/
 
 ### Alignment Notes
 
-The role framework is the key extensibility point in this piece. Piece 10 (killer-gameplay) and piece 11 (fed-gameplay) each implement `RoleInterface` and register themselves in `RoleRegistry`. The clean interface means neither piece needs to know about the other. The run manager just calls `roleRegistry.create(config.role)` and everything flows from there.
+The role framework is the key extensibility point in this piece. Piece 11 (killer-core-mechanics) and piece 13 (fed-core-mechanics) each implement `RoleInterface` and register themselves in `RoleRegistry`. The clean interface means neither piece needs to know about the other. The run manager just calls `roleRegistry.create(config.role)` and everything flows from there.
 
 The sprite variant system (player randomly gets one of the NPC skins) is subtle but important: it means the killer and fed look like ordinary NPCs, but each has a consistent visual appearance within a run. Over time, the fed can learn "the killer has that brown jacket" based on witness descriptions, before the killer can change disguise.

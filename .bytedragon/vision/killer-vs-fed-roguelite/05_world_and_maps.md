@@ -417,7 +417,7 @@ Capabilities:
 - Line-of-sight check: uses Bresenham's line algorithm to determine if a straight sightline is clear of walls
 - Dynamic update: can toggle a tile's blocked state when doors open, bodies are placed, etc.
 
-Line-of-sight is used by NPC perception (piece 06) and evidence rendering.
+Line-of-sight is used by NPC perception (entity and NPC system) and evidence rendering.
 
 ### Spawn Manager
 
@@ -457,19 +457,19 @@ Zone transitions emit map events (zone-entered, zone-exited) when tracked entiti
 
 The main gameplay scene. Orchestrates all map subsystems:
 
-On initialization: receives a seed and biome ID from the run manager (piece 07). During development, hardcoded defaults are used.
+On initialization: receives a seed and biome ID from the run manager (player and role framework). During development, hardcoded defaults are used.
 
 On preload: loads biome-specific (deferred tier) assets — the tilesheet for this biome, NPC sprites, etc.
 
 On create: generates the map, instantiates all subsystems (tile manager, collision layer, pathfinding grid, spawn manager, zone manager, camera controller), then emits the map-loaded event with the biome ID, map dimensions, and a zone summary.
 
-On update: detects zone transitions by checking tracked entities against zone boundaries. Player entity integration is stubbed until piece 07.
+On update: detects zone transitions by checking tracked entities against zone boundaries. Player entity integration is stubbed until the player and role framework piece.
 
 The map scene is added to the game config's scene array as the third entry after Boot and Preload.
 
 ### Minimap Data
 
-The minimap data bridge exports a simplified map representation to the React state layer for the minimap HUD component (piece 07). The minimap data includes:
+The minimap data bridge exports a simplified map representation to the React state layer for the minimap HUD component (player and role framework). The minimap data includes:
 - Map dimensions (width and height in tiles)
 - Explored tiles: a boolean grid tracking fog-of-war (which tiles the player has seen)
 - Zone name and bounds list (for the minimap overlay)
@@ -487,12 +487,16 @@ React-side state for the current map, readable by HUD components. Tracks:
 
 ### Edge Cases
 
-- **Seed management for multiplayer**: The multiplayer host generates the seed (piece 14). For singleplayer (and during this piece's development), generate a random seed at run start using Phaser's built-in random data generator. The seed must be a string.
+- **Seed management for multiplayer**: The multiplayer host generates the seed (the multiplayer sync system). For singleplayer (and during this piece's development), generate a random seed at run start using Phaser's built-in random data generator. The seed must be a string.
 - **Passability validation**: The generator MUST verify that player spawn and all exit points are reachable via pathfinding. If not, regenerate with a modified seed (append a retry suffix). After 3 failures, fallback to a guaranteed-valid hardcoded seed.
-- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during polish (piece 15).
+- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during the polish and onboarding piece.
 - **Map size scaling**: Large maps (concert festival at 180×150 = 27,000 tiles) can be memory-intensive. Use lazy rendering — only process tiles near the camera. Phaser's tilemap layer supports culling for this purpose.
 - **Collision layer dynamic updates**: When a body is placed on a tile or a door opens, both the collision layer and the pathfinding grid must be updated together to keep them in sync.
 - **Fog of war**: The explored tiles grid starts as all-false. As the player moves, tiles within a radius are marked explored. The minimap shows only explored tiles. Unexplored tiles render as black on the minimap. This is tracked client-side only (not server-validated for performance).
+
+### Multiplayer Determinism Requirement
+
+All map generation must be perfectly deterministic from a given seed. The same seed and biome combination must always produce identical maps. No randomness outside the seeded random number generator. Zone placement, building positions, and spawn points must all be deterministic from seed. This is a hard requirement for multiplayer sync — if two clients generate different maps from the same seed, the game state immediately diverges.
 
 ----
 
@@ -769,9 +773,9 @@ export const useMapStore = create<MapStore>((set) => ({
 }))
 ```
 
-### Updated Event Constants
+### Event Constants — `packages/shared/src/constants/events/map.ts`
 
-Add to `packages/shared/src/constants/events.ts`:
+Create `packages/shared/src/constants/events/map.ts`:
 ```typescript
 MAP_LOADED: 'game:map-loaded',
 ZONE_ENTERED: 'game:zone-entered',
@@ -804,7 +808,7 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 12. Create `packages/game-engine/src/world/minimap-data.ts`
 13. Create `packages/game-engine/src/scenes/map-scene.ts` — update `game-config.ts` to include it
 14. Create `apps/web/src/stores/map.ts`
-15. Update `packages/shared/src/constants/events.ts` to add MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+15. Create `packages/shared/src/constants/events/map.ts` with MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
 16. Update `packages/game-engine/src/scenes/scene-keys.ts` to add MAP
 17. Write tests
 
@@ -848,8 +852,14 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 - [x] XIV: EventBus for zone transition signals (one-time events)
 - [x] XV: No database tables in this piece — all data is client-side runtime state. BiomeConfig is code, not DB.
 - [x] XXVI: Tests in `tests/` at package root
-- [x] XXIX: Maps scale to viewport via camera zoom; minimap is responsive React component
-- [x] XXXI: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
+- [x] XXX: Maps scale to viewport via camera zoom; minimap is responsive React component
+- [x] XXXII: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
+
+### Determinism Implementation Requirements
+
+All random number generation in map generation MUST use the seeded RNG (never `Math.random()`). Map generation from the same seed+biome MUST produce byte-identical tile arrays. Add integration test: generate map twice with same seed, assert arrays are deep-equal. This test must pass before this piece is considered complete — it verifies the multiplayer determinism guarantee.
+
+See `art-style-guide.md` in the vision directory for biome-specific color palettes and tileset art style (hand-drawn with hatching/cross-hatching). Tileset dimensions and format requirements are specified there.
 
 ----
 
@@ -875,7 +885,7 @@ When this piece is fully implemented:
 - `packages/game-engine/src/world/minimap-data.ts` — `MinimapData` type, `exportMinimapData()`
 - `packages/game-engine/src/scenes/map-scene.ts` — `MapScene` class
 - `apps/web/src/stores/map.ts` — `useMapStore`
-- Updated `packages/shared/src/constants/events.ts` — adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+- `packages/shared/src/constants/events/map.ts` — MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
 - Updated `packages/game-engine/src/scenes/scene-keys.ts` — adds MAP key
 - Updated `packages/game-engine/src/config/game-config.ts` — adds MapScene to scene list
 
@@ -905,9 +915,8 @@ export function getAssetUrl(relativePath: string, baseUrl?: string): string
 // packages/shared/src/constants/game.ts
 export const GAME_CONFIG: { TILE_SIZE: 32; AI_TICK_RATE: 12; [key: string]: number }
 
-// packages/shared/src/constants/events.ts
-export const GAME_EVENTS: Record<string, string>
-// This piece adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED
+// packages/shared/src/constants/events/game.ts (from piece 04)
+// packages/shared/src/constants/events/map.ts (this piece adds MAP_LOADED, ZONE_ENTERED, ZONE_EXITED)
 ```
 
 ### Produces (for Downstream Pieces)
@@ -915,14 +924,14 @@ export const GAME_EVENTS: Record<string, string>
 - **`CollisionLayer`** — piece 06 (entity-and-npc-system) imports `CollisionLayer` for NPC perception line-of-sight
 - **`PathfindingGrid`** — piece 06 imports `PathfindingGrid` for NPC movement
 - **`SpawnManager`** — piece 06 imports `SpawnManager` for NPC spawn points; piece 07 (player-and-roles) imports for player spawn
-- **`ZoneManager`** — piece 06 imports for NPC zone assignment; piece 09 (evidence-system) imports for evidence zone context
+- **`ZoneManager`** — piece 06 imports for NPC zone assignment; piece 10 (evidence-system) imports for evidence zone context
 - **`MapScene`** — piece 06 adds entities to MapScene; piece 07 adds the player to MapScene
 - **`BIOME_CATALOG`** — piece 07 uses this for the biome selection pre-run screen
 - **`useMapStore`** — piece 07's `Minimap.tsx` HUD component reads minimap data from this store
 - **`CameraController`** — piece 07 calls `cameraController.followTarget(playerSprite)` when player spawns
-- **`TileManager`** — piece 09 uses `setTile()` to place evidence on specific tiles; piece 10 (killer-gameplay) uses it for body disposal locations
-- **`Zone` and `ZoneType` types** — piece 09 tags evidence with zone context; piece 10 uses `ZoneType.isolated` zones for kill opportunities
-- **`BIOME_IDS` and `DEFAULT_BIOMES`** — piece 13 (persistent-progression) uses unlock requirements to gate biome access
+- **`TileManager`** — piece 10 uses `setTile()` to place evidence on specific tiles; piece 11 (killer-core-mechanics) uses it for body disposal locations
+- **`Zone` and `ZoneType` types** — piece 10 tags evidence with zone context; piece 11 uses `ZoneType.isolated` zones for kill opportunities
+- **`BIOME_IDS` and `DEFAULT_BIOMES`** — piece 16 (progression-infrastructure) uses unlock requirements to gate biome access
 
 ### Success Criteria
 
@@ -943,6 +952,6 @@ This piece is sequentially dependent on the game engine bootstrap — it cannot 
 
 Piece 06 (entity-and-npc-system) directly consumes the map systems produced here. It cannot begin until this piece is complete. The dependency chain from here: world-and-maps → entity-and-npc-system → player-and-roles.
 
-The biome catalog is intentionally large (14 biomes) to provide long-term content without requiring a new release. Only 4 biomes launch with the game; the remaining 10 are unlocked through gameplay progression (piece 13). This architecture decision means the biome system must support the unlock mechanic — `BiomeUnlockRequirement` is defined here and consumed by piece 13.
+The biome catalog is intentionally large (14 biomes) to provide long-term content without requiring a new release. Only 4 biomes launch with the game; the remaining 10 are unlocked through gameplay progression (piece 16). This architecture decision means the biome system must support the unlock mechanic — `BiomeUnlockRequirement` is defined here and consumed by piece 16.
 
 The asymmetric difficulty ratings are a design statement: the game intentionally has some biomes that heavily favor one role over the other. This creates strategic variety — skilled killers seek airport terminals (hardest for both, hardest for killer especially) for challenge runs; new killers learn on amusement parks and concert festivals where blending is trivially easy.

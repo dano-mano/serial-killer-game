@@ -13,8 +13,8 @@ produces:
   - "Boot scene packages/game-engine/src/scenes/boot-scene.ts"
   - "Preload scene packages/game-engine/src/scenes/preload-scene.ts"
   - "EventBus packages/game-engine/src/events/event-bus.ts (typed, Phaser-to-React signals)"
-  - "Shared event types packages/shared/src/types/events.ts"
-  - "Shared event constants packages/shared/src/constants/events.ts"
+  - "Shared game event types packages/shared/src/types/events/game.ts"
+  - "Shared game event constants packages/shared/src/constants/events/game.ts"
   - "Zustand game store apps/web/src/stores/game.ts"
   - "Zustand player store apps/web/src/stores/player.ts"
   - "React PhaseGame component apps/web/src/components/app/game/phaser-game.tsx"
@@ -108,7 +108,7 @@ Numeric game configuration values are shared constants:
 - `currentScene`: the active Phaser scene key (null when not in game)
 - `fps`: current frame rate for debug display
 
-**Player store** (stub in this piece, extended by piece 07):
+**Player store** (stub in this piece, extended by the player and role framework):
 - `userId`, `displayName` — set by AuthProvider when user authenticates
 - `health`, `maxHealth` — current HP (initialized to 100/100)
 - `position` — current tile coordinates, or null
@@ -217,7 +217,7 @@ class GameEventBus extends Phaser.Events.EventEmitter {
 export const eventBus = new GameEventBus()
 ```
 
-### Event Constants — `packages/shared/src/constants/events.ts`
+### Event Constants — `packages/shared/src/constants/events/game.ts`
 
 ```typescript
 export const GAME_EVENTS = {
@@ -234,7 +234,7 @@ export const GAME_EVENTS = {
 export type GameEventName = typeof GAME_EVENTS[keyof typeof GAME_EVENTS]
 ```
 
-### Event Payload Types — `packages/shared/src/types/events.ts`
+### Event Payload Types — `packages/shared/src/types/events/game.ts`
 
 ```typescript
 export interface PlayerDiedPayload {
@@ -291,7 +291,7 @@ export const useGameStore = create<GameStore>((set) => ({
 }))
 ```
 
-**`apps/web/src/stores/player.ts`** (stub — extended by piece 07):
+**`apps/web/src/stores/player.ts`** (stub — extended by the player and role framework):
 ```typescript
 'use client'
 import { create } from 'zustand'
@@ -422,12 +422,31 @@ export function loadTilemaps(scene: Phaser.Scene, tilemaps: Array<{key: string; 
 | React | 19.2.4 | PhaserGame component uses useEffect, useRef |
 | TypeScript | 5.9.3+ | Phaser ships its own types |
 
+### Per-Domain Event File Architecture
+
+Use per-domain event constant files instead of a single `events.ts` to prevent merge conflicts when multiple pieces add events in parallel (e.g., when killer and fed roles are built concurrently):
+
+```
+packages/shared/src/constants/events/game.ts       — game engine events (this piece)
+packages/shared/src/constants/events/entity.ts     — NPC/entity events (entity and NPC system)
+packages/shared/src/constants/events/combat.ts     — combat events (combat mechanics)
+packages/shared/src/constants/events/evidence.ts   — evidence events (evidence system)
+packages/shared/src/constants/events/killer.ts     — killer role events (killer core mechanics)
+packages/shared/src/constants/events/fed.ts        — fed role events (fed core mechanics)
+packages/shared/src/constants/events/economy.ts    — session economy events (session economy)
+packages/shared/src/constants/events/multiplayer.ts — multiplayer sync events (multiplayer sync)
+```
+
+Same pattern applies for `packages/shared/src/types/events/` — per-domain type files. Each piece owns its domain file exclusively. No piece modifies another piece's event file. This eliminates all merge conflicts during parallel implementation.
+
+This piece creates `events/game.ts` with the GAME_EVENTS constants. Downstream pieces each create their own domain file.
+
 ### Implementation Order
 
 1. Add Phaser 3.90.0 to `packages/game-engine/package.json` (NOT to apps/web)
 2. Add Zustand to `apps/web/package.json`
-3. Create `packages/shared/src/constants/events.ts` — event name constants
-4. Create `packages/shared/src/types/events.ts` — event payload types
+3. Create `packages/shared/src/constants/events/game.ts` — game engine event name constants
+4. Create `packages/shared/src/types/events/game.ts` — game engine event payload types
 5. Create `packages/shared/src/constants/game.ts` — game configuration constants
 6. Create `packages/game-engine/src/events/event-bus.ts` — EventBus singleton
 7. Create `packages/game-engine/src/scenes/scene-keys.ts` — SceneKey enum
@@ -466,7 +485,7 @@ React components in `apps/web` import via these entry points (e.g., `import { ev
 - EventBus off() removes handlers
 - Multiple handlers for same event all receive it
 
-**Unit tests** (`packages/shared/tests/constants/events.test.ts`):
+**Unit tests** (`packages/shared/tests/constants/events/game.test.ts`):
 - All event constants are unique strings (no collisions)
 
 **Unit tests** (`packages/shared/tests/constants/game.test.ts`):
@@ -491,14 +510,18 @@ React components in `apps/web` import via these entry points (e.g., `import { ev
 ### Constitution Compliance Checklist
 
 - [x] I: No barrel files — game-engine uses `exports` field in package.json (package boundary, not barrel)
-- [x] III: Shared types in `packages/shared/src/types/events.ts`
+- [x] III: Shared types in `packages/shared/src/types/events/game.ts`
 - [x] VI: Domain-based organization — `game/` scenes, `events/` bus, `utils/` loader
 - [x] VII: `"use client"` on PhaserGame component; Phaser scenes have no React imports
 - [x] VIII: EventBus is a singleton (module-level instance); Phaser game instance managed via useRef
 - [x] XIV: EventBus for one-time signals; Zustand for persistent state — correctly applied
 - [x] XXVI: Tests in `tests/` at each package root
-- [x] XXIX: Responsive canvas via `Phaser.Scale.FIT` mode
-- [x] XXXI: Asset loading tiers implemented (Critical → Standard → Deferred)
+- [x] XXX: Responsive canvas via `Phaser.Scale.FIT` mode
+- [x] XXXII: Asset loading tiers implemented (Critical → Standard → Deferred)
+
+### Art Style Integration
+
+Register the PostFX shader pipeline in the Phaser game config. The `packages/game-engine/src/rendering/` directory holds all `PostFXPipeline` classes. The game config calls `registerPipelines(game)` from `packages/game-engine/src/rendering/index.ts` after game initialization — this function registers all shader pipelines without re-exporting the classes (boot registration entry point, not a barrel file). Simple shaders (<50 lines) are embedded as template literals in each pipeline class file. Complex shaders are extracted to `.frag` files and imported as raw strings. See `art-style-guide.md` in the vision directory for full PostFX visual specifications.
 
 ----
 
@@ -516,8 +539,8 @@ When this piece is fully implemented, it should produce:
 - `packages/game-engine/src/scenes/preload-scene.ts` — standard asset preload + loading bar
 - `packages/game-engine/src/events/event-bus.ts` — `eventBus` singleton
 - `packages/game-engine/src/utils/asset-loader.ts` — `loadImages`, `loadAtlases`, `loadTilemaps`, `getAssetUrl`
-- `packages/shared/src/types/events.ts` — all event payload types
-- `packages/shared/src/constants/events.ts` — `GAME_EVENTS` constants
+- `packages/shared/src/types/events/game.ts` — game engine event payload types
+- `packages/shared/src/constants/events/game.ts` — `GAME_EVENTS` constants
 - `packages/shared/src/constants/game.ts` — `GAME_CONFIG` constants
 - `apps/web/src/stores/game.ts` — `useGameStore` (phase, currentScene, fps)
 - `apps/web/src/stores/player.ts` — `usePlayerStore` stub (userId, displayName, health, position)
@@ -539,7 +562,7 @@ All of the following are produced by piece 01 and must be in place:
 - **`createGameConfig`** — piece 05 (world-and-maps) adds `MapScene` to the scene list
 - **`SceneKey`** — all subsequent scene pieces add their keys here
 - **`eventBus`** — every downstream Phaser scene and React component uses this
-- **`GAME_EVENTS`** constants — downstream pieces add their event names here
+- **`GAME_EVENTS`** constants (in `events/game.ts`) — downstream pieces create their own domain event files (entity.ts, combat.ts, etc.) in the same directory
 - **`GAME_CONFIG`** constants — piece 05 uses `TILE_SIZE`; piece 06 uses `AI_TICK_RATE`
 - **`useGameStore`** — HUD components (piece 07+) read `phase` and `currentScene`
 - **`usePlayerStore`** — extended by piece 07 (player-and-roles) with role, inventory, objectives

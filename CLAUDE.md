@@ -59,13 +59,13 @@ see `.bytedragon/TECH_RESEARCH.md`.
 
 ## Constitution (Governance)
 
-The project constitution at `.specify/memory/constitution.md` is the authority for all development decisions. It contains 31 principles across 6 sections:
+The project constitution at `.specify/memory/constitution.md` is the authority for all development decisions. It contains 33 principles across 6 sections:
 
 - **Core Architecture (I-X)**: Direct imports (no barrel files), centralized config/types/branding, immutable vendor components, domain-based organization, explicit client/server boundaries, singleton services, runtime version consistency, observability
 - **Data & State (XI-XV)**: Zod schema validation, Data Access Layer, Server Actions for mutations, three-layer game state bridge (Phaser/Zustand/Supabase), database schema design
 - **Security (XVI-XXII)**: Zero-trust frontend, server-side enforcement, secrets management, RLS defense-in-depth, input validation at every boundary, rate limiting, content security policy
-- **Quality (XXIII-XXVIII)**: Zero tech debt, dependency management, no ephemeral references in source code, centralized test organization + quality, AI-optimized documentation, WCAG AA accessibility
-- **Performance (XXIX-XXXI)**: Responsive design, progressive enhancement, asset loading tiers
+- **Quality (XXIII-XXIX)**: Zero tech debt, dependency management, no ephemeral references in source code, centralized test organization + quality, AI-optimized documentation, WCAG AA accessibility, art style consistency
+- **Performance (XXX-XXXIII)**: Responsive design, progressive enhancement, asset loading tiers, graceful visual degradation
 
 **Conflict resolution priority**: Security > Architecture > Data > Quality > Performance
 

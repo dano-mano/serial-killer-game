@@ -427,7 +427,7 @@ These are common mistakes when migrating from v3 to v4:
 
 **Visual regression** (optional for this piece — note for future):
 - Playwright screenshot tests for key components in light and dark mode
-- Can be added in the polish piece (piece 15)
+- Can be added in the polish piece (piece 19)
 
 **Unit tests** (`packages/ui-theme/tests/`):
 - Verify color token values are valid hex codes
@@ -441,7 +441,13 @@ These are common mistakes when migrating from v3 to v4:
 - [x] VI: Domain-based organization — `app/common/` for shared, `app/game/` for game-specific (later)
 - [x] XXVI: Tests in `tests/` at package root
 - [x] XXVIII: Dark mode default + light mode for accessibility (WCAG AA contrast ratios)
-- [x] XXIX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
+- [x] XXX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
+
+### Art Style Integration
+
+The Bangers comic font is used as the display typeface (headlines, HUD labels, score displays). The token chain for correct integration: `packages/ui-theme/src/typography.ts` defines `fontComic` referencing the CSS variable, `apps/web/src/app/globals.css` defines the `@theme` block with `--font-bangers` loaded from `next/font/google`, and components use `className="font-comic"`. Do not hardcode `font-family: 'Bangers'` in component files — always reference the design token.
+
+AppCard and AppDialog should include `panel` variants with panel-style borders (thick stroke, comic-panel visual treatment). These variants are used by all game UI overlays to maintain the comic-book aesthetic. See `art-style-guide.md` in the vision directory for full visual specifications.
 
 ----
 
@@ -488,7 +494,7 @@ Every subsequent piece that builds UI consumes outputs from this piece:
 - **AppButton, AppCard, AppDialog, AppInput, AppToast** — imported by HUD components (piece 07+), auth pages (piece 02), menus
 - **GameLayout** — used by `/game/*` route layout (piece 04)
 - **AuthLayout** — used by auth pages (piece 02)
-- **PageLayout** — used by landing page, profile, leaderboards (piece 13+)
+- **PageLayout** — used by landing page, profile, leaderboards (piece 16+)
 - **Color tokens** — imported by Phaser canvas to match UI palette (piece 04)
 - **ThemeProvider** — wraps the entire app; theme state accessible to all components
 - **Brand config** — used in page metadata, OG tags, marketing copy

@@ -509,7 +509,7 @@ Downstream pieces consume these outputs:
 - **`createSupabaseServerClient`** — every subsequent piece with a DAL imports this factory
 - **`createSupabaseBrowserClient`** — any client component needing auth state imports this
 - **`AuthProvider`** — wraps the app layout; downstream pieces can access auth context
-- **`user_profiles` table** — piece 13 (persistent-progression) joins against this table for player stats
+- **`user_profiles` table** — piece 16 (progression-infrastructure) joins against this table for player stats
 - **`getProfile` DAL function** — piece 07 calls this to load player profile before a run
 - **Protected route logic in `proxy.ts`** — extended by later pieces as new protected routes are added
 
@@ -531,4 +531,4 @@ This piece runs in parallel with design-system (piece 03) and game-engine-bootst
 
 The `proxy.ts` established in piece 01 is a stub. This piece extends it with real session refresh logic. Later pieces do NOT need to modify `proxy.ts` unless they introduce new route protection requirements.
 
-The `display_name` field is intentionally minimal — no avatar file upload, no social features. Persistent progression (piece 13) will extend the profile concept with game stats.
+The `display_name` field is intentionally minimal — no avatar file upload, no social features. Persistent progression (piece 16) will extend the profile concept with game stats.
