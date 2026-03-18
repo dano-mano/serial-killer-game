@@ -904,7 +904,7 @@ npm i -D eslint eslint-config-next typescript-eslint eslint-plugin-react-compile
 
 **Implementation** (server-only singleton, Constitution Principle VIII):
 ```typescript
-// apps/web/src/lib/logger/index.ts
+// apps/web/src/lib/logger/pino.ts
 import 'server-only'
 import pino from 'pino'
 
@@ -930,6 +930,8 @@ export function createLogger(context: string) {
   return logger.child({ context })
 }
 ```
+
+> **Note**: The `process.env` usage above is for illustration only. In production code, these values MUST be accessed through the centralized config module at `apps/web/src/config/env.ts` with Zod validation (Constitution Principle II).
 
 **Sentry Integration**:
 ```typescript
@@ -1492,6 +1494,8 @@ export const supabaseAdmin = createServerClient(
   { /* cookie config for server-side auth */ }
 );
 ```
+
+> **Note**: The `process.env` usage above is for illustration only. In production code, these values MUST be accessed through the centralized config module at `apps/web/src/config/env.ts` with Zod validation (Constitution Principle II). The `!` non-null assertions shown here are replaced by Zod runtime validation in the config module.
 
 ### Separation of Concerns
 

@@ -6,8 +6,8 @@ group: Core Engine
 group_order: 2
 status: pending
 depends_on:
-  - "04_game_engine_bootstrap: Scene manager (scene-keys.ts — register MapScene), Phaser game config (createGameConfig — add MapScene to scene list), EventBus (emit map-loaded, zone-entered events), asset loader utility, GAME_CONFIG constants (TILE_SIZE)"
-  - "01_project_scaffold: Shared types/constants directories in packages/shared/src/"
+  - "04: Scene manager (scene-keys.ts — register MapScene), Phaser game config (createGameConfig — add MapScene to scene list), EventBus (emit map-loaded, zone-entered events), asset loader utility, GAME_CONFIG constants (TILE_SIZE)"
+  - "01: Shared types/constants directories in packages/shared/src/"
 produces:
   - "Map generator packages/game-engine/src/world/map-generator.ts (seed-based procedural generation)"
   - "Biome definitions packages/game-engine/src/world/biomes/*.ts (14 biomes)"
@@ -34,10 +34,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Build the procedural map generation system that creates the playable world for each run. Maps are tile-based, procedurally generated from a seed (same seed = same map, required for multiplayer synchronization), and organized into biomes with distinct themes, layouts, and asymmetric difficulty ratings. Each map includes collision data, a zone system for triggering events, spawn points for players and NPCs, a camera controller that follows the player, and a pathfinding grid for NPC navigation.
 
@@ -831,12 +833,14 @@ export const useMapStore = create<MapStore>((set) => ({
 - **Collision layer dynamic updates**: When a body is placed on a tile or a door opens, `CollisionLayer.setBlocked()` and `PathfindingGrid.updateCell()` must both be called to keep them in sync.
 - **Fog of war**: `exploredTiles` starts as all-false. As the player moves, tiles within a radius are marked explored. The minimap shows only explored tiles. Unexplored tiles render as black on the minimap. This is tracked client-side only (not server-validated for performance).
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -917,7 +921,7 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 - [x] XXIX: Maps scale to viewport via camera zoom; minimap is responsive React component
 - [x] XXXI: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
 
----
+----
 
 ## Supplemental Information
 

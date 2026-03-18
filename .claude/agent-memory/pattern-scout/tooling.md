@@ -1,6 +1,6 @@
 ---
 name: tooling
-description: Speckit workflow toolchain, available commands, template patterns, and process decisions
+description: Speckit workflow toolchain, build tooling, testing infrastructure, ESLint, CI/CD, and process decisions
 type: project
 ---
 
@@ -43,3 +43,85 @@ Previously caught broken Dockerfile, wrong SQL table reference, wrong cost total
 - Story label = US1, US2, etc.
 - Phase order: Setup -> Foundational (blocking) -> User Stories -> Polish
 - Tests FIRST (must fail before implementation)
+
+## Build Tooling
+
+### ESLint Flat Config (eslint.config.mjs)
+Key rules enforcing constitution:
+- `no-barrel-files/no-barrel-files` — Principle I
+- `n/no-process-env: error` — Principle II (disabled in `config/` dirs only)
+- `no-restricted-imports` on `**/components/vendor/**` — Principle V
+- `no-console` (allows warn/error) — Principle X
+- `neverthrow/must-use-result: error` — Error handling enforcement
+- `jsx-a11y/*` via eslint-config-next — Principle XXVIII
+
+Note: `next lint` command REMOVED in Next.js 16 — use `eslint .` directly.
+
+### Build Script
+```json
+"build": "rm -rf .next && tsc --noEmit && eslint . && next build"
+```
+Sequence: clear cache → type check → lint → build
+
+### Turborepo Tasks (turbo.json)
+```json
+{
+  "tasks": {
+    "build": { "dependsOn": ["^build"] },
+    "test": { "dependsOn": ["^test"] },
+    "test:watch": { "cache": false, "persistent": true },
+    "lint": {}
+  }
+}
+```
+
+### Vitest 4.1.0
+- `vitest.workspace.ts` at monorepo root (not vitest.config.ts)
+- Per-package `vitest.config.ts` in each package
+- `include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx']`
+- Default environment: `jsdom` for component tests
+- `@testing-library/jest-dom/vitest` import in vitest.setup.ts
+
+### Playwright 1.58.2
+- Config at `apps/web/playwright.config.ts`
+- `testDir: './e2e'`
+- E2E spec suffix: `.spec.ts` (distinguishes from Vitest `.test.ts`)
+- Multi-context pattern for multiplayer tests: `browser.newContext()` per player
+
+## CI/CD Pipeline
+
+### ci.yml (on PR)
+1. `actions/setup-node@v4` with `node-version: '24'`
+2. `npm ci` (NOT npm install)
+3. `turbo lint`
+4. `turbo test`
+5. `turbo build`
+6. `npm audit` — FAILS on critical/high vulnerabilities (Principle XXIV)
+7. Validate Node.js version matches `engines.node`
+
+### deploy.yml (on push to main)
+1. Run CI checks
+2. Supabase migrations: `supabase db push` BEFORE app deployment
+3. Docker build with `NEXT_PUBLIC_*` as build-args
+4. Push to ghcr.io
+5. Azure App Service pulls from ghcr.io
+
+### Dockerfile Pattern (node:24-alpine, multi-stage)
+- deps stage: `npm ci`
+- builder stage: `turbo build --filter=web`
+- runner stage: copy standalone output, `node apps/web/server.js`
+- Server secrets: NEVER in Dockerfile — set in Azure App Service Application Settings at runtime
+
+## Package Manager
+`npm` ONLY — bundled with Node.js 24. NEVER pnpm, yarn, or bun.
+`package-lock.json` MUST be committed. Use `npm ci` in CI.
+
+## Supabase Development Scripts
+```json
+{
+  "db:push": "supabase db push",
+  "db:push:dry": "supabase db push --dry-run",
+  "db:types": "supabase gen types --linked --lang=typescript > packages/shared/src/types/database.ts"
+}
+```
+Note: db:types outputs to `packages/shared/` (monorepo-adapted from standard single-app pattern).

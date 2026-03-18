@@ -6,13 +6,13 @@ group: Core Gameplay
 group_order: 3
 status: pending
 depends_on:
-  - project-scaffold
-  - design-system
-  - game-engine-bootstrap
-  - world-and-maps
-  - entity-and-npc-system
-  - player-and-roles
-  - combat-system
+  - "01: Result utilities, Zod, Pino logger, shared type/schema scaffold, environment config"
+  - "03: Design system components (AppButton, AppCard, AppDialog) for EvidencePanel React component"
+  - "04: EventBus, game constants, Zustand game store"
+  - "05: Zone manager (evidence placed in zones), tile manager, biome types, Vec2"
+  - "06: NPC witness system (WitnessStatement, getWitnessStatement()), NPCSpawner, perception system"
+  - "07: Player actions (PLAYER_ACTION events), inventory (evidence-modifying items), role (evidence visibility differs by role), player Zustand store"
+  - "08: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event, Attack type"
 produces:
   - "Evidence manager: tracks all evidence, handles generation, decay, and discovery"
   - "Evidence types: Evidence, EvidenceType, EvidenceState, EvidenceQuality, CaseFile"
@@ -38,10 +38,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement the evidence and clue system that is the central asymmetric mechanic connecting killer and fed gameplay. Killer actions generate forensic traces (footprints, DNA, witness accounts, weapon marks, bodies). The fed discovers and interprets these traces to build a case. The system also implements counter-play abilities: the killer can actively plant false evidence and disrupt the investigation, while the fed can use off-the-books tactics to gather evidence faster but with consequences. Evidence quantity and quality determine whether an arrest is viable.
 
@@ -624,12 +626,14 @@ FALSE_EVIDENCE_PLANTED: { evidenceId: string; type: EvidenceType; pos: Vec2 }  /
 - Spatial hash must be updated when evidence is added, destroyed, or moved — movement does not normally occur but false evidence can be "relocated" by edge cases
 - `FALSE_EVIDENCE` of type WITNESS must reference a real NPC ID to be plausible — system validates the NPC exists in the run before allowing plant
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -680,7 +684,7 @@ The balance between false evidence believability and detectability is the core t
 - [x] Result<T,E> for DAL functions
 - [x] Zero-trust: arrest viability recalculated server-side, client value is untrustworthy
 
----
+----
 
 ## Supplemental Information
 

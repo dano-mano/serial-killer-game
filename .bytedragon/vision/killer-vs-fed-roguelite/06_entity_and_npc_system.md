@@ -6,9 +6,9 @@ group: Core Engine
 group_order: 2
 status: pending
 depends_on:
-  - project-scaffold
-  - game-engine-bootstrap
-  - world-and-maps
+  - "01: Result utilities, Pino logger, shared types scaffold, environment config"
+  - "04: EventBus, Phaser game config, scene keys, Zustand game store"
+  - "05: World/map data, biome types, pathfinding, zone manager, spawn manager, collision layer (line-of-sight), map scene"
 produces:
   - "Base entity class with position, velocity, sprite, animation, collision, health, interaction radius"
   - "Entity types: Entity, EntityType, EntityState, NPCBehavior, NPCRoutine, NPCRole"
@@ -33,10 +33,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Build the entity framework and NPC AI system for an asymmetric roguelite game. NPCs must exhibit believable behavioral routines — walking patterns, entering/exiting buildings, stopping to chat, working tasks, commuting — because the disguise mechanic requires that a human player blending in as an NPC is visually and behaviorally indistinguishable from actual NPCs. The AI behavior system is the backbone of the game's social deduction and stealth mechanics.
 
@@ -460,12 +462,14 @@ SUSPICIOUS_EVENT: { type: string; pos: Vec2; actorId: string }
 - NPC witness reliability (0.0-1.0 float) is seeded from NPC ID + run seed — same NPC is always the same reliability level per run, enabling consistent false-lead designs
 - An NPC that is a witness MUST remain interviewable by the fed until the run ends, even if the NPC has fled
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -534,7 +538,7 @@ Player controller (piece 07) will call `SpriteManager.createCharacterSprite()` w
 - [x] Result<T,E> for spawner functions that can fail (zone not found, invalid spawn point)
 - [x] Tests in `tests/` at package root, mirroring `src/` structure
 
----
+----
 
 ## Supplemental Information
 

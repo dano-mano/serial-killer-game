@@ -5,7 +5,8 @@ name: multiplayer-sync
 group: Multiplayer
 group_order: 6
 status: pending
-depends_on: [13_persistent_progression]
+depends_on:
+  - "13: Loadout type for session creation and loadout-aware matchmaking"
 produces:
   - "supabase/migrations/XXX_multiplayer.sql — game_sessions and game_events tables with RLS"
   - "apps/web/src/lib/supabase/realtime.ts — Supabase Realtime channel management"
@@ -41,10 +42,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement real-time multiplayer using Supabase Realtime — transforming the single-player roguelite into a competitive 1v1 asymmetric experience. The two players (killer and fed) occupy the same map but see different information: the killer's position is never sent to the fed client (only the evidence trail reveals them). The core multiplayer challenge is that the opponent renders as an NPC — preserving the game's social deduction mechanic. A bot controller provides single-player experience with the same systems. An optional spectator mode allows observers after the game ends.
 
@@ -734,12 +737,14 @@ EventBus events to receive from Realtime Broadcast and apply locally:
 - **Bot counter-play**: In single-player mode, bot killer uses `FAKE_EVIDENCE_PLACEMENT` at HARD difficulty (60% chance per kill). Bot fed uses `ROUGH_INTERROGATION` at HARD difficulty when a witness is silenced. This ensures counter-play systems are exercised and tested even in single-player.
 - **Spectator fog of war**: Default spectator view is `BOTH_ROLES` — sees all. This is intentional for post-game analysis. If `spectatorsAllowed = true` during live game, consider `HIDDEN` as default for live spectators to prevent stream sniping.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -778,7 +783,7 @@ The shared-seed determinism principle means both clients run identical world gen
 - [x] XIX: Input validation — all server actions and Edge Function validate inputs with Zod
 - [x] XXII: Content Security Policy — Supabase Realtime WebSocket origin must be in CSP connect-src
 
----
+----
 
 ## Supplemental Information
 

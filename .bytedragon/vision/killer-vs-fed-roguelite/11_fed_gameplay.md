@@ -6,11 +6,12 @@ group: Role Systems
 group_order: 4
 status: pending
 depends_on:
-  - combat-system
-  - evidence-system
-  - design-system
-  - entity-and-npc-system
-  - player-and-roles
+  - "03: Design system components for FedHUD React component and fed-specific UI"
+  - "05: World/map data, biome types, zone manager for investigation area scanning"
+  - "06: NPC witness system (WitnessStatement, canBeInterviewed), NPCSpawner, entity types"
+  - "07: PlayerController, RoleInterface, RoleRegistry, RunManager, inventory types, run types"
+  - "08: Combat system (AttackSystem, HealthSystem, AbilitySystem, StatusEffectSystem, StatModifierSystem, ContentRegistry, Effect types)"
+  - "09: Evidence manager, discovery mechanics, case file tracker, evidence types and constants"
 produces:
   - "packages/game-engine/src/player/roles/fed-role.ts — implements role interface"
   - "packages/shared/src/types/fed.ts — FedObjective, InvestigationTool, SuspectProfile, ArrestCondition, InterrogationResult, CounterPlayAbility, FedSkillTree, FedAbilityDef"
@@ -44,10 +45,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement the federal investigator role's complete gameplay loop. The fed player gathers evidence, interviews witnesses, builds a suspect profile among all map NPCs, and ultimately identifies and arrests (or fights) the killer. The fed must gather enough evidence to distinguish the killer from innocent NPCs while the killer actively undermines the investigation through counter-play. This piece runs in parallel with killer-gameplay (piece 10) — both roles share the same maps, NPC pool, evidence system, and combat framework.
 
@@ -678,7 +681,7 @@ At run start, all NPCs + the hidden killer player are loaded as suspect profiles
 - A `SuspectProfile.suspicionScore > 70` flags them as "primary suspect" in HUD
 - `CaseFileTracker.eliminateSuspect()` marks a profile as `isEliminated = true`, removing from active board
 
-**Killer's fake evidence counter-play** (from piece 09 `EvidenceType.FAKE_EVIDENCE`):
+**Killer's fake evidence counter-play** (`EvidenceType.FAKE_EVIDENCE`):
 - Fake evidence planted by the killer will have `linkedEntityId` pointing to an innocent NPC
 - Fake evidence passes normal discovery and adds to the innocent NPC's `suspicionScore`
 - Fed can detect fake evidence by: (a) examining quality at HIGH tier with forensic analysis — transitions state to `DISCREDITED`, or (b) cross-referencing with timeline (fake evidence timestamps don't match NPC routines)
@@ -887,12 +890,14 @@ checkLoseCondition(state: RunState): boolean {
 - **Multiplayer sync**: In multiplayer (piece 14), the actual killer player's position data is withheld from the fed player's client — only the evidence trail reveals their presence. Anti-cheat validation server-side ensures the fed cannot query the opponent's position directly. The Profiler's Notebook boss item reads from a server-authoritative, time-delayed record of zone visits — never from real-time position state.
 - **Boss item custom handlers**: If a handler name in a CUSTOM effect does not have a registered handler at runtime, the EffectProcessor logs a warning and skips the effect (forward compatibility). All boss item handlers must be registered in `boss-item-handlers.ts` and loaded at game initialization.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -1057,7 +1062,7 @@ The `fedHeatLevel` in `stores/fed.ts` drives the IA Scrutiny meter in `FedHUD.ts
 - [x] XIX: Input validation at every boundary — InterrogationResult validated before store update, crafting actions validated server-side
 - [x] XXVIII: WCAG AA — SuspectBoard keyboard-navigable (Tab through suspects, Enter to select), Armory recipe browser keyboard accessible
 
----
+----
 
 ## Supplemental Information
 

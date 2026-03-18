@@ -6,7 +6,7 @@ group: Foundation
 group_order: 1
 status: pending
 depends_on:
-  - "01_project_scaffold: Turborepo structure, packages/shared/src/types/, packages/shared/src/schemas/, apps/web/src/config/env.ts, apps/web/src/lib/ singleton pattern, neverthrow Result utilities, Pino logger"
+  - "01: Turborepo structure, packages/shared/src/types/, packages/shared/src/schemas/, apps/web/src/config/env.ts, apps/web/src/lib/ singleton pattern, neverthrow Result utilities, Pino logger"
 produces:
   - "Supabase browser and server client singletons in apps/web/src/lib/supabase/"
   - "Database migration supabase/migrations/001_user_profiles.sql with RLS"
@@ -30,10 +30,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Integrate Supabase Auth into the Next.js 16 application to provide user authentication with email/password login and signup. Create the user profile system with a PostgreSQL table, Row Level Security policies, a Data Access Layer for server-side profile operations, and a Server Action for profile mutations. This establishes the identity system that all player-facing features (role selection, persistent progression, session history) will depend on.
 
@@ -396,12 +398,14 @@ Specifically:
 - **Avatar URL**: Optional, nullable. No file upload in this piece — accept external URL only. File upload to Azure Blob Storage is a later enhancement.
 - **Email verification**: Supabase can require email verification before login. Behavior depends on Supabase project settings — the app should handle the `email_not_confirmed` error gracefully and show a friendly message.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -474,7 +478,7 @@ Use `@supabase/ssr` exclusively — this is the current package for Next.js App 
 - [x] XVIII: `SUPABASE_SERVICE_ROLE_KEY` is server-only, never in `NEXT_PUBLIC_*`
 - [x] XXVI: Tests in `tests/` at package root
 
----
+----
 
 ## Supplemental Information
 

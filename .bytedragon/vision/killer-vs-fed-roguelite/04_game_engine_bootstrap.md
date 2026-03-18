@@ -6,7 +6,7 @@ group: Core Engine
 group_order: 2
 status: pending
 depends_on:
-  - "01_project_scaffold: packages/game-engine/ scaffold, packages/shared/src/types/, packages/shared/src/constants/, Zustand dependency, Phaser 3.90.0 dependency already in game-engine package.json"
+  - "01: packages/game-engine/ scaffold, packages/shared/src/types/, packages/shared/src/constants/, Zustand dependency, Phaser 3.90.0 dependency already in game-engine package.json"
 produces:
   - "Phaser game config packages/game-engine/src/config/game-config.ts"
   - "Scene manager with scene keys enum packages/game-engine/src/scenes/scene-keys.ts"
@@ -32,10 +32,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Set up the Phaser 3 game instance within the Next.js 16 application. This includes Phaser game configuration, scene management, the EventBus bridge pattern for safe Phaser-to-React communication, core Zustand stores as the React side of the bridge, the React wrapper component that mounts and destroys the Phaser canvas, and the asset loading utility. After this piece, the game engine runs inside Next.js with bidirectional communication to React — without either system importing the other directly.
 
@@ -530,12 +532,14 @@ The `blobStorageBaseUrl` is read from centralized env config (`AZURE_BLOB_STORAG
 - **EventBus memory leaks**: React components that subscribe to EventBus events MUST unsubscribe in the `useEffect` cleanup. Missing cleanup leads to stale event handlers after component unmount.
 - **Zustand store reset on game end**: When a run ends, game and player stores must be reset to initial state. The cleanup in `PhaserGame` partially handles this — later pieces add full reset logic.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -628,7 +632,7 @@ React components in `apps/web` import via these entry points (e.g., `import { ev
 - [x] XXIX: Responsive canvas via `Phaser.Scale.FIT` mode
 - [x] XXXI: Asset loading tiers implemented (Critical → Standard → Deferred)
 
----
+----
 
 ## Supplemental Information
 

@@ -6,14 +6,14 @@ group: Role Systems
 group_order: 4
 status: pending
 depends_on:
-  - project-scaffold
-  - design-system
-  - game-engine-bootstrap
-  - world-and-maps
-  - entity-and-npc-system
-  - player-and-roles
-  - combat-system
-  - evidence-system
+  - "01: Result utilities, Pino logger, shared types scaffold, environment config"
+  - "03: Design system components for KillerHUD React component"
+  - "04: EventBus, Phaser game config, scene keys, Zustand game and player stores"
+  - "05: World/map data, biome types, zone manager, pathfinding"
+  - "06: BaseEntity, NPCSpawner, PerceptionSystem, entity and NPC types"
+  - "07: PlayerController, RoleInterface, RoleRegistry, RunManager, inventory types, run types"
+  - "08: Combat system (AttackSystem, HealthSystem, AbilitySystem, StatusEffectSystem, StatModifierSystem, ContentRegistry, Effect types)"
+  - "09: Evidence manager, evidence modifiers, evidence types and constants"
 produces:
   - "Killer role implementation: objectives, abilities, win/lose conditions"
   - "Killer types: KillerObjective, KillMethod, DisposalMethod, KillerAbility, StealthState"
@@ -47,10 +47,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement the complete killer role gameplay loop. The killer must identify and eliminate specific NPC targets within a run, dispose of bodies to reduce evidence, manage their "heat" level (how suspicious they appear to NPCs and the fed), and actively counteract the fed's investigation using deception abilities. The killer wins by completing all required eliminations. The killer loses if arrested by the fed or if the fed achieves an airtight case before the killer can escape.
 
@@ -846,12 +848,14 @@ COUNTER_PLAY_USED: { abilityId: KillerAbilityId; pos: Vec2 }
 - MYTHIC boss items cannot be dismantled for salvage_parts
 - Boss items require attunement (5 ghost_tokens) before first equip — attunement is one-time; after that, free to equip/unequip
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -859,7 +863,7 @@ The killer role is self-contained in `packages/game-engine/src/killer/` plus its
 
 The four core killer sub-systems (TargetManager, StealthSystem, KillSystem, DisposalSystem) are coordinated by KillerRole — it composes them together. None of them know about each other directly.
 
-Skills, abilities, weapons, and trophies are all data-driven via the ContentRegistry pattern from piece 08. The ProgressionEffectsEngine (piece 13) applies progression effects at run start by looking up registered definitions and running effects through the EffectProcessor. This piece provides the data files; pieces 13 and the combat system wire up the execution.
+Skills, abilities, weapons, and trophies are all data-driven via the ContentRegistry pattern (`packages/shared/src/registry/content-registry.ts`). The ProgressionEffectsEngine applies progression effects at run start by looking up registered definitions and running effects through the EffectProcessor. This piece provides the data files; the combat system and progression system wire up the execution.
 
 ### Skill Data File Organization
 
@@ -973,7 +977,7 @@ This is what makes the killer's gameplay cerebral rather than action-reflexes.
 - [x] Server Actions for crafting mutations (apply-mod, remove-mod, dismantle-equipment)
 - [x] No direct process.env — all config through centralized env.ts
 
----
+----
 
 ## Supplemental Information
 

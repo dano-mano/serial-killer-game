@@ -6,12 +6,12 @@ group: Core Gameplay
 group_order: 3
 status: pending
 depends_on:
-  - project-scaffold
-  - game-engine-bootstrap
-  - entity-and-npc-system
-  - player-and-roles
-  - world-and-maps
-  - design-system
+  - "01: Result utilities, Pino logger, shared types scaffold"
+  - "03: Design system components (AppButton, AppCard) for CombatHUD React component"
+  - "04: EventBus, Phaser game config (Arcade physics), scene keys, Zustand game store"
+  - "05: World/map data, biome types, collision layer (melee arc wall-gating)"
+  - "06: BaseEntity (takeDamage, heal, setAnimation), PerceptionSystem.registerSuspiciousEvent(), entity types"
+  - "07: PlayerController, PlayerAction types, Inventory.useItem(), RoleConfig, player and HUD Zustand stores"
 produces:
   - "Combat controller: initiates, manages, and resolves combat encounters"
   - "Combat types: CombatState, Attack, DamageType, CombatResult, Ability, AbilityEffect, StatusEffect"
@@ -40,10 +40,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Build the real-time combat system shared by both roles. Combat in this game supports two contexts: regular encounters (player vs NPC guards, hostile NPCs) that occur in the map scene without scene transitions, and structured encounters (killer confronting a target that fights back, or fed directly confronting the killer) that use a more deliberate pacing. The system must emit enough detail in its events that the evidence system (piece 09) can generate appropriate forensic traces from combat actions.
 
@@ -753,12 +755,14 @@ The `DAMAGE_DEALT` event includes `witnesses: string[]` — this is the NPC IDs 
 - Floating damage numbers must be pooled (not instantiated fresh each hit) for performance
 - Registry boot validation: if any data file entry fails Zod schema validation, `registerAllContent()` throws. This is caught in CI integration tests before reaching production.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -831,7 +835,7 @@ Boss configs in JSON allow content to be added without code changes. Structure:
 - [x] Zod validation in ContentRegistry schemas
 - [x] No direct process.env — registry uses no env vars; game config through centralized config
 
----
+----
 
 ## Supplemental Information
 

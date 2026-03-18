@@ -6,12 +6,12 @@ group: Core Gameplay
 group_order: 3
 status: pending
 depends_on:
-  - project-scaffold
-  - auth-and-profiles
-  - design-system
-  - game-engine-bootstrap
-  - world-and-maps
-  - entity-and-npc-system
+  - "01: Result utilities, shared type scaffold, Pino logger, environment config"
+  - "02: Auth session (required for run start), user profile (display name in HUD), Supabase client factories"
+  - "03: Design system components (AppButton, AppCard, AppDialog) for HUD and role selection page"
+  - "04: EventBus, game constants, Zustand game store, scene manager"
+  - "05: Spawn manager (player spawn point), camera controller, map scene"
+  - "06: BaseEntity (PlayerController extends it), SpriteManager, InteractionManager, NPCSpawner, entity types"
 produces:
   - "Player controller extending base entity with keyboard/mouse input"
   - "Player types: PlayerRole, PlayerState, PlayerAbility, RoleConfig"
@@ -38,10 +38,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement the player character controller, input handling, inventory system, and role selection framework for an asymmetric roguelite. The player character uses the same base entity class and sprite system as NPCs — this is the disguise mechanic's foundation. Role selection (Killer or Fed) happens before each run, and the role framework provides a clean abstraction for the killer-gameplay and fed-gameplay features to implement their specific behavior without coupling to each other.
 
@@ -559,12 +561,14 @@ MOVEMENT_MODE_CHANGED: { mode: MovementMode }
 - Inventory full: attempting to pick up an item shows a toast via `hudStore.addNotification()` — item stays in world for a short time
 - Run manager must handle the case where `initRun()` is called while a run is already active — log warning and return error (no nested runs)
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -639,7 +643,7 @@ apps/web/src/
 - [x] Auth required before run start (redirect in page component)
 - [x] Accessibility: remappable controls, keyboard navigation for role selection page
 
----
+----
 
 ## Supplemental Information
 

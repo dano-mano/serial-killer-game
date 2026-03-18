@@ -6,7 +6,7 @@ group: Foundation
 group_order: 1
 status: pending
 depends_on:
-  - "01_project_scaffold: Turborepo structure, packages/ui-theme/ scaffold, apps/web/src/components/ directory structure, Tailwind CSS 4.2.1 dependency already installed"
+  - "01: Turborepo structure, packages/ui-theme/ scaffold, apps/web/src/components/ directory structure, Tailwind CSS 4.2.1 dependency already installed"
 produces:
   - "Tailwind v4 theme in apps/web/src/app/globals.css using @theme inline block"
   - "Design tokens in packages/ui-theme/src/tokens/ (colors, typography, spacing)"
@@ -29,10 +29,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Set up the complete visual design foundation for the game's non-game UI: Tailwind CSS v4 theme configuration with a dark-first color palette suited to the serial killer thriller genre, shadcn/ui and Magic UI component installation, app-layer wrappers around vendor components, centralized design tokens in the ui-theme package, and layout scaffolding for auth pages, marketing pages, and full-screen game view.
 
@@ -396,12 +398,14 @@ Never skip a level. Feature code does not import from `vendor/` directly.
 - **Magic UI performance**: Magic UI animated components use CSS animations and occasional JavaScript. Never use them inside the game canvas area or in components that mount/unmount frequently.
 - **GameLayout z-index**: The Phaser canvas renders at z-index 0. React HUD overlay renders at z-index 10+. All HUD components must use `position: absolute` and appropriate z-index values.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -467,7 +471,7 @@ These are common mistakes when migrating from v3 to v4:
 - [x] XXVIII: Dark mode default + light mode for accessibility (WCAG AA contrast ratios)
 - [x] XXIX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
 
----
+----
 
 ## Supplemental Information
 

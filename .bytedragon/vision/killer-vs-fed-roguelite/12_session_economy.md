@@ -6,10 +6,10 @@ group: Progression
 group_order: 5
 status: pending
 depends_on:
-  - killer-gameplay
-  - fed-gameplay
-  - auth-and-profiles
-  - player-and-roles
+  - "10: KillerObjective scoring types, KillerStore state (kills, disposals, evidenceDestroyed) for run scoring"
+  - "11: FedRunState, ArrestCondition, FedStore state (evidenceCollected, interrogationsPerformed, arrestCondition) for run scoring"
+  - "02: Supabase server client for DAL (run_history, daily_bonus persistence)"
+  - "07: PlayerRole, RunConfig, Loadout, RunManager lifecycle hooks, inventory types"
 produces:
   - "packages/game-engine/src/economy/session-economy.ts — session coins earn/spend/reset"
   - "packages/shared/src/types/economy.ts — SessionCurrency, PersistentCurrency, ShopOffering, RandomEncounter, EncounterChoice, EncounterOutcome, GhostTokenBonus, SalvagePartDrop"
@@ -47,10 +47,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Implement the within-run economy that completes the single-run gameplay loop. Session coins are earned through role-appropriate actions, spent at an in-run shop offering random temporary powerups, and consumed in random encounter events. At run end, a scoring system computes performance and awards persistent materials — including the scarce ghost_token currency and new salvage_parts material — used by meta-progression (the persistent-progression feature). Run results are saved to the database. This piece transforms isolated role systems into a cohesive run loop with clear start, middle, and end.
 
@@ -861,12 +863,14 @@ Events emitted by this piece:
 - **Biome first-clear check**: Checked server-side by querying `run_history` for any prior WIN on the given biome+role combination. The 3 GT bonus fires only if no prior WIN exists. This requires the biome first-clear check to happen BEFORE the current run is inserted (or within the same transaction). Use a database transaction: check → insert run → conditionally award bonus.
 - **Salvage parts in run materialsEarned**: `salvage_parts` in the `materialsEarned` field must always be 0 when submitted from a run save (salvage comes from dismantling, not runs). The server action validates this and rejects non-zero values. The material type exists in the map for schema consistency but is earned through a different flow.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -989,7 +993,7 @@ supabase/migrations/XXX_daily_bonus.sql
 - [x] XVI: Zero-trust — client score is validated server-side, ghost token amounts validated against eligible bonuses, daily bonus checked server-side only
 - [x] XXIV: Dependency management — no new dependencies beyond existing stack
 
----
+----
 
 ## Supplemental Information
 

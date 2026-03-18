@@ -5,7 +5,8 @@ name: polish-and-onboarding
 group: Polish
 group_order: 7
 status: pending
-depends_on: [14_multiplayer_sync]
+depends_on:
+  - "14: GameSession type for tutorial integration and lobby polish"
 produces:
   - "packages/game-engine/src/audio/audio-manager.ts — background music, SFX, ambient, volume controls"
   - "packages/shared/src/types/audio.ts — SoundEffect, MusicTrack, AmbientLoop, AudioSettings"
@@ -42,10 +43,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Transform the functional game into a polished, accessible experience. This piece adds audio (biome music, SFX, ambient), visual effects (particles, screen effects, scene transitions), tutorial flows for first-time players (covering both roles and introducing counter-play concepts), WCAG AA accessibility features, performance optimization (object pooling, viewport culling), and a polished landing page. Settings are persisted to localStorage and optionally to Supabase. This is the final piece — it touches all systems to enhance without modifying their core logic.
 
@@ -724,12 +727,14 @@ Settings store emits these events after `saveToLocalStorage()` completes. Phaser
 - **Tutorial skip**: If player skips tutorial, the tutorial complete flags are still set — tutorial never re-shows. A "Replay Tutorial" option is available in Settings → Gameplay.
 - **Counter-play SFX volume**: Counter-play ability SFX (intimidation, jamming, rough interrogation) play at 70% of master SFX volume by default — subtler than core ability SFX to feel appropriately clandestine. User cannot set this per-ability; it's a design-enforced offset on top of `sfxVolume`.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -771,9 +776,9 @@ Audio assets are placeholders at implementation time — the system is implement
 - [x] XXVIII: WCAG AA — high contrast, colorblind mode, keyboard nav, screen reader, reduced motion
 - [x] XXIX: Responsive design — landing page and settings page responsive at all viewport sizes
 - [x] XXX: Progressive enhancement — landing page functional without JS (SSR); audio disabled gracefully without user gesture
-- [x] XXXI: Asset loading tiers — loading scene respects critical/standard/deferred tiers from piece 04
+- [x] XXXI: Asset loading tiers — loading scene respects critical/standard/deferred tiers defined in PreloadScene
 
----
+----
 
 ## Supplemental Information
 

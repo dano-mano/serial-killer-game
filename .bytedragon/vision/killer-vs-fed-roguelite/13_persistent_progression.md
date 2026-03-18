@@ -5,7 +5,8 @@ name: persistent-progression
 group: Progression
 group_order: 5
 status: pending
-depends_on: [12_session_economy]
+depends_on:
+  - "12: PersistentCurrency types, material type constants, RunHistoryDTO and getRunHistory for unlock condition resolution"
 produces:
   - "supabase/migrations/XXX_progression.sql — skill_trees, skills, user_skills, trophies, user_trophies, equipment, user_equipment, user_loadouts, user_materials, crafting_recipes, user_equipment_mods tables with RLS"
   - "supabase/migrations/XXX_run_history.sql — run_history table with RLS (inlined from session economy dependency)"
@@ -83,10 +84,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Build the complete meta-progression systems that persist between runs. This piece owns: ranked skill trees (3 per role, 10 skills each, 1-5 ranks per skill with diminishing returns), trophies/keepsakes with passive abilities (42 total, single-tier), equipment loadouts (4 slots per loadout, MYTHIC rarity tier for boss items), the crafting/modification system (The Workshop for Killer, The Armory for Fed), persistent material currency including ghost tokens, and the permanent unlock system. The data-driven ContentRegistry and universal Effect system are also defined here — they provide the extensible backbone for all content.
 
@@ -1361,12 +1364,14 @@ No build dominates all matchups. Build diversity creates replay value and meta-g
 - **False alibi detectability**: At K-D8 rank 1, detection chance by forensic analysis is 40%. At K-D8 rank 3 + The Setup (LEGENDARY trophy), detection drops to ~25%. At fed with F-F10 (Master Analyst), passive detection is 25% + active adds 14% = 39% total. Counter-play depth preserved: no combination reaches 0% detection.
 - **Loadout counter-play equipment without skill tree**: Counter-play equipment (e.g., Off-Books Briefcase) grants starting items. These items function as the activation mechanism even without the ability unlocked in skill tree. This is intentional: equipment provides an alternate gating path for counter-play tools.
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -1523,7 +1528,7 @@ supabase/
 - [x] XIX: Input validation at every boundary — Server Actions re-validate even if client pre-validates
 - [x] XXVIII: WCAG AA — skill tree keyboard-navigable (arrow keys between nodes), tooltips accessible, crafting UI has aria labels on slot zones
 
----
+----
 
 ## Supplemental Information
 

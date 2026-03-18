@@ -33,10 +33,12 @@ last_aligned: never
 
 ---
 
-## Feature Specification
+## /speckit.specify Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.specify `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.specify ` (note the trailing space).
+
+----
 
 Bootstrap the complete Turborepo monorepo for a browser-based asymmetric roguelite game built with Next.js 16, Phaser 3, and Supabase. This piece creates the entire development infrastructure — every subsequent feature depends on this foundation.
 
@@ -218,12 +220,14 @@ Multi-stage Dockerfile using `node:24-alpine`:
 - GitHub Actions MUST cache `node_modules` and Turborepo cache for performance
 - ESLint must not false-positive on `packages/shared/` package.json `exports` field (these are package boundary entry points, not barrel files)
 
----
+----
 
-## Planning Guidance
+## /speckit.plan Prompt
 
-> **Usage**: Copy everything below this line through the next `---` separator, then
-> paste after typing `/speckit.plan `
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
 
 ### Architecture Approach
 
@@ -318,7 +322,7 @@ CMD ["node", "apps/web/server.js"]
 - [x] XXIV: Dependency management (npm audit in CI)
 - [x] XXVI: Centralized tests/ directories
 
----
+----
 
 ## Supplemental Information
 
