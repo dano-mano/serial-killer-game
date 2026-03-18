@@ -17,14 +17,15 @@ Greenfield browser-based asymmetric roguelite game — "Serial Killer vs. Fed". 
 - `.specify/` — Full speckit toolchain (v0.3.0)
 - `.claude/commands/` — 9 speckit commands
 - `.bytedragon/session-notes/` — 6 architectural decision notes
-- `.bytedragon/vision/killer-vs-fed-roguelite/` — 15 vision documents (01-15), complete game design
-- `.bytedragon/next-session/2026-03-17-200521/CONTEXT.md` — Full session summary with decisions
+- `.bytedragon/vision/killer-vs-fed-roguelite/` — 15 vision documents (01-15), complete game design, all status: pending
+- `.bytedragon/agent-outputs/pattern-scout.md` — Full pattern discovery output (2026-03-18)
 
 ## What Does NOT Exist
 - No package.json, no node_modules
 - No apps/web/, packages/, supabase/
 - No source code, no tests
 - No specs directory yet (speckit.specify not yet run)
+- No turbo.json, Dockerfile, CI/CD workflows
 
 ## Next Implementation Step
 Piece 01: project-scaffold. Vision document at `.bytedragon/vision/killer-vs-fed-roguelite/01_project_scaffold.md`.
@@ -35,3 +36,6 @@ Subsequent pieces 02, 03, 04 can be parallelized after 01 completes.
 - ContentRegistry<T> pattern (pieces 08+): use `DamageTypeId = string`, NOT hardcoded unions
 - Ghost token scarcity intentional — don't add GT sources without balance review
 - Boss item CUSTOM handlers require subsystem interfaces from earlier pieces
+
+## Verified
+2026-03-18 — confirmed via full project glob and document reads. Memory entries accurate.
