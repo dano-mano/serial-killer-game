@@ -925,14 +925,14 @@ export const GAME_EVENTS: Record<string, string>
 - **`CollisionLayer`** — piece 06 (entity-and-npc-system) imports `CollisionLayer` for NPC perception line-of-sight
 - **`PathfindingGrid`** — piece 06 imports `PathfindingGrid` for NPC movement
 - **`SpawnManager`** — piece 06 imports `SpawnManager` for NPC spawn points; piece 07 (player-and-roles) imports for player spawn
-- **`ZoneManager`** — piece 06 imports for NPC zone assignment; piece 09 (evidence-system) imports for evidence zone context
+- **`ZoneManager`** — piece 06 imports for NPC zone assignment; piece 10 (evidence-system) imports for evidence zone context
 - **`MapScene`** — piece 06 adds entities to MapScene; piece 07 adds the player to MapScene
 - **`BIOME_CATALOG`** — piece 07 uses this for the biome selection pre-run screen
 - **`useMapStore`** — piece 07's `Minimap.tsx` HUD component reads minimap data from this store
 - **`CameraController`** — piece 07 calls `cameraController.followTarget(playerSprite)` when player spawns
-- **`TileManager`** — piece 09 uses `setTile()` to place evidence on specific tiles; piece 10 (killer-gameplay) uses it for body disposal locations
-- **`Zone` and `ZoneType` types** — piece 09 tags evidence with zone context; piece 10 uses `ZoneType.isolated` zones for kill opportunities
-- **`BIOME_IDS` and `DEFAULT_BIOMES`** — piece 13 (persistent-progression) uses unlock requirements to gate biome access
+- **`TileManager`** — piece 10 uses `setTile()` to place evidence on specific tiles; piece 11 (killer-core-mechanics) uses it for body disposal locations
+- **`Zone` and `ZoneType` types** — piece 10 tags evidence with zone context; piece 11 uses `ZoneType.isolated` zones for kill opportunities
+- **`BIOME_IDS` and `DEFAULT_BIOMES`** — piece 16 (progression-infrastructure) uses unlock requirements to gate biome access
 
 ### Success Criteria
 
@@ -953,6 +953,6 @@ This piece is sequentially dependent on the game engine bootstrap — it cannot 
 
 Piece 06 (entity-and-npc-system) directly consumes the map systems produced here. It cannot begin until this piece is complete. The dependency chain from here: world-and-maps → entity-and-npc-system → player-and-roles.
 
-The biome catalog is intentionally large (14 biomes) to provide long-term content without requiring a new release. Only 4 biomes launch with the game; the remaining 10 are unlocked through gameplay progression (piece 13). This architecture decision means the biome system must support the unlock mechanic — `BiomeUnlockRequirement` is defined here and consumed by piece 13.
+The biome catalog is intentionally large (14 biomes) to provide long-term content without requiring a new release. Only 4 biomes launch with the game; the remaining 10 are unlocked through gameplay progression (piece 16). This architecture decision means the biome system must support the unlock mechanic — `BiomeUnlockRequirement` is defined here and consumed by piece 16.
 
 The asymmetric difficulty ratings are a design statement: the game intentionally has some biomes that heavily favor one role over the other. This creates strategic variety — skilled killers seek airport terminals (hardest for both, hardest for killer especially) for challenge runs; new killers learn on amusement parks and concert festivals where blending is trivially easy.

@@ -1,13 +1,13 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "10b"
+sequence: "12"
 name: killer-content
 group: Gameplay
 group_order: 4
 status: pending
 depends_on:
-  - "08a: ContentRegistry<T> with abilityRegistry, weaponRegistry, itemRegistry, skillRegistry, trophyRegistry instances; Effect union type; _register-all.ts scaffold"
-  - "10a: KillerRole, KillerAbilityId type, KillMethod type, DisposalMethod type, killer constants — content data files reference these types"
+  - "08: ContentRegistry<T> with abilityRegistry, weaponRegistry, itemRegistry, skillRegistry, trophyRegistry instances; Effect union type; _register-all.ts scaffold"
+  - "11: KillerRole, KillerAbilityId type, KillMethod type, DisposalMethod type, killer constants — content data files reference these types"
 produces:
   - "Killer Stealth skill tree data at packages/shared/src/data/skills/killer-stealth.ts — K-S1 through K-S10 (10 skills)"
   - "Killer Brutality skill tree data at packages/shared/src/data/skills/killer-brutality.ts — K-B1 through K-B10 (10 skills)"
@@ -24,7 +24,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 10b: Killer Content
+# Vision Piece 12: Killer Content
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: content-architecture, killer-core-mechanics
@@ -291,11 +291,11 @@ import { KILLER_STEALTH_SKILLS, KILLER_BRUTALITY_SKILLS, KILLER_DECEPTION_SKILLS
 // ... other imports
 
 export function registerAllContent(): void {
-  // Piece 08a registrations (status effects, damage types) — already here
+  // Piece 08 registrations (status effects, damage types) — already here
   statusEffectRegistry.registerAll([...]);
   damageTypeRegistry.registerAll([...]);
 
-  // Piece 10b additions:
+  // Piece 12 additions:
   skillRegistry.registerAll([...KILLER_STEALTH_SKILLS, ...KILLER_BRUTALITY_SKILLS, ...KILLER_DECEPTION_SKILLS]);
   abilityRegistry.registerAll(KILLER_ABILITIES);
   weaponRegistry.registerAll(KILLER_WEAPONS);
@@ -356,14 +356,14 @@ Server Component. Fetches the killer's equipment collection and applied mods fro
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - `ContentRegistry` instances: `skillRegistry`, `abilityRegistry`, `weaponRegistry`, `itemRegistry` from `packages/shared/src/registry/registries`
 - `Effect` union type and `StatId`: `packages/shared/src/effects/effect-types`
 - `STAT_CAPS`: `packages/shared/src/constants/balance` — rank 5 effects must not exceed caps
 - Zod schemas: `skillDefSchema`, `abilityDefSchema`, `weaponDefSchema`, `itemDefSchema` from `packages/shared/src/schemas/content`
 - `_register-all.ts` scaffold at `packages/shared/src/data/_register-all.ts` — this piece extends it
 
-**From piece 10a (Killer Core Mechanics)**:
+**From piece 11 (Killer Core Mechanics)**:
 - `KillerAbilityId` union type: `packages/shared/src/types/killer`
 - `KillMethod`, `DisposalMethod` types
 - `KillerTarget`, `StealthState` types referenced in data comments
@@ -376,13 +376,13 @@ Server Component. Fetches the killer's equipment collection and applied mods fro
 - [ ] All 7 MYTHIC boss items have custom handlers registered in `killer-boss-item-handlers.ts` matching the handler names in data
 - [ ] Skill tree tier progression requires 2 skills from previous tier — prerequisites enforced in data entries
 - [ ] Rank 5 effects for each skill do not violate STAT_CAPS (validated by unit test)
-- [ ] Boot test counts: `skillRegistry` has at least 30 entries after piece 10b registration
+- [ ] Boot test counts: `skillRegistry` has at least 30 entries after piece 12 registration
 - [ ] Workshop page renders equipment collection and compatible recipes for the killer's equipment
 
 ### Alignment Notes
 
-This piece is SOLELY responsible for all killer-specific content data files. Piece 13 (persistent progression) must NOT re-declare these files. Piece 13a owns the database tables, DAL, and Server Actions; piece 13b owns trophy and equipment catalog data and registration.
+This piece is SOLELY responsible for all killer-specific content data files. Piece 16/17 (persistent progression) must NOT re-declare these files. Piece 16 owns the database tables, DAL, and Server Actions; piece 17 owns trophy and equipment catalog data and registration.
 
-The `boss-item-handlers.ts` file for killer content is `killer-boss-item-handlers.ts` — it is NOT the same as the legacy `boss-item-handlers.ts` referenced in the original piece 08. The fed equivalent is `fed-boss-item-handlers.ts` in piece 11b. This split prevents merge conflicts when pieces 10b and 11b are built in parallel.
+The `boss-item-handlers.ts` file for killer content is `killer-boss-item-handlers.ts` — it is NOT the same as the legacy `boss-item-handlers.ts` referenced in the original piece 08. The fed equivalent is `fed-boss-item-handlers.ts` in piece 14. This split prevents merge conflicts when pieces 12 and 14 are built in parallel.
 
-The crafting recipes file (`killer-recipes.ts`) is created here. Its registration with `craftingRecipeRegistry` happens in piece 13b's extension of `_register-all.ts` (since `craftingRecipeRegistry` is defined in piece 13a).
+The crafting recipes file (`killer-recipes.ts`) is created here. Its registration with `craftingRecipeRegistry` happens in piece 17's extension of `_register-all.ts` (since `craftingRecipeRegistry` is defined in piece 16).

@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: 09
+sequence: "10"
 name: evidence-system
 group: Core Gameplay
 group_order: 3
@@ -12,7 +12,7 @@ depends_on:
   - "05: Zone manager (evidence placed in zones), tile manager, biome types, Vec2"
   - "06: NPC witness system (WitnessStatement, getWitnessStatement()), NPCSpawner, perception system"
   - "07: Player actions (PLAYER_ACTION events), inventory (evidence-modifying items), role (evidence visibility differs by role), player Zustand store"
-  - "08b: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event, Attack type"
+  - "09: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event, Attack type"
 produces:
   - "Evidence manager: tracks all evidence, handles generation, decay, and discovery"
   - "Evidence types: Evidence, EvidenceType, EvidenceState, EvidenceQuality, CaseFile"
@@ -31,7 +31,7 @@ created: 2026-03-17
 last_aligned: never
 ---
 
-# Vision Piece 09: Evidence System
+# Vision Piece 10: Evidence System
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, design-system, game-engine-bootstrap, world-and-maps, entity-and-npc-system, player-and-roles
@@ -698,7 +698,7 @@ The balance between false evidence believability and detectability is the core t
 - Piece 05: Zone manager (evidence placed in zones), tile manager
 - Piece 06: NPC witness system (WitnessStatement, getWitnessStatement()), NPCSpawner
 - Piece 07: Player actions (PLAYER_ACTION events), inventory (evidence-modifying items), role (evidence visibility differs by role)
-- Piece 08: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event
+- Piece 09: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event
 
 ### Success Criteria
 
@@ -719,4 +719,4 @@ The balance between false evidence believability and detectability is the core t
 
 The counter-play abilities are the strategic depth layer that elevates this game beyond a simple hide-and-seek. The killer has active tools to mislead the fed; the fed has active tools to push through the killer's obfuscation. The risk/reward on each counter-play ability is intentional — no ability should be "always use this." The false evidence detection probability curve (20% base → 70% skilled) means early-game play favors the killer's deception while late-game skilled feds can cut through the noise.
 
-The evidence system outputs (CaseFile, arrest viability) are consumed by piece 11 (fed-gameplay) for the arrest mechanic, and the evidence generation rules are directly modified by piece 10 (killer-gameplay) skill/item configurations.
+The evidence system outputs (CaseFile, arrest viability) are consumed by piece 13 (fed-gameplay) for the arrest mechanic, and the evidence generation rules are directly modified by piece 11 (killer-gameplay) skill/item configurations.

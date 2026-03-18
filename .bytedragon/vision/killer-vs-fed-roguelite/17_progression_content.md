@@ -1,15 +1,15 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "13b"
+sequence: "17"
 name: progression-content
 group: Meta
 group_order: 5
 status: pending
 depends_on:
-  - "08a: ContentRegistry<T> instances (trophyRegistry, weaponRegistry, itemRegistry), Effect union type, StatId, STAT_CAPS, _register-all.ts scaffold"
-  - "10b: Killer content data files (killer-boss-items.ts, killer-recipes.ts) available for registration; killer-recipes.ts created but craftingRecipeRegistry defined in 13a"
-  - "11b: Fed content data files (fed-boss-items.ts, fed-recipes.ts) available for registration; fed-recipes.ts created but craftingRecipeRegistry defined in 13a"
-  - "13a: DAL modules (trophies-dal.ts, equipment-dal.ts, loadouts-dal.ts, crafting-dal.ts), Server Actions (unlock-trophy.ts, equip-item.ts, save-loadout.ts, craft-item.ts, apply-mod.ts, remove-mod.ts, dismantle-equipment.ts), Progression Zustand store, Crafting Zustand store, craftingRecipeRegistry instance, user_trophy_unlocks/user_equipment/user_loadouts/user_equipment_mods/user_materials tables"
+  - "08: ContentRegistry<T> instances (trophyRegistry, weaponRegistry, itemRegistry), Effect union type, StatId, STAT_CAPS, _register-all.ts scaffold"
+  - "12: Killer content data files (killer-boss-items.ts, killer-recipes.ts) available for registration; killer-recipes.ts created but craftingRecipeRegistry defined in 16"
+  - "14: Fed content data files (fed-boss-items.ts, fed-recipes.ts) available for registration; fed-recipes.ts created but craftingRecipeRegistry defined in 16"
+  - "16: DAL modules (trophies-dal.ts, equipment-dal.ts, loadouts-dal.ts, crafting-dal.ts), Server Actions (unlock-trophy.ts, equip-item.ts, save-loadout.ts, craft-item.ts, apply-mod.ts, remove-mod.ts, dismantle-equipment.ts), Progression Zustand store, Crafting Zustand store, craftingRecipeRegistry instance, user_trophy_unlocks/user_equipment/user_loadouts/user_equipment_mods/user_materials tables"
 produces:
   - "Shared trophy catalog at packages/shared/src/data/trophies/shared-trophies.ts — ST-1 through ST-6 (6 shared trophies)"
   - "Killer trophy catalog at packages/shared/src/data/trophies/killer-trophies.ts — KT-1 through KT-18 (18 killer trophies)"
@@ -27,7 +27,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 13b: Progression Content
+# Vision Piece 17: Progression Content
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: content-architecture, killer-content, fed-content, progression-infrastructure
@@ -76,14 +76,6 @@ Range from early unlocks (first arrest, completing a run using only forensic evi
 ### Equipment Catalog
 
 Equipment items are slot-based unlockables worn by the player during a run. Each item occupies one of four equipment slots: Weapon, Armor, Tool, or Accessory. Players can equip one item per slot type in their loadout. Equipment items have rarities from Common through Mythic — higher rarity items have more upgrade slots (up to 3 for Mythic), more powerful base effects, and stricter unlock conditions.
-
-Each equipment item defines:
-- Slot type (which of the 4 slots it occupies)
-- Role (killer-only, fed-only, or shared)
-- Rarity (Common, Uncommon, Rare, Legendary, Mythic)
-- Base effects (stat modifiers applied when equipped)
-- Upgrade slot count (how many crafting mods can be applied; 1 for Common/Uncommon, 2 for Rare/Legendary, 3 for Mythic)
-- Unlock condition (how the player earns this item)
 
 **Shared equipment** (available to both roles):
 - Deceiver's Kit (Accessory, Rare) — reduces counter-play ability heat cost by 12%. Unlocked after successfully using counter-play abilities 20 times total.
@@ -151,77 +143,6 @@ This piece is purely data and UI. All server-side infrastructure (DB tables, DAL
 
 The progression pages use a hybrid rendering approach: Server Components for initial data fetch (passed as props), Client Components for interactivity (calling Server Actions, updating Zustand stores). No React hooks in Server Components.
 
-### Shared Types (From 13a — Inline)
-
-These types are already defined in `packages/shared/src/types/progression.ts` by the progression infrastructure system. All data files and UI components import from this path.
-
-```typescript
-export interface Trophy {
-  id: string;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  name: string;
-  description: string;
-  flavorText?: string;
-  unlockCondition: UnlockCondition;
-  effects: TrophyEffect[];
-  cosmetic?: TrophyCosmetic;
-}
-
-export interface TrophyEffect {
-  type: 'PASSIVE' | 'STARTING_BONUS';
-  effect: Effect;  // Universal Effect union from packages/shared/src/effects/effect-types.ts
-}
-
-export interface TrophyCosmetic {
-  hudSkin?: string;
-  killAnimationVariant?: string;
-  characterAppearance?: string;
-}
-
-export interface Equipment {
-  id: string;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  slot: 'WEAPON' | 'ARMOR' | 'TOOL' | 'ACCESSORY';
-  name: string;
-  description: string;
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC';
-  upgradeSlots: number;  // 1=COMMON/UNCOMMON, 2=RARE/LEGENDARY, 3=MYTHIC
-  obtainCondition: UnlockCondition;
-  effects: Effect[];     // Universal Effect union from packages/shared/src/effects/effect-types.ts
-}
-
-export type UnlockCondition =
-  | { type: 'DEFAULT' }
-  | { type: 'WIN_COUNT'; role: PlayerRole; count: number }
-  | { type: 'SCORE_THRESHOLD'; minScore: number; role?: PlayerRole }
-  | { type: 'BOSS_KILL'; bossId: string; difficulty?: string; killMethod?: string }
-  | { type: 'TROPHY_OWNED'; trophyId: string }
-  | { type: 'SKILL_RANK'; skillId: string; minRank: number }
-  | { type: 'COUNTER_PLAY_USES'; abilityId: string; count: number }
-  | { type: 'TOTAL_TROPHIES'; count: number }
-  | { type: 'RUN_COUNT'; count: number };
-
-export type PlayerRole = 'KILLER' | 'FED';
-```
-
-### Content Registry Types (From 08a — Inline)
-
-```typescript
-// packages/shared/src/registry/content-registry.ts
-class ContentRegistry<T extends { id: string }> {
-  register(item: T): void
-  get(id: string): T | undefined
-  getAll(): T[]
-  has(id: string): boolean
-}
-
-// packages/shared/src/registry/registries.ts (instances from 08a)
-export const trophyRegistry: ContentRegistry<Trophy>;
-export const itemRegistry: ContentRegistry<Equipment>;
-// craftingRecipeRegistry added by the progression infrastructure system:
-export const craftingRecipeRegistry: ContentRegistry<CraftingRecipe>;
-```
-
 ### Data File Structure
 
 **File**: `packages/shared/src/data/trophies/shared-trophies.ts`
@@ -238,82 +159,18 @@ export const SHARED_TROPHIES: Trophy[] = [
     unlockCondition: { type: 'RUN_COUNT', count: 10 },
     effects: [{ type: 'PASSIVE', effect: { type: 'STAT_MOD', stat: 'scoreMultiplier', value: 0.05, modType: 'PERCENT' } }],
   },
-  {
-    id: 'ST-2',
-    role: 'SHARED',
-    name: 'Iron Resolve',
-    description: 'Injury stat penalties reduced by 20%',
-    unlockCondition: { type: 'WIN_COUNT', role: 'KILLER', count: 5 },  // 5 consecutive no-abandon wins
-    effects: [{ type: 'PASSIVE', effect: { type: 'STAT_MOD', stat: 'injuryPenaltyReduction', value: 0.20, modType: 'PERCENT' } }],
-  },
-  {
-    id: 'ST-3',
-    role: 'SHARED',
-    name: "Speed Runner's Tag",
-    description: 'Start with +10 evidence_dust',
-    unlockCondition: { type: 'SCORE_THRESHOLD', minScore: 3000 },  // proxy for sub-8min win
-    effects: [{ type: 'STARTING_BONUS', effect: { type: 'STAT_MOD', stat: 'startingEvidenceDust', value: 10, modType: 'FLAT' } }],
-  },
-  {
-    id: 'ST-4',
-    role: 'SHARED',
-    name: "Perfectionist's Seal",
-    description: 'Start with +1 ghost_token',
-    unlockCondition: { type: 'SCORE_THRESHOLD', minScore: 5000 },  // proxy for zero-evidence win
-    effects: [{ type: 'STARTING_BONUS', effect: { type: 'STAT_MOD', stat: 'startingGhostTokens', value: 1, modType: 'FLAT' } }],
-  },
-  {
-    id: 'ST-5',
-    role: 'SHARED',
-    name: "Veteran's Crest",
-    description: '+10% material earn rates across all types',
-    unlockCondition: { type: 'RUN_COUNT', count: 50 },
-    effects: [{ type: 'PASSIVE', effect: { type: 'STAT_MOD', stat: 'materialEarnRate', value: 0.10, modType: 'PERCENT' } }],
-  },
-  {
-    id: 'ST-6',
-    role: 'SHARED',
-    name: 'Blood Moon Relic',
-    description: 'Counter-play heat cost reduced by 5%',
-    unlockCondition: { type: 'TOTAL_TROPHIES', count: 3 },  // proxy for dual-role week wins
-    effects: [{ type: 'PASSIVE', effect: { type: 'STAT_MOD', stat: 'heatCostMultiplier', value: -0.05, modType: 'PERCENT' } }],
-  },
+  // ST-2 through ST-6...
 ];
 ```
 
-**File**: `packages/shared/src/data/trophies/killer-trophies.ts` — 18 entries (KT-1 through KT-18).
-
-Example high-confidence entries:
-- KT-1 (KILLER, first-kill unlock): passive +2% kill speed. `unlockCondition: { type: 'WIN_COUNT', role: 'KILLER', count: 1 }`.
-- KT-5 (knife-only run): starting +1 Serrated Knife in inventory. `unlockCondition: { type: 'SCORE_THRESHOLD', minScore: 2000, role: 'KILLER' }`.
-- KT-10 (5 consecutive stealth kills in one run): passive detection radius -5%. `unlockCondition: { type: 'WIN_COUNT', role: 'KILLER', count: 5 }`.
-- KT-18 (master capstone): passive +5% kill speed + starting Shadow Cloak pre-equipped. `unlockCondition: { type: 'WIN_COUNT', role: 'KILLER', count: 30 }`.
-
-All 18 trophies follow the same `Trophy` interface. Implement the remaining 14 entries with unlock counts progressing from 2–25 wins and effects using the `STAT_MOD` type (`{ type: 'STAT_MOD', stat: StatId, value: number, modType: 'FLAT' | 'PERCENT' }`) with stats from the StatId union defined in the content architecture system (08a).
-
-**File**: `packages/shared/src/data/trophies/fed-trophies.ts` — 18 entries (FT-1 through FT-18).
-
-Example entries:
-- FT-1 (first arrest): passive +2% evidence collection speed. `unlockCondition: { type: 'WIN_COUNT', role: 'FED', count: 1 }`.
-- FT-5 (forensic-only run): starting +10 case_files. `unlockCondition: { type: 'SCORE_THRESHOLD', minScore: 2000, role: 'FED' }`.
-- FT-10 (4-witness arrest): passive witness reliability +8%. `unlockCondition: { type: 'WIN_COUNT', role: 'FED', count: 5 }`.
-- FT-18 (master capstone): passive arrest speed +10% + starting pre-briefed informant. `unlockCondition: { type: 'WIN_COUNT', role: 'FED', count: 30 }`.
-
-### Equipment Data Files
-
 **Directory**: `packages/shared/src/data/equipment/`
 
-**Files**:
-- `shared-equipment.ts` — 6 shared items
-- `killer-equipment.ts` — 12 killer-only items
-- `fed-equipment.ts` — 6 fed-only items
+Equipment files: `shared-equipment.ts` (6 items), `killer-equipment.ts` (12 items), `fed-equipment.ts` (6 items). All files export typed arrays using the `Equipment` interface. The `upgradeSlots` field must match rarity exactly: COMMON=1, UNCOMMON=1, RARE=2, LEGENDARY=2, MYTHIC=3.
 
-All files export typed arrays using the `Equipment` interface. The `upgradeSlots` field must match rarity exactly: COMMON=1, UNCOMMON=1, RARE=2, LEGENDARY=2, MYTHIC=3.
-
-Noteworthy entries to implement explicitly:
+Noteworthy entries:
 
 ```typescript
-// packages/shared/src/data/equipment/shared-equipment.ts
+// shared-equipment.ts
 {
   id: 'EQ-DECEIVER-KIT',
   role: 'SHARED',
@@ -362,65 +219,32 @@ RecipeCard.tsx            — single recipe display: name, effects, material cos
 MaterialCostDisplay.tsx   — renders material cost breakdown (icons + amounts) with red text when unaffordable
 ```
 
-**CraftingPanel props**:
-```typescript
-interface CraftingPanelProps {
-  equipment: Equipment;
-  appliedMods: EquipmentMod[];  // from crafting Zustand store
-  selectedSlot: number | null;
-  onSlotSelect: (slotIndex: number) => void;
-}
-```
-
-RecipeCard calls `applyMod` server action on confirm. CraftingPanel reads compatible recipes from crafting Zustand store `getCompatibleRecipes(equipment.id, selectedSlot)`. Material affordability is computed in the store's derived state.
-
-Mod removal: a remove button on each occupied mod slot calls `removeMod` server action after a confirmation dialog using AppDialog from the design system.
+CraftingPanel calls `applyMod` server action on confirm. Reads compatible recipes from crafting Zustand store `getCompatibleRecipes(equipment.id, selectedSlot)`. Material affordability is computed in the store's derived state. Mod removal triggers AppDialog confirmation before calling `removeMod` server action.
 
 ### Progression Pages
 
 **Progression layout**: `apps/web/src/app/progression/layout.tsx` — shared nav tabs (Skills | Trophies | Equipment | Loadouts). Server Component. Uses AppCard for tab container.
 
-**Skill Trees page**: `apps/web/src/app/progression/skills/page.tsx`
+**Skill Trees page**: Server Component fetches user's skill ranks. Passes data to `SkillTreesClient` Client Component. `SkillTreesClient` renders three SkillTree sub-components. Counter-play tree styled with `className="bg-slate-900 border-red-700"` on container and `className="border-red-600"` on nodes.
 
-```typescript
-// Server Component — fetches user's skill ranks via trophies-dal
-// Passes data to SkillTreesClient Client Component
-export default async function SkillsPage() {
-  const user = await requireAuth();
-  const skillRanks = await getSkillRanks(user.id);  // from apps/web/src/dal/progression/skills.ts
-  return <SkillTreesClient initialSkillRanks={skillRanks} />;
-}
-```
+**Trophies page**: Server Component fetches TrophyUnlock rows. Passes to TrophiesClient. Grid layout 4 columns on desktop. Trophy cards use `AppCard`. Locked trophies grey out with progress indicator. Equip button calls `equipTrophy` server action (single-select, unequips previous).
 
-`SkillTreesClient` renders three SkillTree sub-components. Each SkillTree renders a 10-node grid with tier headers. Counter-play tree styled with `className="bg-slate-900 border-red-700"` on container and `className="border-red-600"` on nodes. Clicking a node opens AppDialog with full rank effect descriptions. Unlock button calls `unlockSkill` server action; store updates optimistically.
+**Equipment page**: Server Component fetches user equipment unlock rows and applied mods. Four tab sections (Weapon / Armor / Tool / Accessory). Each equipment card shows rarity chip (color-coded), upgrade slot indicators, and "Customize" button that opens CraftingPanel in an AppDialog.
 
-**Trophies page**: `apps/web/src/app/progression/trophies/page.tsx`
+**Loadouts page**: Server Component fetches loadouts. Up to 5 loadout cards per role. Edit mode allows selecting trophy and equipment per slot from unlocked items only. Save calls `saveLoadout` server action. Default badge on one card per role.
 
-Server Component fetches TrophyUnlock rows. Passes to TrophiesClient. Grid layout 4 columns on desktop. Trophy cards use `AppCard`. Locked trophies grey out with progress indicator where `unlockCondition.type` has a measurable count. Equip button calls `equipTrophy` server action (single-select, unequips previous).
-
-**Equipment page**: `apps/web/src/app/progression/equipment/page.tsx`
-
-Server Component fetches user equipment unlock rows and applied mods. Passes to EquipmentClient. Four tab sections (Weapon / Armor / Tool / Accessory). Each equipment card shows rarity chip (colour-coded: grey/green/blue/purple/gold for COMMON through MYTHIC), upgrade slot indicators, and "Customize" button that opens CraftingPanel in an AppDialog.
-
-**Loadouts page**: `apps/web/src/app/progression/loadouts/page.tsx`
-
-Server Component fetches loadouts. Passes to LoadoutsClient. Up to 5 loadout cards per role. Edit mode allows selecting trophy and equipment per slot from unlocked items only. Save calls `saveLoadout` server action. Default badge on one card per role. "Set Default" button calls `setDefaultLoadout` server action.
-
-**Leaderboard page**: `apps/web/src/app/leaderboard/page.tsx`
-
+**Leaderboard page**:
 ```typescript
 // React Server Component — revalidates every 60 seconds
 export const revalidate = 60;
-
 export default async function LeaderboardPage() {
   const user = await requireAuth();
-  const entries = await getLeaderboard({ limit: 100 });  // from dal/leaderboard.ts
+  const entries = await getLeaderboard({ limit: 100 });
   const personalBest = await getPersonalBest(user.id);
   return <LeaderboardTable entries={entries} personalBestId={user.id} personalBest={personalBest} />;
 }
 ```
-
-LeaderboardTable is a Client Component for highlight logic. Personal best row has ring highlight (`ring-2 ring-yellow-400`). Filter controls (role and biome dropdowns) are client-side — no round trips.
+Personal best row has ring highlight (`ring-2 ring-yellow-400`). Filter controls (role and biome dropdowns) are client-side — no round trips.
 
 ### Boot Registration Extension
 
@@ -443,15 +267,6 @@ import { FED_RECIPES } from '../data/crafting/fed-recipes';        // created by
 [...KILLER_RECIPES, ...FED_RECIPES].forEach(r => craftingRecipeRegistry.register(r));
 ```
 
-### Constitution Compliance
-
-- [x] No barrel files — all component imports use direct file paths
-- [x] Server Components for initial data fetch; Client Components only for interactivity
-- [x] Server Actions from the progression infrastructure system handle all mutations — UI never queries DB directly
-- [x] Zod validation occurs at content registry boot — malformed entries fail fast
-- [x] No `process.env` in data files — all config via centralized env module
-- [x] MYTHIC item attunement gating enforced by server action in 13a; UI reflects attuned state from store
-
 ### Testing Strategy
 
 - Unit tests for `_register-all.ts` extensions: all trophies, equipment, and recipes register without schema errors
@@ -459,6 +274,15 @@ import { FED_RECIPES } from '../data/crafting/fed-recipes';        // created by
 - Component tests (React Testing Library) for CraftingPanel: apply button disabled when unaffordable, confirmation dialog shown before mod removal
 - Component tests for TrophyCard: locked state renders correctly, equip button calls server action
 - E2E test (Playwright): full loadout save flow — select trophy, select equipment, save, verify persists after page reload
+
+### Constitution Compliance
+
+- [x] No barrel files — all component imports use direct file paths
+- [x] Server Components for initial data fetch; Client Components only for interactivity
+- [x] Server Actions from the progression infrastructure system handle all mutations — UI never queries DB directly
+- [x] Zod validation occurs at content registry boot — malformed entries fail fast
+- [x] No `process.env` in data files — all config via centralized env module
+- [x] MYTHIC item attunement gating enforced by server action in 16; UI reflects attuned state from store
 
 ----
 
@@ -488,29 +312,27 @@ import { FED_RECIPES } from '../data/crafting/fed-recipes';        // created by
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From 08a**:
+**From 08**:
 - `ContentRegistry<T>` class at `packages/shared/src/registry/content-registry.ts`
 - `trophyRegistry`, `itemRegistry` instances at `packages/shared/src/registry/registries.ts`
-- `Effect` union type at `packages/shared/src/effects/effect-types.ts`
-- `StatId` union at `packages/shared/src/effects/effect-types.ts`
+- `Effect` union type, `StatId` union at `packages/shared/src/effects/effect-types.ts`
 - `_register-all.ts` scaffold at `packages/shared/src/data/_register-all.ts`
 
-**From 10b**:
+**From 12**:
 - `KILLER_RECIPES` exported from `packages/shared/src/data/crafting/killer-recipes.ts`
 - `KillerBossItem` IDs KB-1 through KB-7 (for trophy unlock condition references)
 
-**From 11b**:
+**From 14**:
 - `FED_RECIPES` exported from `packages/shared/src/data/crafting/fed-recipes.ts`
 - `FedBossItem` IDs FB-1 through FB-7 (for trophy unlock condition references)
 
-**From 13a**:
+**From 16**:
 - `craftingRecipeRegistry` at `packages/shared/src/registry/registries.ts`
 - `Trophy`, `Equipment`, `TrophyEffect`, `TrophyCosmetic`, `UnlockCondition` types at `packages/shared/src/types/progression.ts`
-- `getSkillRanks`, `getTrophyUnlocks`, `getEquipmentUnlocks`, `getLoadouts`, `getAppliedMods`, `getLeaderboard`, `getPersonalBest` DAL functions at `apps/web/src/dal/progression/`
-- Server Actions: `unlockTrophy`, `equipTrophy`, `equipItem`, `saveLoadout`, `setDefaultLoadout`, `applyMod`, `removeMod`, `dismantleEquipment` at `apps/web/src/app/actions/progression/` and `apps/web/src/app/actions/crafting/`
+- All DAL functions and Server Actions from `apps/web/src/dal/progression/` and `apps/web/src/app/actions/`
 - Progression Zustand store at `apps/web/src/stores/progression.ts`
 - Crafting Zustand store at `apps/web/src/stores/crafting.ts`
-- `AppButton`, `AppCard`, `AppDialog`, `AppToast`, `AppInput` design system components from piece 03
+- `AppButton`, `AppCard`, `AppDialog`, `AppToast`, `AppInput` from piece 03
 
 ### Success Criteria
 
@@ -529,7 +351,6 @@ import { FED_RECIPES } from '../data/crafting/fed-recipes';        // created by
 ### Alignment Notes
 
 - Trophy catalog is the only source of trophy definitions — if the number of trophies changes (e.g., adding seasonal trophies), `_register-all.ts` is the only file that changes in this piece.
-- Equipment unlock conditions reference `WIN_COUNT` and `SCORE_THRESHOLD` condition types. If new `UnlockCondition` discriminants are added in piece 13a, killer-trophies.ts and fed-trophies.ts may need updated entries.
-- The `EQ-OFF-BOOKS-BRIEFCASE` and `EQ-HANDLERS-BADGE` equipment items unlock abilities (KA-BRIEFCASE-PRELOAD and FA-HANDLER-INFORMANT). These ability IDs must be registered in the abilityRegistry by pieces 10a and 11a respectively — if ability IDs change there, they must be updated here.
-- CraftingPanel reads from crafting Zustand store's `getCompatibleRecipes`. If the recipe compatibility predicate in the store changes (e.g., new equipment category constraints), CraftingPanel automatically reflects the correct recipe list.
+- Equipment unlock conditions reference `WIN_COUNT` and `SCORE_THRESHOLD` condition types. If new `UnlockCondition` discriminants are added in piece 16, killer-trophies.ts and fed-trophies.ts may need updated entries.
+- The `EQ-OFF-BOOKS-BRIEFCASE` and `EQ-HANDLERS-BADGE` equipment items unlock abilities (KA-BRIEFCASE-PRELOAD and FA-HANDLER-INFORMANT). These ability IDs must be registered in the abilityRegistry by pieces 11 and 13 respectively — if ability IDs change there, they must be updated here.
 - Leaderboard uses `export const revalidate = 60` (Next.js ISR). If real-time leaderboard becomes a requirement, this page would need to be converted to a Supabase Realtime subscription — downstream impact is isolated to `leaderboard/page.tsx` only.

@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "08b"
+sequence: "09"
 name: combat-system
 group: Gameplay
 group_order: 3
@@ -10,7 +10,7 @@ depends_on:
   - "04: EventBus (emit/subscribe typed events), Phaser game config (Arcade physics), scene keys, Zustand game store"
   - "06: BaseEntity (takeDamage, heal, setAnimation), PerceptionSystem.registerSuspiciousEvent(), entity types"
   - "07: PlayerController, PlayerAction types, Inventory.useItem(), RoleConfig, player and HUD Zustand stores"
-  - "08a: ContentRegistry<T> (statusEffectRegistry, abilityRegistry, damageTypeRegistry, itemRegistry, weaponRegistry), Effect union type, StatId, EffectProcessor, StatModifierSystem, STAT_CAPS in balance.ts, content Zod schemas, status effect and damage type data entries, _register-all.ts scaffold"
+  - "08: ContentRegistry<T> (statusEffectRegistry, abilityRegistry, damageTypeRegistry, itemRegistry, weaponRegistry), Effect union type, StatId, EffectProcessor, StatModifierSystem, STAT_CAPS in balance.ts, content Zod schemas, status effect and damage type data entries, _register-all.ts scaffold"
 produces:
   - "CombatController — initiates, manages, and resolves combat encounters at packages/game-engine/src/combat/combat-controller.ts"
   - "HealthSystem — HP pool, damage calculation, healing, death/knockout, invincibility frames at packages/game-engine/src/combat/health-system.ts"
@@ -30,7 +30,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 08b: Combat System
+# Vision Piece 09: Combat System
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, game-engine-bootstrap, entity-and-npc-system, player-and-roles, content-architecture
@@ -456,7 +456,7 @@ Combat VFX must follow the comic-book aesthetic defined in the art style guide: 
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - `ContentRegistry<T>` class: `import { ContentRegistry } from 'packages/shared/src/registry/content-registry'`
 - Registry instances: `statusEffectRegistry`, `abilityRegistry`, `damageTypeRegistry`, `weaponRegistry` from `packages/shared/src/registry/registries`
 - `Effect` union type and `StatId`: `import { Effect, StatId } from 'packages/shared/src/effects/effect-types'`
@@ -499,8 +499,8 @@ Combat VFX must follow the comic-book aesthetic defined in the art style guide: 
 
 ### Alignment Notes
 
-The `witnesses` field on `DAMAGE_DEALT` is the coupling point between the combat system and the evidence system (piece 09). The combat system does not generate evidence directly — it emits detailed events and the evidence system subscribes to translate those into forensic traces. This keeps the two systems decoupled.
+The `witnesses` field on `DAMAGE_DEALT` is the coupling point between the combat system and the evidence system (piece 10). The combat system does not generate evidence directly — it emits detailed events and the evidence system subscribes to translate those into forensic traces. This keeps the two systems decoupled.
 
-The StatusEffectSystem is the hook for temporary powerups (piece 12) and trophy passives (piece 13). Those pieces call `StatusEffectSystem.applyFromDefinition()` with long-duration or permanent effects at run initialization — no new mechanism is added, only the same system extended.
+The StatusEffectSystem is the hook for temporary powerups (piece 15) and trophy passives (piece 16). Those pieces call `StatusEffectSystem.applyFromDefinition()` with long-duration or permanent effects at run initialization — no new mechanism is added, only the same system extended.
 
-This piece does NOT own the ContentRegistry, Effect types, or EffectProcessor (those are owned by 08a). If the EffectProcessor constructor signature changes in 08a, this piece's CombatController initialization must be updated.
+This piece does NOT own the ContentRegistry, Effect types, or EffectProcessor (those are owned by 08). If the EffectProcessor constructor signature changes in 08, this piece's CombatController initialization must be updated.

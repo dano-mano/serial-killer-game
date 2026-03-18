@@ -1,19 +1,19 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: 15
+sequence: "19"
 name: polish-and-onboarding
 group: Polish
 group_order: 7
 status: pending
 depends_on:
-  - "14: GameSession type for tutorial integration and lobby polish, NetworkManager for connection state UI"
-  - "13b: Progression pages (trophies, equipment, loadouts) for onboarding flow guidance"
-  - "13a: Progression server actions for tutorial-triggered unlocks"
-  - "12: Results page, run scoring, material reward display for polish"
-  - "11a: FedHUD, fed ability system for tutorial scripting"
-  - "10a: KillerHUD, killer ability system for tutorial scripting"
-  - "09: EvidenceManager for tutorial evidence generation triggers"
-  - "08b: CombatHUD, CombatAnimations for VFX integration"
+  - "18: GameSession type for tutorial integration and lobby polish, NetworkManager for connection state UI"
+  - "17: Progression pages (trophies, equipment, loadouts) for onboarding flow guidance"
+  - "16: Progression server actions for tutorial-triggered unlocks"
+  - "15: Results page, run scoring, material reward display for polish"
+  - "13: FedHUD, fed ability system for tutorial scripting"
+  - "11: KillerHUD, killer ability system for tutorial scripting"
+  - "10: EvidenceManager for tutorial evidence generation triggers"
+  - "09: CombatHUD, CombatAnimations for VFX integration"
   - "07: RunManager for tutorial mode hook, PlayerRole for role-specific tutorials"
   - "06: NPC system for tutorial NPC scripting"
   - "05: MapScene for loading screen and environment VFX integration"
@@ -50,10 +50,10 @@ created: 2026-03-17
 last_aligned: never
 ---
 
-# Vision Piece 15: Polish and Onboarding
+# Vision Piece 19: Polish and Onboarding
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
-> Status: pending | Dependencies: multiplayer-sync (14)
+> Status: pending | Dependencies: multiplayer-sync (18)
 
 ---
 
@@ -84,13 +84,13 @@ From piece 05: the 12 biomes (rural, city, cruise ship, office building, amuseme
 
 From piece 07: player role (killer or fed).
 
-From piece 08: status effect structure (ID, name, type as buff or debuff, remaining duration in milliseconds).
+From piece 09: status effect structure (ID, name, type as buff or debuff, remaining duration in milliseconds).
 
-From piece 09: evidence types (footprint, DNA, weapon trace, body, witness, surveillance, broken lock, disturbed scene, false evidence, informant report).
+From piece 10: evidence types (footprint, DNA, weapon trace, body, witness, surveillance, broken lock, disturbed scene, false evidence, informant report).
 
-From piece 13: trophy (ID, name, rarity) and equipment (ID, name, rarity) structures.
+From piece 17: trophy (ID, name, rarity) and equipment (ID, name, rarity) structures.
 
-From piece 14: game session (ID, status).
+From piece 18: game session (ID, status).
 
 ### New Data Entities
 
@@ -736,12 +736,12 @@ When this piece is fully implemented:
 ### Dependencies (Consumed from Earlier Pieces)
 
 This piece is uniquely dependent on ALL previous pieces because polish layers over every system:
-- Multiplayer (piece 14): audio/VFX triggers from multiplayer events; tutorial accounts for multiplayer mode
-- Progression (piece 13): unlock celebration VFX/audio when new content unlocked
-- Session economy (piece 12): shop open SFX, coin burst VFX, encounter audio
-- Killer gameplay (piece 10): stealth SFX, kill animation VFX, counter-play SFX
-- Fed gameplay (piece 11): investigation SFX, arrest animation, counter-play SFX
-- Combat system (piece 08): combat hit SFX, ability VFX, death animation
+- Multiplayer (piece 18): audio/VFX triggers from multiplayer events; tutorial accounts for multiplayer mode
+- Progression (piece 17): unlock celebration VFX/audio when new content unlocked
+- Session economy (piece 15): shop open SFX, coin burst VFX, encounter audio
+- Killer gameplay (piece 11): stealth SFX, kill animation VFX, counter-play SFX
+- Fed gameplay (piece 13): investigation SFX, arrest animation, counter-play SFX
+- Combat system (piece 09): combat hit SFX, ability VFX, death animation
 - World/maps (piece 05): biome music, ambient particles, environment lighting
 - Game engine bootstrap (piece 04): loading scene extends PreloadScene, asset loader tiers
 
@@ -767,4 +767,4 @@ At implementation time, use placeholder audio keys mapped to free test sounds. T
 
 ### Alignment Notes
 
-This is the final piece. It must not introduce new architectural patterns or change core gameplay logic. If any audio trigger requires a new EventBus event that doesn't already exist from pieces 10-14, prefer adding the event to the existing piece's implementation during polish (if minor) rather than creating workarounds in the audio system. The tutorial's counter-play introduction steps must accurately reflect the actual ability names and costs from pieces 10-11 and 13.
+This is the final piece. It must not introduce new architectural patterns or change core gameplay logic. If any audio trigger requires a new EventBus event that doesn't already exist from pieces 11-18, prefer adding the event to the existing piece's implementation during polish (if minor) rather than creating workarounds in the audio system. The tutorial's counter-play introduction steps must accurately reflect the actual ability names and costs from pieces 11 and 13.

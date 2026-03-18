@@ -321,7 +321,7 @@ The signature visual feature. When significant gameplay events occur, stylized o
 | NPC alerted | !! / ? / ?! | Above NPC head, yellow fill (`#FFD700`) | Persists while alerted | Sprite (follow NPC position) |
 | Ability activation | Varies by ability | Styled text in ability's color theme | 0.5s | Sprite + Tween |
 
-**Implementation**: Pre-rendered as PNG sprites at multiple sizes. Spawned as Phaser GameObjects with tween animations (scale pop, rotation, fade). Object-pooled per piece 15 performance specifications.
+**Implementation**: Pre-rendered as PNG sprites at multiple sizes. Spawned as Phaser GameObjects with tween animations (scale pop, rotation, fade). Object-pooled per piece 19 performance specifications.
 
 ### Speed Lines and Motion Effects
 
@@ -512,7 +512,7 @@ Each PostFX shader is a separate class extending `Phaser.Renderer.WebGL.Pipeline
 
 ### Graceful Degradation (4 Levels)
 
-PostFX must be toggleable via the graphics settings (piece 15). The game implements four quality levels, each independently functional:
+PostFX must be toggleable via the graphics settings (piece 19). The game implements four quality levels, each independently functional:
 
 | Level | What is Active | When to Use |
 |-------|---------------|-------------|
@@ -703,14 +703,14 @@ This table documents which vision pieces consume specifications from this art st
 | 05 | World and Maps | Environment/Tileset Style, Color Palette (biome accents) | Tileset rendering rules, biome palette table, shadow tile approach, environmental detail style, tile format specifications |
 | 06 | Entity and NPC System | Sprite Specifications, Animation Standards | 48x48 frame size, outline treatment rules, color fill approach per role, animation state list, JSON Hash atlas format, disguise mechanic visual support |
 | 07 | Player and Roles | Sprite Specifications, Color Palette | Player character uses same SpriteManager system as NPCs, role-specific color accents (killer = crimson, fed = blue) |
-| 08 | Combat System | VFX Catalog, Animation Standards | Onomatopoeia event table, impact frame specification, speed line configuration, damage number font (Bangers/fontComic), combat particle style (ink-splatter shapes) |
-| 09 | Evidence System | VFX Catalog (evidence markers), Accessibility | Evidence marker shape+color system, discovery pulse VFX, accessibility shape redundancy requirements |
-| 10 | Killer Gameplay | VFX Catalog, Sprite Specifications | Stealth kill silence effect, kill VFX (CRUNCH!/SNAP!), ink-splatter particle on stealth actions |
-| 11 | Fed Gameplay | VFX Catalog, UI Style | Evidence discovery VFX (blue pulse), investigation caption boxes (JetBrains Mono), fed-themed UI color |
-| 14 | Multiplayer Sync | Sprite Specifications | Player sprite rendering must be deterministic across clients -- same atlas, same animation frames |
-| 15 | Polish and Onboarding | VFX Catalog (all), PostFX Pipeline (degradation), UI Style (transitions, loading), Accessibility | All VFX presets in comic style, screen effect restyling (ink splatter vignette, concentric rings), scene transitions (page-turn/panel-wipe), loading screen comic panel layout, graphics settings for PostFX toggle, `prefers-reduced-motion` compliance for all effects |
+| 09 | Combat System | VFX Catalog, Animation Standards | Onomatopoeia event table, impact frame specification, speed line configuration, damage number font (Bangers/fontComic), combat particle style (ink-splatter shapes) |
+| 10 | Evidence System | VFX Catalog (evidence markers), Accessibility | Evidence marker shape+color system, discovery pulse VFX, accessibility shape redundancy requirements |
+| 11 | Killer Gameplay | VFX Catalog, Sprite Specifications | Stealth kill silence effect, kill VFX (CRUNCH!/SNAP!), ink-splatter particle on stealth actions |
+| 13 | Fed Gameplay | VFX Catalog, UI Style | Evidence discovery VFX (blue pulse), investigation caption boxes (JetBrains Mono), fed-themed UI color |
+| 18 | Multiplayer Sync | Sprite Specifications | Player sprite rendering must be deterministic across clients -- same atlas, same animation frames |
+| 19 | Polish and Onboarding | VFX Catalog (all), PostFX Pipeline (degradation), UI Style (transitions, loading), Accessibility | All VFX presets in comic style, screen effect restyling (ink splatter vignette, concentric rings), scene transitions (page-turn/panel-wipe), loading screen comic panel layout, graphics settings for PostFX toggle, `prefers-reduced-motion` compliance for all effects |
 
-**Pieces with no art style dependency**: 01 (Project Scaffold), 02 (Auth and Profiles), 12 (Session Economy), 13 (Persistent Progression). These pieces deal with infrastructure, authentication, and data systems that have no direct visual rendering requirements.
+**Pieces with no art style dependency**: 01 (Project Scaffold), 02 (Auth and Profiles), 15 (Session Economy), 16 (Progression Infrastructure), 17 (Progression Content). These pieces deal with infrastructure, authentication, and data systems that have no direct visual rendering requirements.
 
 ---
 

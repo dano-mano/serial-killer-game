@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "10a"
+sequence: "11"
 name: killer-core-mechanics
 group: Gameplay
 group_order: 4
@@ -12,9 +12,9 @@ depends_on:
   - "05: World/map data, biome types, zone manager, pathfinding — disposal locations are zone-based, camera jamming targets zones"
   - "06: BaseEntity, NPCSpawner, PerceptionSystem, entity and NPC types — NPC has witness flag, witness event log, interviewable flag"
   - "07: PlayerController, RoleInterface, RoleRegistry, RunManager, inventory types, run types — killer role registers with role registry"
-  - "08a: ContentRegistry<T> instances (abilityRegistry, weaponRegistry, itemRegistry, statusEffectRegistry), Effect union type, StatId, EffectProcessor, StatModifierSystem, STAT_CAPS"
-  - "08b: CombatController, HealthSystem, AbilitySystem, StatusEffectSystem, StatModifierSystem, BossManager — killer targets can resist, triggering boss encounters"
-  - "09: EvidenceManager (generateEvidence, plantFalseEvidence, setKillEvidenceReduction), EvidenceModifiers, evidence types and constants — kill events generate evidence"
+  - "08: ContentRegistry<T> instances (abilityRegistry, weaponRegistry, itemRegistry, statusEffectRegistry), Effect union type, StatId, EffectProcessor, StatModifierSystem, STAT_CAPS"
+  - "09: CombatController, HealthSystem, AbilitySystem, StatusEffectSystem, StatModifierSystem, BossManager — killer targets can resist, triggering boss encounters"
+  - "10: EvidenceManager (generateEvidence, plantFalseEvidence, setKillEvidenceReduction), EvidenceModifiers, evidence types and constants — kill events generate evidence"
 produces:
   - "KillerRole class at packages/game-engine/src/roles/killer/killer-role-handler.ts — implements RoleInterface, composes sub-systems"
   - "TargetManager at packages/game-engine/src/roles/killer/target-manager.ts — assigns and tracks NPC targets per run"
@@ -31,7 +31,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 10a: Killer Core Mechanics
+# Vision Piece 11: Killer Core Mechanics
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, design-system, game-engine-bootstrap, world-and-maps, entity-and-npc-system, player-and-roles, content-architecture, combat-system, evidence-system
@@ -426,19 +426,19 @@ type KillerStore = {
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - `ContentRegistry` instances: `abilityRegistry`, `weaponRegistry`, `itemRegistry` from `packages/shared/src/registry/registries`
 - `Effect` union and `StatId`: `packages/shared/src/effects/effect-types`
 - `EffectProcessor`: `packages/game-engine/src/effects/effect-processor`
 - `StatModifierSystem`: `packages/game-engine/src/combat/stat-modifier-system`
 - `STAT_CAPS`: `packages/shared/src/constants/balance`
 
-**From piece 08b (Combat System)**:
+**From piece 09 (Combat System)**:
 - `CombatController`, `BossManager` for target resistance encounters
 - `StatusEffectSystem.applyFromDefinition()` for ability effects
 - Combat event constants from `packages/shared/src/constants/events/combat`
 
-**From piece 09 (Evidence System)**:
+**From piece 10 (Evidence System)**:
 - `EvidenceManager.generateEvidence()`, `.plantFalseEvidence()`, `.setKillEvidenceReduction()`
 - `EvidenceGenerator` subscription to kill events
 
@@ -466,8 +466,8 @@ type KillerStore = {
 
 ### Alignment Notes
 
-This piece owns the killer's game loop engine code. Piece 10b owns all content data (skills, abilities, weapons, boss items, crafting recipes). The KillSystem's evidence generation call goes to the EvidenceGenerator from piece 09 — the killer never generates evidence directly.
+This piece owns the killer's game loop engine code. Piece 12 owns all content data (skills, abilities, weapons, boss items, crafting recipes). The KillSystem's evidence generation call goes to the EvidenceGenerator from piece 10 — the killer never generates evidence directly.
 
-The seeded target selection in TargetManager is critical for multiplayer consistency (piece 14 depends on this). The seed must use the run seed, not Math.random(). The same seed + biome combination must always produce the same targets.
+The seeded target selection in TargetManager is critical for multiplayer consistency (piece 18 depends on this). The seed must use the run seed, not Math.random(). The same seed + biome combination must always produce the same targets.
 
-The StealthSystem reads from StatModifierSystem, which is populated by the ProgressionEffectsEngine (piece 13a) at run start. The core mechanics here are stat-agnostic — they read effective stat values at runtime.
+The StealthSystem reads from StatModifierSystem, which is populated by the ProgressionEffectsEngine (piece 16) at run start. The core mechanics here are stat-agnostic — they read effective stat values at runtime.

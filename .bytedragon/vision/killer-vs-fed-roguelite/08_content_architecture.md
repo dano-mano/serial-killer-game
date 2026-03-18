@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "08a"
+sequence: "08"
 name: content-architecture
 group: Gameplay
 group_order: 3
@@ -24,7 +24,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 08a: Content Architecture
+# Vision Piece 08: Content Architecture
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, game-engine-bootstrap, player-and-roles
@@ -331,12 +331,12 @@ export function registerAllContent(): void {
   statusEffectRegistry.registerAll([...combatEffects, ...movementEffects, ...statModEffects, ...investigationEffects]);
   // Damage types
   damageTypeRegistry.registerAll(allDamageTypes);
-  // Abilities, items, weapons, trophies, skills — each added by their owning piece (10b, 11b, 13b)
+  // Abilities, items, weapons, trophies, skills — each added by their owning piece (12, 14, 17)
   // This scaffold file is the boot entry point; downstream pieces IMPORT this file and call it
 }
 ```
 
-Downstream pieces (10b, 11b, 13b) extend this by importing and calling their own registration functions inside `registerAllContent()` — they do not create a separate boot function.
+Downstream pieces (12, 14, 17) extend this by importing and calling their own registration functions inside `registerAllContent()` — they do not create a separate boot function.
 
 ### Boot Test
 
@@ -384,7 +384,7 @@ effectProcessor.registerCustomHandler('lure_npc', (params, sourceId, targetId, c
 - Unit tests for ContentRegistry: duplicate ID rejection, Zod validation failure, `getOrThrow` error on missing ID, `getByFilter` predicate correctness
 - Unit tests for StatModifierSystem: STAT_CAPS enforcement when multiple modifier sources stack, temporary modifier tick-down, removal by ID
 - Unit tests for EffectProcessor: each standard Effect type dispatches to the correct system, CUSTOM handler lookup, WARN log on unregistered handler
-- Boot test: `registerAllContent()` succeeds, all registries reach expected counts (25 status effects, 9 damage types at 08a completion; 60 skills + 24 abilities etc. at full sequence completion)
+- Boot test: `registerAllContent()` succeeds, all registries reach expected counts (25 status effects, 9 damage types at 08 completion; 60 skills + 24 abilities etc. at full sequence completion)
 
 ### Constitution Compliance
 
@@ -447,8 +447,8 @@ effectProcessor.registerCustomHandler('lure_npc', (params, sourceId, targetId, c
 
 ### Alignment Notes
 
-The ContentRegistry and Effect type system created here are the dependency foundation for pieces 08b (combat mechanics), 10a, 10b (killer), 11a, 11b (fed), 13a, and 13b (progression). Any change to the Effect type union requires updating EffectProcessor's switch statement and potentially all content data files that use the changed type.
+The ContentRegistry and Effect type system created here are the dependency foundation for pieces 09 (combat mechanics), 11, 12 (killer), 13, 14 (fed), 16, and 17 (progression). Any change to the Effect type union requires updating EffectProcessor's switch statement and potentially all content data files that use the changed type.
 
-The `_register-all.ts` scaffold is intentionally incomplete at this piece — it only registers status effects and damage types. Downstream pieces (10b, 11b, 13b) add their content registrations by extending this file. This must be communicated clearly when delegating those pieces.
+The `_register-all.ts` scaffold is intentionally incomplete at this piece — it only registers status effects and damage types. Downstream pieces (12, 14, 17) add their content registrations by extending this file. This must be communicated clearly when delegating those pieces.
 
-The StatModifierSystem is created here but consumed heavily by 08b (combat). The STAT_CAPS values are the authoritative balance reference for all downstream pieces — changes here cascade everywhere.
+The StatModifierSystem is created here but consumed heavily by 09 (combat). The STAT_CAPS values are the authoritative balance reference for all downstream pieces — changes here cascade everywhere.

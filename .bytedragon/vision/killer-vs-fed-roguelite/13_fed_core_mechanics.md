@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "11a"
+sequence: "13"
 name: fed-core-mechanics
 group: Gameplay
 group_order: 4
@@ -12,9 +12,9 @@ depends_on:
   - "05: World/map data, biome types, zone manager — investigation area scanning, zone-based evidence clustering"
   - "06: NPC witness system (WitnessStatement, canBeInterviewed), NPCSpawner, entity types — witness interviews depend on NPC state"
   - "07: PlayerController, RoleInterface, RoleRegistry, RunManager, inventory types, run types — fed role registers with role registry"
-  - "08a: ContentRegistry<T> with abilityRegistry, itemRegistry instances; Effect union type; StatId; EffectProcessor; StatModifierSystem; STAT_CAPS"
-  - "08b: CombatController, HealthSystem, AbilitySystem, StatusEffectSystem — fed can engage killer in direct combat"
-  - "09: EvidenceManager (discoverEvidence, upgradeQuality, getEvidenceInRadius), CaseFileTracker (arrestViabilityScore, addEvidence), evidence types and constants"
+  - "08: ContentRegistry<T> with abilityRegistry, itemRegistry instances; Effect union type; StatId; EffectProcessor; StatModifierSystem; STAT_CAPS"
+  - "09: CombatController, HealthSystem, AbilitySystem, StatusEffectSystem — fed can engage killer in direct combat"
+  - "10: EvidenceManager (discoverEvidence, upgradeQuality, getEvidenceInRadius), CaseFileTracker (arrestViabilityScore, addEvidence), evidence types and constants"
 produces:
   - "FedRole class at packages/game-engine/src/roles/fed/fed-role-handler.ts — implements RoleInterface, composes investigation sub-systems"
   - "InvestigationSystem at packages/game-engine/src/roles/fed/investigation-system.ts — area scan, crime scene analysis, forensic examination"
@@ -32,7 +32,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 11a: Fed Core Mechanics
+# Vision Piece 13: Fed Core Mechanics
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, design-system, game-engine-bootstrap, world-and-maps, entity-and-npc-system, player-and-roles, content-architecture, combat-system, evidence-system
@@ -408,17 +408,17 @@ interface FedStore {
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - `ContentRegistry` instances: `abilityRegistry`, `itemRegistry` from `packages/shared/src/registry/registries`
 - `Effect` union and `StatId`: `packages/shared/src/effects/effect-types`
 - `EffectProcessor`, `StatModifierSystem`: from game-engine effects/combat paths
 - `STAT_CAPS`: `packages/shared/src/constants/balance`
 
-**From piece 08b (Combat System)**:
+**From piece 09 (Combat System)**:
 - `CombatController`, `BossManager` for vigilante and contested arrest encounters
 - `StatusEffectSystem.applyFromDefinition()`
 
-**From piece 09 (Evidence System)**:
+**From piece 10 (Evidence System)**:
 - `EvidenceManager.discoverEvidence()`, `.upgradeQuality()`, `.getEvidenceInRadius()`
 - `CaseFileTracker.getArrestViabilityScore()`, `.addEvidence()`
 - `EvidenceType` enum and quality levels
@@ -445,10 +445,10 @@ interface FedStore {
 
 ### Alignment Notes
 
-This piece owns the fed's game loop engine code. Piece 11b owns all content data (skills, abilities, weapons, boss items, crafting recipes).
+This piece owns the fed's game loop engine code. Piece 14 owns all content data (skills, abilities, weapons, boss items, crafting recipes).
 
 The fed heat system never persists between runs — it is always reset to 0 on run start. This is a design constraint that prevents the progression system from making it persistent.
 
-The SuspectTracker starts with ALL NPCs as potential suspects (including the hidden killer player's NPC identity). In multiplayer (piece 14), the killer's real player identity is never revealed to the fed's client until the arrest succeeds or the run ends.
+The SuspectTracker starts with ALL NPCs as potential suspects (including the hidden killer player's NPC identity). In multiplayer (piece 18), the killer's real player identity is never revealed to the fed's client until the arrest succeeds or the run ends.
 
 The inadmissible evidence tracking is per-evidence-object: each `Evidence` entity in the EvidenceManager has an `isInadmissible` flag set by the counter-play abilities. The ratio is calculated by the InvestigationSystem querying the CaseFileTracker.

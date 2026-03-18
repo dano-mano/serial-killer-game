@@ -427,7 +427,7 @@ These are common mistakes when migrating from v3 to v4:
 
 **Visual regression** (optional for this piece — note for future):
 - Playwright screenshot tests for key components in light and dark mode
-- Can be added in the polish piece (piece 15)
+- Can be added in the polish piece (piece 19)
 
 **Unit tests** (`packages/ui-theme/tests/`):
 - Verify color token values are valid hex codes
@@ -494,7 +494,7 @@ Every subsequent piece that builds UI consumes outputs from this piece:
 - **AppButton, AppCard, AppDialog, AppInput, AppToast** — imported by HUD components (piece 07+), auth pages (piece 02), menus
 - **GameLayout** — used by `/game/*` route layout (piece 04)
 - **AuthLayout** — used by auth pages (piece 02)
-- **PageLayout** — used by landing page, profile, leaderboards (piece 13+)
+- **PageLayout** — used by landing page, profile, leaderboards (piece 16+)
 - **Color tokens** — imported by Phaser canvas to match UI palette (piece 04)
 - **ThemeProvider** — wraps the entire app; theme state accessible to all components
 - **Brand config** — used in page metadata, OG tags, marketing copy

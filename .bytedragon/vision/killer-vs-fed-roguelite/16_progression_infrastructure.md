@@ -1,6 +1,6 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "13a"
+sequence: "16"
 name: progression-infrastructure
 group: Meta
 group_order: 5
@@ -9,12 +9,12 @@ depends_on:
   - "01: Result utilities, Pino logger, shared types scaffold, environment config, Zod-validated env"
   - "02: Supabase Auth (server-side and browser-side clients), authenticated user sessions"
   - "03: Design system components (AppButton, AppCard, AppDialog, AppToast, AppInput) for progression pages"
-  - "08a: ContentRegistry<T> instances (skillRegistry, trophyRegistry, weaponRegistry, itemRegistry), Effect union type, StatId, EffectProcessor, STAT_CAPS in balance.ts"
-  - "10a: KillerRole types — KillerAbilityId, KillMethod (for loadout validation)"
-  - "10b: Killer content data files created and available for registration"
-  - "11a: FedRole types — ArrestCondition, FedRunState (for progression effects application)"
-  - "11b: Fed content data files created and available for registration"
-  - "12: PersistentCurrency types, material type constants (evidence_dust, blood_marks, ghost_tokens, case_files, shadow_coins, salvage_parts), RunHistoryDTO and getRunHistory"
+  - "08: ContentRegistry<T> instances (skillRegistry, trophyRegistry, weaponRegistry, itemRegistry), Effect union type, StatId, EffectProcessor, STAT_CAPS in balance.ts"
+  - "11: KillerRole types — KillerAbilityId, KillMethod (for loadout validation)"
+  - "12: Killer content data files created and available for registration"
+  - "13: FedRole types — ArrestCondition, FedRunState (for progression effects application)"
+  - "14: Fed content data files created and available for registration"
+  - "15: PersistentCurrency types, material type constants (evidence_dust, blood_marks, ghost_tokens, case_files, shadow_coins, salvage_parts), RunHistoryDTO and getRunHistory"
 produces:
   - "Database migrations — skill_unlocks, trophy_unlocks, equipment_inventory, materials, loadouts, loadout_skills, loadout_equipment, crafting_unlocks, match_history, leaderboard tables with RLS"
   - "DAL modules — apps/web/src/dal/progression/ — skills-dal.ts, trophies-dal.ts, equipment-dal.ts, materials-dal.ts, loadouts-dal.ts, crafting-dal.ts, history-dal.ts"
@@ -35,7 +35,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 13a: Progression Infrastructure
+# Vision Piece 16: Progression Infrastructure
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: project-scaffold, auth, design-system, content-architecture, killer-core-mechanics, killer-content, fed-core-mechanics, fed-content, session-economy
@@ -87,7 +87,7 @@ Build the server-side infrastructure for all meta-progression: the database tabl
 
 **Equipment mods**: Records crafting modifications applied to a user's equipment. Fields: unique ID, user ID, equipment ID, slot index (0-based), recipe ID, application timestamp. One row per (user, equipment, slot index). Row-level security: users own their rows.
 
-All global definition tables (skill trees, skills, trophies, equipment, crafting recipes) are stored as TypeScript data objects in `packages/shared/src/data/` and seeded into the database using a seed script. They are readable by all authenticated users and writable only by service role.
+All global definition tables are stored as TypeScript data objects in `packages/shared/src/data/` and seeded into the database using a seed script. They are readable by all authenticated users and writable only by service role.
 
 ### JSONB Usage
 
@@ -147,7 +147,7 @@ Dual-source sync: TypeScript const objects in `packages/shared/src/data/` are th
 CREATE TABLE user_skill_unlocks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  skill_id TEXT NOT NULL,       -- references skill data by string ID
+  skill_id TEXT NOT NULL,
   current_rank INT NOT NULL CHECK (current_rank BETWEEN 1 AND 5),
   unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(user_id, skill_id)
@@ -175,7 +175,7 @@ CREATE TABLE user_equipment (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   equipment_id TEXT NOT NULL,
-  attuned BOOLEAN NOT NULL DEFAULT FALSE,  -- MYTHIC items require attunement
+  attuned BOOLEAN NOT NULL DEFAULT FALSE,
   unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(user_id, equipment_id)
 );
@@ -187,7 +187,7 @@ CREATE POLICY "users own their equipment" ON user_equipment
 CREATE TABLE user_materials (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  material_type TEXT NOT NULL,  -- 'evidence_dust' | 'blood_marks' | 'ghost_tokens' | 'case_files' | 'shadow_coins' | 'salvage_parts'
+  material_type TEXT NOT NULL,
   amount INT NOT NULL DEFAULT 0 CHECK (amount >= 0),
   UNIQUE(user_id, material_type)
 );
@@ -201,8 +201,8 @@ CREATE TABLE user_loadouts (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
   name TEXT NOT NULL,
-  trophy_id TEXT,              -- NULL if no trophy equipped
-  equipment_ids JSONB NOT NULL DEFAULT '[]',  -- up to 4 equipment IDs
+  trophy_id TEXT,
+  equipment_ids JSONB NOT NULL DEFAULT '[]',
   is_default BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -243,98 +243,6 @@ CREATE POLICY "users own their match history" ON match_history
   FOR ALL USING (auth.uid() = user_id);
 ```
 
-### Shared Types
-
-**File**: `packages/shared/src/types/progression.ts`
-
-```typescript
-export interface SkillRank {
-  userId: string;
-  skillId: string;
-  currentRank: number;
-  unlockedAt: Date;
-}
-
-export interface TrophyUnlock {
-  userId: string;
-  trophyId: string;
-  unlocked: boolean;
-  equipped: boolean;
-  unlockedAt: Date | null;
-}
-
-export interface Equipment {
-  id: string;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  slot: 'WEAPON' | 'ARMOR' | 'TOOL' | 'ACCESSORY';
-  name: string;
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC';
-  upgradeSlots: number;   // 1 for COMMON/UNCOMMON, 2 for RARE/LEGENDARY, 3 for MYTHIC
-  obtainCondition: UnlockCondition;
-  effects: Effect[];
-}
-
-export type UnlockCondition =
-  | { type: 'DEFAULT' }
-  | { type: 'WIN_COUNT'; role: PlayerRole; count: number }
-  | { type: 'SCORE_THRESHOLD'; minScore: number; role?: PlayerRole }
-  | { type: 'BOSS_KILL'; bossId: string; difficulty?: string; killMethod?: string }
-  | { type: 'TROPHY_OWNED'; trophyId: string }
-  | { type: 'SKILL_RANK'; skillId: string; minRank: number }
-  | { type: 'COUNTER_PLAY_USES'; abilityId: string; count: number }
-  | { type: 'TOTAL_TROPHIES'; count: number }
-  | { type: 'RUN_COUNT'; count: number };
-
-export interface Loadout {
-  id: string;
-  userId: string;
-  role: 'KILLER' | 'FED';
-  name: string;
-  trophyId: string | null;
-  equipmentIds: string[];   // max 4, one per slot type
-  isDefault: boolean;
-}
-
-export interface Material {
-  userId: string;
-  materialType: string;
-  amount: number;
-}
-```
-
-### Server Actions
-
-**File**: `apps/web/src/app/actions/progression/unlock-skill.ts`
-- Validates: authenticated, prerequisites met, materials sufficient, skill not at max rank
-- Transaction: deduct materials (user_materials UPDATE), upsert user_skill_unlocks row
-- Returns: Result<SkillRank, 'PREREQ_NOT_MET' | 'INSUFFICIENT_MATERIALS' | 'ALREADY_MAX_RANK'>
-
-**File**: `apps/web/src/app/actions/progression/spend-materials.ts`
-- Validates: sufficient balance per material type (no type goes below 0)
-- Atomically deducts all specified materials in a transaction
-- Returns: Result<void, 'INSUFFICIENT_MATERIALS'>
-
-**File**: `apps/web/src/app/actions/progression/save-loadout.ts`
-- Validates: all equipment IDs owned and attuned if MYTHIC, trophy owned and unlocked, slot uniqueness, role match
-- Upserts loadout row
-- Returns: Result<Loadout, 'INVALID_EQUIPMENT' | 'INVALID_TROPHY' | 'SLOT_CONFLICT'>
-
-**File**: `apps/web/src/app/actions/crafting/apply-mod.ts`
-- Validates: user owns equipment, empty slot at slot_index, recipe compatible with equipment slot/category, unlock condition met, sufficient materials
-- Transaction: deduct materials, insert user_equipment_mods row
-- Returns: Result<void, 'SLOT_OCCUPIED' | 'INCOMPATIBLE_RECIPE' | 'UNLOCK_CONDITION_NOT_MET' | 'INSUFFICIENT_MATERIALS'>
-
-**File**: `apps/web/src/app/actions/crafting/remove-mod.ts`
-- Validates: user owns equipment and mod
-- Deducts 2 salvage_parts flat fee
-- Deletes user_equipment_mods row (materials NOT refunded)
-- Returns: Result<void, 'MOD_NOT_FOUND' | 'INSUFFICIENT_SALVAGE'>
-
-**File**: `apps/web/src/app/actions/crafting/dismantle-equipment.ts`
-- Validates: user owns equipment, not in any active loadout, not MYTHIC
-- Removes all applied mods first, then deletes from user_equipment, grants salvage_parts
-- Returns: Result<void, 'IN_ACTIVE_LOADOUT' | 'MYTHIC_CANNOT_DISMANTLE'>
-
 ### Progression Effects Engine
 
 **File**: `packages/game-engine/src/progression/progression-effects.ts`
@@ -365,24 +273,38 @@ class ProgressionEffectsEngine {
 }
 ```
 
-### Unlock Resolver
+### Server Actions
 
-**File**: `packages/game-engine/src/progression/unlock-resolver.ts`
+**File**: `apps/web/src/app/actions/progression/unlock-skill.ts`
+- Validates: authenticated, prerequisites met, materials sufficient, skill not at max rank
+- Transaction: deduct materials (user_materials UPDATE), upsert user_skill_unlocks row
+- Returns: `Result<SkillRank, 'PREREQ_NOT_MET' | 'INSUFFICIENT_MATERIALS' | 'ALREADY_MAX_RANK'>`
 
-```typescript
-interface UnlockCheckResult {
-  newlyUnlocked: { id: string; type: 'TROPHY' | 'EQUIPMENT' | 'BOSS_ITEM' }[];
-}
+**File**: `apps/web/src/app/actions/progression/spend-materials.ts`
+- Validates: sufficient balance per material type (no type goes below 0)
+- Atomically deducts all specified materials in a transaction
+- Returns: `Result<void, 'INSUFFICIENT_MATERIALS'>`
 
-class UnlockResolver {
-  checkForUnlocks(
-    runResult: RunHistoryDTO,
-    runHistory: RunHistoryDTO[],
-    currentUnlocks: { trophies: string[]; equipment: string[] },
-    allDefinitions: { trophies: TrophyDef[]; equipment: EquipmentDef[] }
-  ): UnlockCheckResult
-}
-```
+**File**: `apps/web/src/app/actions/progression/save-loadout.ts`
+- Validates: all equipment IDs owned and attuned if MYTHIC, trophy owned and unlocked, slot uniqueness, role match
+- Upserts loadout row
+- Returns: `Result<Loadout, 'INVALID_EQUIPMENT' | 'INVALID_TROPHY' | 'SLOT_CONFLICT'>`
+
+**File**: `apps/web/src/app/actions/crafting/apply-mod.ts`
+- Validates: user owns equipment, empty slot at slot_index, recipe compatible, unlock condition met, sufficient materials
+- Transaction: deduct materials, insert user_equipment_mods row
+- Returns: `Result<void, 'SLOT_OCCUPIED' | 'INCOMPATIBLE_RECIPE' | 'UNLOCK_CONDITION_NOT_MET' | 'INSUFFICIENT_MATERIALS'>`
+
+**File**: `apps/web/src/app/actions/crafting/remove-mod.ts`
+- Validates: user owns equipment and mod
+- Deducts 2 salvage_parts flat fee
+- Deletes user_equipment_mods row (materials NOT refunded)
+- Returns: `Result<void, 'MOD_NOT_FOUND' | 'INSUFFICIENT_SALVAGE'>`
+
+**File**: `apps/web/src/app/actions/crafting/dismantle-equipment.ts`
+- Validates: user owns equipment, not in any active loadout, not MYTHIC
+- Removes all applied mods first, then deletes from user_equipment, grants salvage_parts
+- Returns: `Result<void, 'IN_ACTIVE_LOADOUT' | 'MYTHIC_CANNOT_DISMANTLE'>`
 
 ### craftingRecipeRegistry
 
@@ -392,12 +314,6 @@ This piece adds `craftingRecipeRegistry` to the registries file from the content
 // Extends packages/shared/src/registry/registries.ts:
 export const craftingRecipeRegistry = new ContentRegistry('CraftingRecipe', craftingRecipeDefSchema);
 ```
-
-### Zustand Stores
-
-**File**: `apps/web/src/stores/progression.ts` — holds all skill ranks, trophy unlock state, equipment unlock/attunement state, saved loadouts, material balances. Computed values: currently active loadout, equipped trophy, unlocked ability IDs. Initializes from server-rendered data passed as props at the Server/Client component boundary.
-
-**File**: `apps/web/src/stores/crafting.ts` — holds crafting recipe definitions (filtered by role), user's applied mods, salvage parts balance. Computed access: compatible recipes for selected equipment, can-afford checks, applied mods for equipment. Mutations are optimistic — confirmed by server action response.
 
 ### Testing Strategy
 
@@ -454,17 +370,17 @@ export const craftingRecipeRegistry = new ContentRegistry('CraftingRecipe', craf
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - Registry instances: `skillRegistry`, `trophyRegistry`, `weaponRegistry`, `itemRegistry` from `packages/shared/src/registry/registries`
 - `Effect` union and `StatId`: `packages/shared/src/effects/effect-types`
 - `EffectProcessor`: `packages/game-engine/src/effects/effect-processor`
 - `StatModifierSystem` with `STAT_CAPS`: `packages/game-engine/src/combat/stat-modifier-system`, `packages/shared/src/constants/balance`
 
-**From piece 12 (Session Economy)**:
+**From piece 15 (Session Economy)**:
 - Material type constants: `MATERIAL_TYPES` from `packages/shared/src/constants/economy`
 - `RunHistoryDTO` type and `getRunHistory()` function
 
-**From pieces 10b and 11b (Content)**:
+**From pieces 12 and 14 (Content)**:
 - All data files exist and are importable for the seed script
 
 ### Success Criteria
@@ -480,8 +396,10 @@ export const craftingRecipeRegistry = new ContentRegistry('CraftingRecipe', craf
 
 ### Alignment Notes
 
-This piece owns all database tables, DAL modules, and server actions for progression. Piece 13b owns the UI pages and the trophy/equipment content data.
+This piece owns all database tables, DAL modules, and server actions for progression. Piece 17 owns the UI pages and the trophy/equipment content data.
 
-The `craftingRecipeRegistry` instance is added in this piece (to `registries.ts`) because it requires the crafting schema infrastructure defined here. Piece 10b creates `killer-recipes.ts` and piece 11b creates `fed-recipes.ts` — those files are registered in piece 13b's extension of `_register-all.ts`.
+The `craftingRecipeRegistry` instance is added in this piece (to `registries.ts`) because it requires the crafting schema infrastructure defined here. Piece 12 creates `killer-recipes.ts` and piece 14 creates `fed-recipes.ts` — those files are registered in piece 17's extension of `_register-all.ts`.
 
 The ProgressionEffectsEngine is the critical integration point between the meta-progression layer and the game engine. It runs at run start via the run manager's hook from piece 07. It must complete synchronously (reading from the already-hydrated Zustand store) before any gameplay begins.
+
+Piece 07 creates the `_register-all.ts` scaffold referenced throughout. Piece 16's `craftingRecipeRegistry` adds to `registries.ts`. Piece 17 extends `_register-all.ts` to register trophies, equipment, and crafting recipes from pieces 12 and 14.

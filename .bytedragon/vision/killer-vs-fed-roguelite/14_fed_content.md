@@ -1,13 +1,13 @@
 ---
 vision: killer-vs-fed-roguelite
-sequence: "11b"
+sequence: "14"
 name: fed-content
 group: Gameplay
 group_order: 4
 status: pending
 depends_on:
-  - "08a: ContentRegistry<T> with abilityRegistry, weaponRegistry, itemRegistry, skillRegistry instances; Effect union type; _register-all.ts scaffold"
-  - "11a: FedRole, FedObjective type, ArrestCondition type, FedRunState — content data files reference these types"
+  - "08: ContentRegistry<T> with abilityRegistry, weaponRegistry, itemRegistry, skillRegistry instances; Effect union type; _register-all.ts scaffold"
+  - "13: FedRole, FedObjective type, ArrestCondition type, FedRunState — content data files reference these types"
 produces:
   - "Fed Forensics skill tree data at packages/shared/src/data/skills/fed-forensics.ts — F-F1 through F-F10 (10 skills)"
   - "Fed Interrogation skill tree data at packages/shared/src/data/skills/fed-interrogation.ts — F-I1 through F-I10 (10 skills, counter-play)"
@@ -24,7 +24,7 @@ created: 2026-03-18
 last_aligned: never
 ---
 
-# Vision Piece 11b: Fed Content
+# Vision Piece 14: Fed Content
 
 > Part of vision sequence: **killer-vs-fed-roguelite**
 > Status: pending | Dependencies: content-architecture, fed-core-mechanics
@@ -274,7 +274,7 @@ The custom handlers for crafting (Scramble-Proof Radio, Neural Link, Adaptive Ar
 Extend `_register-all.ts` to include fed content (alongside killer content added by the killer content piece):
 
 ```typescript
-// After killer registrations from 10b:
+// After killer registrations from 12:
 skillRegistry.registerAll([...FED_FORENSICS_SKILLS, ...FED_INTERROGATION_SKILLS, ...FED_TACTICS_SKILLS]);
 abilityRegistry.registerAll(FED_ABILITIES);
 weaponRegistry.registerAll(FED_WEAPONS);
@@ -333,14 +333,14 @@ Server Component. Fetches fed equipment and applied mods from the DAL. Renders t
 
 ### Dependencies (Consumed from Earlier Pieces)
 
-**From piece 08a (Content Architecture)**:
+**From piece 08 (Content Architecture)**:
 - `ContentRegistry` instances: `skillRegistry`, `abilityRegistry`, `weaponRegistry`, `itemRegistry`
 - `Effect` union type: `packages/shared/src/effects/effect-types`
 - `STAT_CAPS`: ensure rank 5 effects do not exceed caps
 - Zod schemas: `skillDefSchema`, `abilityDefSchema`, `weaponDefSchema`, `itemDefSchema`
 - `_register-all.ts` scaffold — this piece extends it
 
-**From piece 11a (Fed Core Mechanics)**:
+**From piece 13 (Fed Core Mechanics)**:
 - `ArrestCondition` type
 - `FedRunState` fields modified by skill effects
 - Fed EventBus event constants from `packages/shared/src/constants/events/fed`
@@ -353,15 +353,15 @@ Server Component. Fetches fed equipment and applied mods from the DAL. Renders t
 - [ ] All 7 MYTHIC boss items have custom handlers registered in `fed-boss-item-handlers.ts` matching data handler names
 - [ ] Skill tree tier prerequisites enforced in data entries
 - [ ] Rank 5 effects for each skill do not violate STAT_CAPS (validated by unit test)
-- [ ] Boot test counts: `skillRegistry` has at least 60 entries after both 10b and 11b register
+- [ ] Boot test counts: `skillRegistry` has at least 60 entries after both 12 and 14 register
 - [ ] Armory page renders equipment collection and compatible recipes for the fed's equipment
 
 ### Alignment Notes
 
-This piece is SOLELY responsible for all fed-specific content data files. Piece 13 must NOT re-declare these files.
+This piece is SOLELY responsible for all fed-specific content data files. Piece 16/17 must NOT re-declare these files.
 
-The `fed-boss-item-handlers.ts` file is separate from `killer-boss-item-handlers.ts` — this prevents merge conflicts when pieces 10b and 11b are built in parallel or in sequence.
+The `fed-boss-item-handlers.ts` file is separate from `killer-boss-item-handlers.ts` — this prevents merge conflicts when pieces 12 and 14 are built in parallel or in sequence.
 
-The Profiler's Notebook (FB-3) handler reads from a server-authoritative time-delayed record of killer zone visits. In multiplayer (piece 14), this data is provided by the Supabase Realtime channel with a server-enforced 60-second delay. The handler must not read from any real-time position state.
+The Profiler's Notebook (FB-3) handler reads from a server-authoritative time-delayed record of killer zone visits. In multiplayer (piece 18), this data is provided by the Supabase Realtime channel with a server-enforced 60-second delay. The handler must not read from any real-time position state.
 
-Fed crafting recipes (`fed-recipes.ts`) are created here. Their registration with `craftingRecipeRegistry` happens in piece 13b's extension of `_register-all.ts` — same pattern as killer recipes.
+Fed crafting recipes (`fed-recipes.ts`) are created here. Their registration with `craftingRecipeRegistry` happens in piece 17's extension of `_register-all.ts` — same pattern as killer recipes.
