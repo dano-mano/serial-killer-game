@@ -6,7 +6,21 @@ group: Polish
 group_order: 7
 status: pending
 depends_on:
-  - "14: GameSession type for tutorial integration and lobby polish"
+  - "14: GameSession type for tutorial integration and lobby polish, NetworkManager for connection state UI"
+  - "13b: Progression pages (trophies, equipment, loadouts) for onboarding flow guidance"
+  - "13a: Progression server actions for tutorial-triggered unlocks"
+  - "12: Results page, run scoring, material reward display for polish"
+  - "11a: FedHUD, fed ability system for tutorial scripting"
+  - "10a: KillerHUD, killer ability system for tutorial scripting"
+  - "09: EvidenceManager for tutorial evidence generation triggers"
+  - "08b: CombatHUD, CombatAnimations for VFX integration"
+  - "07: RunManager for tutorial mode hook, PlayerRole for role-specific tutorials"
+  - "06: NPC system for tutorial NPC scripting"
+  - "05: MapScene for loading screen and environment VFX integration"
+  - "04: EventBus for audio/VFX event subscriptions, PhaseGame component"
+  - "03: Magic UI animated components for landing page, shared design system"
+  - "02: Auth for onboarding flow gating"
+  - "01: Pino logger, object pool utilities (shared)"
 produces:
   - "packages/game-engine/src/audio/audio-manager.ts — background music, SFX, ambient, volume controls"
   - "packages/shared/src/types/audio.ts — SoundEffect, MusicTrack, AmbientLoop, AudioSettings"
@@ -694,9 +708,13 @@ Settings store emits these events after `saveToLocalStorage()` completes. Phaser
 - [x] XV: JSONB documented — user_settings JSONB rationale documented in schema comment
 - [x] XXVII: AI-optimized docs — tutorial steps include explicit counter-play introductions
 - [x] XXVIII: WCAG AA — high contrast, colorblind mode, keyboard nav, screen reader, reduced motion
-- [x] XXIX: Responsive design — landing page and settings page responsive at all viewport sizes
-- [x] XXX: Progressive enhancement — landing page functional without JS (SSR); audio disabled gracefully without user gesture
-- [x] XXXI: Asset loading tiers — loading scene respects critical/standard/deferred tiers defined in PreloadScene
+- [x] XXX: Responsive design — landing page and settings page responsive at all viewport sizes
+- [x] XXXI: Progressive enhancement — landing page functional without JS (SSR); audio disabled gracefully without user gesture
+- [x] XXXII: Asset loading tiers — loading scene respects critical/standard/deferred tiers defined in PreloadScene
+
+### Art Style Integration
+
+The loading screen uses an ink-splatter animation (black ink expanding on parchment-colored background) rendered as a sprite sheet, not a procedural shader. Comic panel scene transitions (panel borders expanding to fill screen, then collapsing into the new scene) are implemented as a Phaser Camera effect with a border overlay sprite. PostFX shader integration: register halftone dot pattern and paper texture grain shaders in the `rendering/` pipeline directory. The loading scene triggers `registerPipelines(game)` to ensure PostFX is active before first gameplay frame. All VFX presets (combat, evidence, environment, UI) must follow the onomatopoeia and speed-line style from the art style guide. See `art-style-guide.md` in the vision directory for full PostFX shader specifications, loading screen ink-splatter timing, and comic panel transition dimensions.
 
 ----
 

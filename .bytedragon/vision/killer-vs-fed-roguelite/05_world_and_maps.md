@@ -417,7 +417,7 @@ Capabilities:
 - Line-of-sight check: uses Bresenham's line algorithm to determine if a straight sightline is clear of walls
 - Dynamic update: can toggle a tile's blocked state when doors open, bodies are placed, etc.
 
-Line-of-sight is used by NPC perception (piece 06) and evidence rendering.
+Line-of-sight is used by NPC perception (entity and NPC system) and evidence rendering.
 
 ### Spawn Manager
 
@@ -457,19 +457,19 @@ Zone transitions emit map events (zone-entered, zone-exited) when tracked entiti
 
 The main gameplay scene. Orchestrates all map subsystems:
 
-On initialization: receives a seed and biome ID from the run manager (piece 07). During development, hardcoded defaults are used.
+On initialization: receives a seed and biome ID from the run manager (player and role framework). During development, hardcoded defaults are used.
 
 On preload: loads biome-specific (deferred tier) assets — the tilesheet for this biome, NPC sprites, etc.
 
 On create: generates the map, instantiates all subsystems (tile manager, collision layer, pathfinding grid, spawn manager, zone manager, camera controller), then emits the map-loaded event with the biome ID, map dimensions, and a zone summary.
 
-On update: detects zone transitions by checking tracked entities against zone boundaries. Player entity integration is stubbed until piece 07.
+On update: detects zone transitions by checking tracked entities against zone boundaries. Player entity integration is stubbed until the player and role framework piece.
 
 The map scene is added to the game config's scene array as the third entry after Boot and Preload.
 
 ### Minimap Data
 
-The minimap data bridge exports a simplified map representation to the React state layer for the minimap HUD component (piece 07). The minimap data includes:
+The minimap data bridge exports a simplified map representation to the React state layer for the minimap HUD component (player and role framework). The minimap data includes:
 - Map dimensions (width and height in tiles)
 - Explored tiles: a boolean grid tracking fog-of-war (which tiles the player has seen)
 - Zone name and bounds list (for the minimap overlay)
@@ -487,12 +487,16 @@ React-side state for the current map, readable by HUD components. Tracks:
 
 ### Edge Cases
 
-- **Seed management for multiplayer**: The multiplayer host generates the seed (piece 14). For singleplayer (and during this piece's development), generate a random seed at run start using Phaser's built-in random data generator. The seed must be a string.
+- **Seed management for multiplayer**: The multiplayer host generates the seed (the multiplayer sync system). For singleplayer (and during this piece's development), generate a random seed at run start using Phaser's built-in random data generator. The seed must be a string.
 - **Passability validation**: The generator MUST verify that player spawn and all exit points are reachable via pathfinding. If not, regenerate with a modified seed (append a retry suffix). After 3 failures, fallback to a guaranteed-valid hardcoded seed.
-- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during polish (piece 15).
+- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during the polish and onboarding piece.
 - **Map size scaling**: Large maps (concert festival at 180×150 = 27,000 tiles) can be memory-intensive. Use lazy rendering — only process tiles near the camera. Phaser's tilemap layer supports culling for this purpose.
 - **Collision layer dynamic updates**: When a body is placed on a tile or a door opens, both the collision layer and the pathfinding grid must be updated together to keep them in sync.
 - **Fog of war**: The explored tiles grid starts as all-false. As the player moves, tiles within a radius are marked explored. The minimap shows only explored tiles. Unexplored tiles render as black on the minimap. This is tracked client-side only (not server-validated for performance).
+
+### Multiplayer Determinism Requirement
+
+All map generation must be perfectly deterministic from a given seed. The same seed and biome combination must always produce identical maps. No randomness outside the seeded random number generator. Zone placement, building positions, and spawn points must all be deterministic from seed. This is a hard requirement for multiplayer sync — if two clients generate different maps from the same seed, the game state immediately diverges.
 
 ----
 
@@ -848,8 +852,14 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 - [x] XIV: EventBus for zone transition signals (one-time events)
 - [x] XV: No database tables in this piece — all data is client-side runtime state. BiomeConfig is code, not DB.
 - [x] XXVI: Tests in `tests/` at package root
-- [x] XXIX: Maps scale to viewport via camera zoom; minimap is responsive React component
-- [x] XXXI: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
+- [x] XXX: Maps scale to viewport via camera zoom; minimap is responsive React component
+- [x] XXXII: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
+
+### Determinism Implementation Requirements
+
+All random number generation in map generation MUST use the seeded RNG (never `Math.random()`). Map generation from the same seed+biome MUST produce byte-identical tile arrays. Add integration test: generate map twice with same seed, assert arrays are deep-equal. This test must pass before this piece is considered complete — it verifies the multiplayer determinism guarantee.
+
+See `art-style-guide.md` in the vision directory for biome-specific color palettes and tileset art style (hand-drawn with hatching/cross-hatching). Tileset dimensions and format requirements are specified there.
 
 ----
 

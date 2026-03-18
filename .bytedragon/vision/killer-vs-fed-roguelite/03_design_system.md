@@ -441,7 +441,13 @@ These are common mistakes when migrating from v3 to v4:
 - [x] VI: Domain-based organization — `app/common/` for shared, `app/game/` for game-specific (later)
 - [x] XXVI: Tests in `tests/` at package root
 - [x] XXVIII: Dark mode default + light mode for accessibility (WCAG AA contrast ratios)
-- [x] XXIX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
+- [x] XXX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
+
+### Art Style Integration
+
+The Bangers comic font is used as the display typeface (headlines, HUD labels, score displays). The token chain for correct integration: `packages/ui-theme/src/typography.ts` defines `fontComic` referencing the CSS variable, `apps/web/src/app/globals.css` defines the `@theme` block with `--font-bangers` loaded from `next/font/google`, and components use `className="font-comic"`. Do not hardcode `font-family: 'Bangers'` in component files — always reference the design token.
+
+AppCard and AppDialog should include `panel` variants with panel-style borders (thick stroke, comic-panel visual treatment). These variants are used by all game UI overlays to maintain the comic-book aesthetic. See `art-style-guide.md` in the vision directory for full visual specifications.
 
 ----
 

@@ -1,13 +1,14 @@
 ---
 name: constitution-renumbering-propagation
-description: Constitution principle numbers changed in v1.1.0 -- researcher outputs and TECH_RESEARCH still reference old numbers. Check all cross-references after constitution amendments.
+description: Recurring issue -- constitution amendments that renumber principles leave stale references in CLAUDE.md, TECH_RESEARCH.md, and vision docs. Check ALL downstream docs after every amendment.
 type: project
 ---
 
-Constitution v1.1.0 renumbered principles XXII-XXIX due to two new insertions (XXII CSP, XXIV Dependency Management). Researcher outputs created before the amendment used v1.0.0 numbering. When implementation-specialist carried those references into TECH_RESEARCH.md, the old numbers persisted.
+Downstream principle-number staleness has occurred in BOTH v1.1.0 and v1.2.0 amendments. This is a recurring pattern, not a one-time oversight.
 
-**Why:** The researcher ran before the constitution amendment. The implementation-specialist did not cross-check principle numbers against the current constitution.
+- v1.1.0: Researcher outputs used v1.0.0 numbers; implementation-specialist propagated stale refs into TECH_RESEARCH.md
+- v1.2.0: CLAUDE.md, TECH_RESEARCH.md, and 9 vision doc references still use v1.1.0 numbers after renumbering XXIX-XXXI -> XXX-XXXII
 
-**How to apply:** After any constitution amendment that adds/removes/renumbers principles, audit ALL downstream documents (TECH_RESEARCH.md, CLAUDE.md, agent outputs) for stale principle references. The most common mapping errors after v1.1.0:
-- Old XXIV (Test Organization) -> New XXVI
-- Old XXVI (Accessibility) -> New XXVIII
+**Why:** No automated cross-reference validation exists. Each amendment relies on manual grep-and-fix, which is error-prone when vision docs accumulate references.
+
+**How to apply:** After any constitution amendment that adds/removes/renumbers principles, grep the entire repo for affected Roman numerals and audit ALL hits: CLAUDE.md, TECH_RESEARCH.md, vision docs, agent memory files, session notes. Consider recommending principle references by NAME rather than number to reduce future breakage (last seen 2026-03-18).

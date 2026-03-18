@@ -12,7 +12,7 @@ depends_on:
   - "05: Zone manager (evidence placed in zones), tile manager, biome types, Vec2"
   - "06: NPC witness system (WitnessStatement, getWitnessStatement()), NPCSpawner, perception system"
   - "07: Player actions (PLAYER_ACTION events), inventory (evidence-modifying items), role (evidence visibility differs by role), player Zustand store"
-  - "08: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event, Attack type"
+  - "08b: DAMAGE_DEALT event (with witnesses[]), ENTITY_DIED event, Attack type"
 produces:
   - "Evidence manager: tracks all evidence, handles generation, decay, and discovery"
   - "Evidence types: Evidence, EvidenceType, EvidenceState, EvidenceQuality, CaseFile"
@@ -212,7 +212,7 @@ New events added for the evidence system: evidence generated (object and source)
 
 The evidence system is entirely passive from the killer's perspective (evidence is generated automatically by their actions via EventBus listeners) and active from the fed's perspective (fed must physically explore and trigger discovery mechanics).
 
-Counter-play abilities are implemented as PlayerAbility objects that call EvidenceManager and NPC methods directly — no new evidence systems needed. The ability system (piece 08) handles cooldowns and resource costs; evidence methods implement the actual effect.
+Counter-play abilities are implemented as PlayerAbility objects that call EvidenceManager and NPC methods directly — no new evidence systems needed. The combat ability system handles cooldowns and resource costs; evidence methods implement the actual effect.
 
 ### Core Types
 

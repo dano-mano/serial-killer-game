@@ -206,6 +206,10 @@ NPC AI runs on a throttled tick rate rather than every render frame, using Phase
 - NPC witness reliability is seeded from NPC ID plus run seed — the same NPC is always the same reliability level per run, enabling consistent false-lead designs
 - An NPC that is a witness MUST remain interviewable by the fed until the run ends, even if the NPC has fled
 
+### Multiplayer Determinism Requirement
+
+NPC spawning and behavior must be fully deterministic from the run seed. The same seed must produce identical NPC placements and routine schedules. NPC ID assignment must be deterministic from seed — not randomly generated UUIDs. This is required for multiplayer sync: both clients must produce identical NPC states from the same seed.
+
 ----
 
 ## /speckit.plan Prompt
@@ -219,7 +223,7 @@ NPC AI runs on a throttled tick rate rather than every render frame, using Phase
 
 All entity/NPC code lives in `packages/game-engine/src/`. No React imports anywhere in this package. State that the React HUD needs (nearby NPC count, interaction prompts) flows out via EventBus events, which Zustand stores in `apps/web/src/stores/player.ts` (extended) subscribe to.
 
-The base entity class must be abstract. Both NPC and the future player controller (piece 07) extend it. This shared hierarchy is what makes the disguise mechanic work: a human player using the same `BaseEntity.setAnimation()` system looks identical to an NPC from a renderer perspective.
+The base entity class must be abstract. Both NPC and the future player controller (player and role framework) extend it. This shared hierarchy is what makes the disguise mechanic work: a human player using the same `BaseEntity.setAnimation()` system looks identical to an NPC from a renderer perspective.
 
 ### Shared Types and Constants
 
@@ -551,7 +555,7 @@ Selector (root)
 
 Use a single character atlas with multiple NPC "skins" (clothing color/pattern variations). Animation frames are identical across skins. Each skin is a separate row in the atlas. This way, `SpriteManager.createCharacterSprite()` just swaps which row it reads from.
 
-Player controller (piece 07) will call `SpriteManager.createCharacterSprite()` with the same interface, making player sprites visually identical to NPCs of the same role variant.
+The player controller will call `SpriteManager.createCharacterSprite()` with the same interface, making player sprites visually identical to NPCs of the same role variant.
 
 ### Testing Strategy
 
@@ -571,6 +575,12 @@ Player controller (piece 07) will call `SpriteManager.createCharacterSprite()` w
 - [x] Singleton pattern for SpriteManager, InteractionManager, PerceptionSystem, NPCSpawner
 - [x] Result<T,E> for spawner functions that can fail (zone not found, invalid spawn point)
 - [x] Tests in `tests/` at package root, mirroring `src/` structure
+
+### Determinism Implementation Requirements
+
+NPC spawning from same seed MUST produce identical placements and schedules. NPC ID assignment MUST be deterministic from seed (not UUID-random — use `seed-${npcIndex}` or derive from run seed + spawn point index). NPC behavioral variation seeding already uses run seed + NPC ID (good). Add integration test: spawn NPCs twice with same seed, assert identical initial states (positions, IDs, routine schedules). This test must pass before this piece is considered complete.
+
+See `art-style-guide.md` in the vision directory for character sprite dimensions (48x48px), atlas format (PNG + JSON Hash), and character outline style requirements.
 
 ----
 

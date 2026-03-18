@@ -1,31 +1,29 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.0.0 -> 1.1.0
-Type: MINOR - Two new principles added (CSP, Dependency Management),
-one principle strengthened (Database Schema), one principle clarified
-(Test Organization), technology decisions updated.
+Version Change: 1.1.0 -> 1.2.0
+Type: MINOR - Two new principles added (Art Style Consistency,
+Graceful Visual Degradation) for the cell-shaded/comic-book art
+style decision.
 
-Current Principle Count: 31 (I-XXXI)
+Current Principle Count: 33 (I-XXXIII)
 
 Added Principles (2):
-- XXII. Content Security Policy (Security & Compliance section)
-- XXIV. Dependency Management (Quality & Maintenance section)
+- XXIX. Art Style Consistency (Quality & Maintenance section)
+- XXXIII. Graceful Visual Degradation (Performance & UX section)
 
-Modified Principles (2):
-- XV. Database Schema Design: Strengthened to require 3NF as starting
-  point, JSONB usage now requires documented rationale (MUST), added
-  JSONB limitations note
-- XXVI (was XXIV). Centralized Test Organization & Quality: Added
-  canonical test directory name requirement (`tests/` at package root)
+Modified Principles (0):
+- None
 
 Renumbered Principles:
-- Old XXII-XXVI -> New XXIII-XXVIII (shifted by XXII CSP insertion
-  and XXIV Dependency Management insertion)
-- Old XXVII-XXIX -> New XXIX-XXXI (cascaded shift)
+- Old XXIX (Responsive Design) -> XXX
+- Old XXX (Progressive Enhancement) -> XXXI
+- Old XXXI (Asset Loading & Performance) -> XXXII
 
 Cross-Reference Updates:
-- Governance conflict resolution ranges updated to reflect new numbering
+- Governance conflict resolution ranges updated:
+  Quality & Maintenance: XXIII-XXVIII -> XXIII-XXIX
+  Performance & UX: XXIX-XXXI -> XXX-XXXIII
 
 Technology Decisions:
 - Runtime: Node.js 24 LTS
@@ -43,16 +41,23 @@ Technology Decisions:
 - Logging: Pino (structured JSON)
 - Error Handling: neverthrow (Result type) + next-safe-action
   (Server Actions)
+- Rendering: Phaser PostFXPipeline, PNG+JSON Hash atlas,
+  frame-by-frame animation, comic-book/cel-shaded art style
 
 Templates Requiring Updates:
 - None (templates are generic and load constitution at runtime)
 
 Follow-up TODOs:
-- Update CLAUDE.md principle count from 29 to 31 and section ranges
-- Update CLAUDE.md Pending Decisions to remove testing tooling
-  (now decided)
-- Create docs/architecture/testing-strategy.md ADR with coverage
-  targets and mocking conventions
+- Update CLAUDE.md principle count from 31 to 33 and section ranges
+- Update CLAUDE.md constitution summary to include new principles
+
+=== Historical Record: v1.1.0 ===
+Version Change: 1.0.0 -> 1.1.0
+Type: MINOR - Two new principles added (CSP, Dependency Management),
+one principle strengthened (Database Schema), one principle clarified
+(Test Organization), technology decisions updated.
+Principle Count: 31 (I-XXXI)
+Amended: 2026-03-16
 
 === Historical Record: v1.0.0 (Initial) ===
 Version Change: template -> 1.0.0
@@ -985,9 +990,44 @@ accessibility approaches distinct from standard web UI.
 
 ---
 
+### XXIX. Art Style Consistency
+
+All game sprites, tilesets, and visual effects MUST use a
+consistent comic-book/cel-shaded visual style characterized by
+thick black outlines, flat color fills, and ink-style shadow
+treatment. New visual assets MUST conform to the art style guide.
+
+**Rationale**: Visual consistency is critical for player immersion
+and professional polish. The comic-book/cel-shaded style is baked
+into the 2D art assets (not achieved through post-processing
+alone), making it essential that every visual element follows the
+same aesthetic language. Inconsistent assets break the visual
+contract with players and undermine the game's identity.
+
+**Requirements**:
+- All character sprites, tilesets, and environmental art MUST use
+  thick black outlines with line-weight variation
+- Color fills MUST use flat colors with ink-style shadow treatment
+  (hatching, cross-hatching, or solid ink shadows)
+- New visual assets MUST conform to the art style guide before
+  integration into the game
+- The baked art style MUST carry the visual identity independently
+  of any post-processing shader effects
+- Evidence markers, status indicators, and UI icons MUST follow
+  the same comic-book aesthetic
+- Color-only visual indicators MUST have a secondary differentiator
+  (shape, pattern, or label) per Principle XXVIII
+
+**Enforcement**:
+- Visual asset changes MUST include comparison against the art
+  style guide
+- Art style deviations require documented rationale and review
+
+---
+
 ## Performance & User Experience
 
-### XXIX. Responsive Design & Cross-Device Support
+### XXX. Responsive Design & Cross-Device Support
 
 All web UI components MUST be responsive and functional from 320px
 to 2560px+ viewport widths. The game canvas MUST adapt to
@@ -1012,7 +1052,7 @@ constraints -- it must scale while preserving visual fidelity.
 
 ---
 
-### XXX. Progressive Enhancement
+### XXXI. Progressive Enhancement
 
 Server-rendered HTML MUST provide a functional baseline experience.
 Client-side JavaScript enhancements MUST be layered on top of this
@@ -1037,7 +1077,7 @@ gracefully.
 
 ---
 
-### XXXI. Asset Loading & Performance
+### XXXII. Asset Loading & Performance
 
 Game assets (sprites, audio, maps, fonts) MUST be managed through
 a tiered storage strategy with appropriate caching headers. Large
@@ -1069,6 +1109,39 @@ delivery mechanisms.
   optimization) for non-game-canvas images
 - The game engine bundle SHOULD be compressed and lazy-loaded to
   minimize initial page weight
+
+---
+
+### XXXIII. Graceful Visual Degradation
+
+The game's visual identity MUST be maintained when PostFX shaders
+are disabled. Post-processing effects (halftone, paper texture)
+are enhancements, not requirements for the visual identity.
+
+**Rationale**: Browser-based games must run across diverse hardware
+capabilities, from high-end gaming PCs to low-powered laptops and
+tablets. PostFX shaders enhance the visual experience but MUST NOT
+be required for the game to look intentional and polished. The 2D
+baked art style ensures visual identity at every degradation level.
+
+**Requirements**:
+- The application MUST provide a 4-level degradation path: Full
+  PostFX, Reduced (1 pass), Minimal (no PostFX), Canvas fallback
+- Each degradation level MUST be independently functional and
+  visually coherent
+- Degradation level SHOULD be automatically detected based on
+  device GPU capability
+- Degradation level MAY be manually overridden by the user in
+  graphics settings
+- PostFX shader effects MUST fail silently (no errors, no broken
+  visuals) when WebGL is unavailable
+- Performance monitoring SHOULD detect sustained frame drops and
+  suggest degradation level changes
+
+**Enforcement**:
+- Graphics settings UI MUST expose the degradation level selector
+- Automated tests SHOULD verify each degradation level renders
+  without errors
 
 ---
 
@@ -1122,9 +1195,9 @@ When principles conflict, apply in order of priority:
    remain stable
 3. **Data & State Management (XI-XV)** -- Data integrity protects
    correctness
-4. **Quality & Maintenance (XXIII-XXVIII)** -- Maintainability
+4. **Quality & Maintenance (XXIII-XXIX)** -- Maintainability
    protects long-term velocity
-5. **Performance & User Experience (XXIX-XXXI)** -- User
+5. **Performance & User Experience (XXX-XXXIII)** -- User
    experience within architectural constraints
 
 ### Documentation References
@@ -1136,4 +1209,4 @@ Canonical documentation locations:
   adopted)
 - **API Documentation**: `docs/api/`
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-15 | **Last Amended**: 2026-03-16
+**Version**: 1.2.0 | **Ratified**: 2026-03-15 | **Last Amended**: 2026-03-18

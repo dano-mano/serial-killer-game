@@ -5,6 +5,8 @@
 
 > Updated: 2026-03-16 — Added testing, linting, logging, and error handling sections
 
+> Updated: 2026-03-18 — Added Visual Rendering Pipeline section (art asset technical specifications)
+
 ---
 
 ## Table of Contents
@@ -20,12 +22,13 @@
 9. [Testing Infrastructure](#testing-infrastructure)
 10. [Code Quality Tooling](#code-quality-tooling)
 11. [Logging & Error Handling](#logging--error-handling)
-12. [Supabase Development Scripts](#supabase-development-scripts)
-13. [Architecture & Project Structure](#architecture--project-structure) (incl. [Centralization Principles](#centralization-principles), [Zero-Trust Security](#zero-trust-security-architecture))
-14. [Deployment Strategy](#deployment-strategy)
-15. [Cost Analysis](#cost-analysis)
-16. [Recommended Stack Summary](#recommended-stack-summary)
-17. [Sources](#sources)
+12. [Visual Rendering Pipeline](#visual-rendering-pipeline)
+13. [Supabase Development Scripts](#supabase-development-scripts)
+14. [Architecture & Project Structure](#architecture--project-structure) (incl. [Centralization Principles](#centralization-principles), [Zero-Trust Security](#zero-trust-security-architecture))
+15. [Deployment Strategy](#deployment-strategy)
+16. [Cost Analysis](#cost-analysis)
+17. [Recommended Stack Summary](#recommended-stack-summary)
+18. [Sources](#sources)
 
 ---
 
@@ -61,6 +64,7 @@
 | **Linting** | ESLint (flat config) with eslint-config-next | Constitution principle enforcement |
 | **Logging** | Pino 10.x | Structured JSON, 5-10x faster than Winston, Sentry integration |
 | **Error Handling** | neverthrow (Result type) + next-safe-action | Type-safe errors across Phaser, React, and Server Actions |
+| **Rendering Pipeline** | Phaser PostFXPipeline + PNG/JSON Hash atlases + GLSL shaders | 2-pass max PostFX (halftone + paper texture), 4-level graceful degradation, 48×48px characters, 32×32px tiles |
 
 ### Key Architectural Decision
 
@@ -1065,6 +1069,106 @@ import neverthrowPlugin from 'eslint-plugin-neverthrow'
   rules: { 'neverthrow/must-use-result': 'error' },
 }
 ```
+
+---
+
+## Visual Rendering Pipeline
+
+> **Key Decision**: Art style is 90% baked into assets and 10% runtime PostFX. The game looks correct with all shaders disabled — PostFX enhance, they do not define, the visual identity. This ensures graceful degradation on low-end hardware without breaking the comic-book aesthetic.
+
+### Rendering Architecture
+
+| Layer | Technology | Location | Why |
+|-------|-----------|----------|-----|
+| **Post-processing** | Phaser `PostFXPipeline` subclass | `packages/game-engine/src/rendering/` | Available in Phaser 3.60+; project uses 3.90.0. Camera-level PostFX applies to the full game canvas in a single pass |
+| **Game sprites** | Phaser sprite rendering (WebGL) | Built into Phaser | Phaser's WebGL renderer handles all sprite draw calls; PostFX sits on top |
+| **React UI overlays** | SVG elements in React components | `apps/web/src/components/app/common/` | Speech bubbles, panel borders, and UI icons are SVG on the React side; never cross the Phaser boundary (Constitution rule 7) |
+| **Fallback** | Phaser Canvas renderer | Automatic (`Phaser.AUTO`) | PostFX shaders are silently unavailable in Canvas mode; game remains playable |
+
+**Performance constraint**: Maximum 2 PostFX passes per frame to maintain 60fps on mid-range hardware (Intel UHD 620 class GPU). See [Performance Budget](#performance-budget) below.
+
+### Asset Format Standards
+
+| Asset Type | Format | Why |
+|-----------|--------|-----|
+| **Game sprites and tilesets** | PNG + JSON Hash atlas | Phaser's native atlas format. JSON Hash provides named frame access and is the output format for both Aseprite and TexturePacker. Preferred over JSON Array for named-frame lookups |
+| **React UI elements** (speech bubbles, panel borders, icons) | SVG | Resolution-independent, Tailwind-styleable, zero rasterization cost at any canvas scale. Loaded by React, never by Phaser |
+| **PostFX shaders** | GLSL (embedded in TypeScript PostFXPipeline classes) | Simple shaders (<50 lines) are embedded as template literals directly inside each pipeline class file (no separate `.frag` file). Complex shaders are extracted to `.frag` files and imported as raw strings. Compiled by Phaser's WebGL renderer at runtime |
+| **Production asset filenames** | Content-hash filenames | e.g., `character-doctor-a1b2c3.png` — required by Constitution Principle XXXII for long-lived cache headers (`Cache-Control: public, max-age=31536000, immutable`) |
+
+> **Note on content-hash filenames**: Asset pipeline tooling (Aseprite export scripts, TexturePacker) must output content-hash filenames. The `getAssetUrl()` helper in the asset loader is responsible for resolving the correct hashed path at runtime. See Deployment Strategy section for caching header configuration on Azure Blob Storage.
+
+### Sprite Specifications
+
+| Specification | Value | Rationale |
+|--------------|-------|-----------|
+| **Character sprites** | 48×48px | 1.5× tile size (32px × 1.5 = 48px) for character readability against tile backgrounds at 1280×720 |
+| **Tile sprites** | 32×32px | Matches `GAME_CONFIG.TILE_SIZE` (defined in `packages/game-engine/src/config.ts`) |
+| **Canvas resolution** | 1280×720px | Matches `GAME_CONFIG.BASE_RESOLUTION`; standard 16:9 baseline that scales to device |
+| **Atlas size** | 2048×2048px (preferred max) | Safe for all target devices including mobile WebGL; avoids texture size errors on low-end GPUs |
+| **Pixel format** | RGBA (32-bit) | Transparency required — character outlines use alpha channel for ink-stroke edges against any background |
+
+### Animation Format
+
+**Decision: Frame-by-frame sprite animation (NOT skeletal)**
+
+| Attribute | Value |
+|-----------|-------|
+| **Format** | Frame-by-frame (individual frames in atlas) |
+| **Frames per animation state** | 4–6 frames |
+| **Animation system** | Phaser native (`this.anims.create()`) |
+| **External animation library** | None required |
+
+**Why frame-by-frame over skeletal**:
+
+1. **Comic-book aesthetic requires per-frame control**: Ink shadows, thick outlines, and halftone dots must be hand-authored or controlled per frame. Skeletal systems interpolate between poses and cannot maintain the flat-color, hard-edge look that defines the style.
+2. **Phaser native system is sufficient**: 4–6 frames per state (idle, walk, action, react) is well within Phaser's built-in animation system capabilities. No external library is needed.
+3. **Atlas size is manageable**: 4–6 frames × 48×48px RGBA = ~37–56KB uncompressed per character variant. A 2048×2048 atlas holds ~1,700+ 48×48 frames — ample headroom for all character variants and states.
+4. **Predictable render cost**: Frame-by-frame swaps are a single texture coordinate lookup per frame. Skeletal systems require matrix transforms per bone per frame, adding CPU cost with no visual benefit for this art style.
+
+### Tool Specifications (Asset Pipeline)
+
+| Tool | Purpose | Output Format |
+|------|---------|--------------|
+| **Aseprite** (or equivalent pixel art tool) | Character sprite creation, frame animation | PNG spritesheet + JSON Hash atlas |
+| **Tiled** | Tilemap editing, level design | Phaser-compatible JSON (`.tmj` / `.json`) |
+| **TexturePacker** (or Aseprite built-in atlas export) | Packing multiple sprites into a single atlas texture | PNG + JSON Hash |
+
+**Why JSON Hash specifically**: Phaser's `Loader.atlas()` method defaults to JSON Hash format. Named frame access (`sprite.setFrame('doctor-idle-01')`) requires Hash format — Array format uses only numeric indices.
+
+### Performance Budget
+
+| Metric | Value | Calculation |
+|--------|-------|-------------|
+| **PostFX passes per frame** | 2 maximum | Conservative limit; Intel UHD 620 handles 4–6 simple passes but 2 leaves headroom for complex shaders |
+| **Pixel operations per frame** | ~1.84M | 1280 × 720 × 2 passes = 1,843,200 pixel ops/frame |
+| **Pixel operations per second** | ~110M | 1,843,200 × 60fps = 110,592,000 pixel ops/sec (well within mid-range GPU capability) |
+| **Total texture memory budget** | ~35–50MB | Covers all character atlases, tilesets, UI textures, and PostFX framebuffers |
+
+**Graceful degradation — 4 levels**:
+
+| Level | Condition | Rendering Mode |
+|-------|-----------|---------------|
+| **Full** | WebGL, mid-range GPU | 2 PostFX passes (halftone + paper texture) |
+| **Reduced** | WebGL, low-end GPU or performance warning | 1 PostFX pass (halftone only, paper texture disabled) |
+| **Minimal** | WebGL, performance critical | No PostFX (art style held by baked assets alone; game looks correct) |
+| **Canvas fallback** | No WebGL support | Phaser Canvas renderer; PostFX silently unavailable; game fully playable |
+
+**Why this budget is sound**: The 2-pass limit is conservative. Simple GLSL shaders (halftone, paper texture overlay) are not computationally expensive — the constraint primarily guards against shader author creep (adding "just one more" pass over time). The Canvas fallback guarantees playability on any device because 90% of the visual identity is baked into the assets.
+
+### PostFX Shader Location
+
+```
+packages/game-engine/src/rendering/
+  HalftonePipeline.ts       # PostFXPipeline subclass — halftone dot pattern
+  PaperTexturePipeline.ts   # PostFXPipeline subclass — paper grain overlay
+  index.ts                  # Pipeline registration (NOT a barrel file — single entry point
+                            #   for Phaser's renderer.pipelines.addPostPipeline() calls)
+```
+
+This file exports a single `registerPipelines(game: Phaser.Game)` function. It does NOT re-export pipeline classes — modules that need a pipeline class reference MUST import directly from the class file (e.g., `import { HalftonePipeline } from './HalftonePipeline'`). This makes it a boot registration entry point, not a barrel file, and keeps it compliant with Constitution Principle I.
+
+**GLSL shader files** are embedded as template literals within each pipeline class file (no separate `.frag` file required for simple shaders) or imported as raw strings if the shader exceeds ~50 lines.
 
 ---
 

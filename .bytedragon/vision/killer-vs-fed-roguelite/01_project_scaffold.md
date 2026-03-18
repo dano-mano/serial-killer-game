@@ -324,6 +324,10 @@ CMD ["node", "apps/web/server.js"]
 - `packages/shared/src/utils/result.ts` — exports `ok()`, `err()`, error types
 - All service clients follow singleton pattern: create instance, export it, import where needed
 
+### Content Security Policy
+
+Configure Content Security Policy headers in `proxy.ts`. Include `script-src`, `style-src`, `img-src`, `connect-src` (Supabase WebSocket origins — `wss://*.supabase.co` and `https://*.supabase.co`), and `frame-ancestors` directives. CSP must be defined centrally in `proxy.ts` per Constitution Principle XXII. Placing CSP here (in the scaffold) ensures it is present from the first deployed commit and never added as an afterthought. The `connect-src` directive must include Supabase Realtime WebSocket endpoints — these must be configured before the multiplayer feature is needed or the CSP will block Realtime connections.
+
 ### Constitution Compliance Checklist
 
 - [x] I: No barrel files (ESLint rule enforced)
@@ -333,6 +337,7 @@ CMD ["node", "apps/web/server.js"]
 - [x] VIII: Singleton services (lib/ pattern)
 - [x] IX: Runtime version consistency (.nvmrc, Dockerfile, CI all 24.14.0)
 - [x] X: Observability (Pino + Sentry)
+- [x] XXII: Content Security Policy defined in proxy.ts
 - [x] XXIV: Dependency management (npm audit in CI)
 - [x] XXVI: Centralized tests/ directories
 

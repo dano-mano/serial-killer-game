@@ -6,7 +6,18 @@ group: Multiplayer
 group_order: 6
 status: pending
 depends_on:
-  - "13: Loadout type for session creation and loadout-aware matchmaking"
+  - "13a: Loadout type, progression Zustand store, user_loadouts table for session creation and loadout-aware matchmaking"
+  - "13b: Trophy and equipment data for session state"
+  - "12: run_history table, scoring types, material reward types"
+  - "11a: FedRole, FedRunState, ArrestSystem, VigilanteSystem for bot controller"
+  - "10a: KillerRole, KillerRunState, StealthSystem, KillSystem for bot controller"
+  - "09: EvidenceState serialization for sync payload"
+  - "07: PlayerRole, RunConfig, RunManager multiplayer initialization hook"
+  - "06: NPC state for opponent-renderer NPC rendering of hidden opponent"
+  - "05: MapScene, seeded map generation for deterministic map sync"
+  - "03: AppButton, AppCard, AppDialog for lobby UI components"
+  - "02: Supabase Auth, proxy protection for lobby routes, server client"
+  - "01: Pino logger, Result<T,E> utilities, env config"
 produces:
   - "supabase/migrations/XXX_multiplayer.sql — game_sessions and game_events tables with RLS"
   - "apps/web/src/lib/supabase/realtime.ts — Supabase Realtime channel management"

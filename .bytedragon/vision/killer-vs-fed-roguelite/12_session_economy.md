@@ -6,10 +6,14 @@ group: Progression
 group_order: 5
 status: pending
 depends_on:
-  - "10: KillerObjective scoring types, KillerStore state (kills, disposals, evidenceDestroyed) for run scoring"
-  - "11: FedRunState, ArrestCondition, FedStore state (evidenceCollected, interrogationsPerformed, arrestCondition) for run scoring"
+  - "10a: KillerObjective scoring types, KillerStore state (kills, disposals, evidenceDestroyed) for run scoring"
+  - "11a: FedRunState, ArrestCondition, FedStore state (evidenceCollected, interrogationsPerformed, arrestCondition) for run scoring"
   - "02: Supabase server client for DAL (run_history, daily_bonus persistence)"
   - "07: PlayerRole, RunConfig, Loadout, RunManager lifecycle hooks, inventory types"
+  - "01: Pino logger singleton, Result<T,E> utilities, env config module"
+  - "03: AppButton, AppCard, AppDialog, AppInput, AppToast shared UI components"
+  - "04: EventBus for game event communication, Phaser scene lifecycle"
+  - "08b: StatusEffectSystem for applying temp powerups as status effects"
 produces:
   - "packages/game-engine/src/economy/session-economy.ts — session coins earn/spend/reset"
   - "packages/shared/src/types/economy.ts — SessionCurrency, PersistentCurrency, ShopOffering, RandomEncounter, EncounterChoice, EncounterOutcome, GhostTokenBonus, SalvagePartDrop"
@@ -58,21 +62,21 @@ Implement the within-run economy that completes the single-run gameplay loop. Se
 
 ### Dependency Overview
 
-**From piece 01 (foundation)**: Structured logging (Pino) available via a shared logger module. All environment variables accessed through a typed env config module — never directly via process.env.
+**Foundation infrastructure**: Structured logging (Pino) available via a shared logger module. All environment variables accessed through a typed env config module — never directly via process.env.
 
-**From piece 02 (Supabase)**: Server-side Supabase client for database access (DAL functions). Used for persisting run history and daily bonus tracking.
+**Auth and database infrastructure**: Server-side Supabase client for database access (DAL functions). Used for persisting run history and daily bonus tracking.
 
-**From piece 03 (design system)**: Shared UI components (buttons, cards, dialogs, inputs, toasts) and layout components for the shop panel, encounter dialog, and results page.
+**Design system**: Shared UI components (buttons, cards, dialogs, inputs, toasts) and layout components for the shop panel, encounter dialog, and results page.
 
-**From piece 04 (infrastructure)**: EventBus for emitting and receiving game events between the Phaser game engine and React stores.
+**Game engine bootstrap**: EventBus for emitting and receiving game events between the Phaser game engine and React stores.
 
-**From piece 07 (player/role framework)**: Player role (KILLER or FED), run configuration (seed, biome, role, loadout), run state (phase, tick count, start time), run result (outcome, score, duration, materials earned). Run manager lifecycle hooks: `onRunStart` (where session economy initializes) and `onRunEnd` (where scoring and persistence happen). Inventory types: item ID, type, name, rarity (COMMON through MYTHIC), effect. Inventory actions: add item, remove item.
+**Player and role framework**: Player role (KILLER or FED), run configuration (seed, biome, role, loadout), run state (phase, tick count, start time), run result (outcome, score, duration, materials earned). Run manager lifecycle hooks: `onRunStart` (where session economy initializes) and `onRunEnd` (where scoring and persistence happen). Inventory types: item ID, type, name, rarity (COMMON through MYTHIC), effect. Inventory actions: add item, remove item.
 
-**From piece 08 (combat)**: Status effect type (ID, name, buff/debuff type, remaining duration in milliseconds). Status effect system functions: apply and remove status effects on entities. Temp powerups are applied as status effects.
+**Combat system**: Status effect type (ID, name, buff/debuff type, remaining duration in milliseconds). Status effect system functions: apply and remove status effects on entities. Temp powerups are applied as status effects.
 
-**From piece 10 (killer gameplay)**: Killer run state data consumed for scoring: targets eliminated, targets disposed, evidence destroyed. Killer Zustand store with kill count, disposal count, and evidence destroyed count.
+**Killer gameplay**: Killer run state data consumed for scoring: targets eliminated, targets disposed, evidence destroyed. Killer Zustand store with kill count, disposal count, and evidence destroyed count.
 
-**From piece 11 (fed gameplay)**: Fed run state data consumed for scoring: evidence collected, interrogations performed, arrest attempts, arrest condition (INSUFFICIENT/WEAK/MODERATE/STRONG/AIRTIGHT). Fed Zustand store with those same fields plus current arrest condition tier.
+**Fed gameplay**: Fed run state data consumed for scoring: evidence collected, interrogations performed, arrest attempts, arrest condition (INSUFFICIENT/WEAK/MODERATE/STRONG/AIRTIGHT). Fed Zustand store with those same fields plus current arrest condition tier.
 
 ### New Data Entities
 
@@ -384,7 +388,7 @@ Actions: earn coins (with category), spend coins (returns false if insufficient)
 
 ### Events Emitted
 
-Events fired by the session economy systems (consumed by React stores and piece 14):
+Events fired by the session economy systems (consumed by React stores and the multiplayer sync system):
 - Shop opened (with current offerings)
 - Shop item purchased (powerup acquired, coins spent)
 - Shop rerolled (new offerings, coins spent)
