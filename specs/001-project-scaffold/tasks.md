@@ -75,7 +75,7 @@
 ### Implementation
 
 - [ ] T025 [US2] Implement centralized Zod-validated environment config exporting typed env object; fail-fast with clear error on missing/invalid required vars; graceful handling of optional vars in apps/web/src/config/env.ts
-- [ ] T026 [US1] Create next.config.ts with standalone output, serverExternalPackages (pino, pino-pretty), withSentryConfig wrapper for source map upload, tunnelRoute /monitoring in apps/web/next.config.ts
+- [ ] T026 [US1] Create next.config.ts with standalone output, serverExternalPackages (pino, pino-pretty), withSentryConfig wrapper for automatic source map upload during build (FR-010), tunnelRoute /monitoring in apps/web/next.config.ts
 - [ ] T027 [US1] Create root layout.tsx with html/body tags, metadata export, children prop in apps/web/src/app/layout.tsx
 - [ ] T028 [US1] Create minimal home page with project name heading in apps/web/src/app/page.tsx
 - [ ] T029 [US2] Create .env.example with all required and optional variable stubs and descriptions in .env.example

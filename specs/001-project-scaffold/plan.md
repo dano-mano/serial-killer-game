@@ -95,9 +95,7 @@ specs/001-project-scaffold/
 │       │   ├── lib/
 │       │   │   ├── logger/
 │       │   │   │   └── pino.ts      # Singleton Pino instance
-│       │   │   └── sentry/
-│       │   │       ├── client.ts    # Sentry client-side init
-│       │   │       └── server.ts    # Sentry server-side init
+│       │   │   └── sentry/          # (init handled by instrumentation files above)
 │       │   └── app/actions/         # Server Actions (empty, created per domain later)
 │       ├── tests/
 │       │   ├── config/
@@ -111,7 +109,7 @@ specs/001-project-scaffold/
 │       │   └── home.spec.ts         # Playwright E2E: home page loads
 │       ├── next.config.ts
 │       ├── playwright.config.ts
-│       ├── vitest.config.ts
+│       ├── vitest.config.mts
 │       ├── tsconfig.json
 │       └── package.json
 ├── packages/
@@ -120,7 +118,7 @@ specs/001-project-scaffold/
 │   │   │   └── index.ts             # Package entry point (exports nothing yet)
 │   │   ├── tests/
 │   │   │   └── setup.test.ts        # Verify package builds
-│   │   ├── vitest.config.ts
+│   │   ├── vitest.config.mts
 │   │   ├── tsconfig.json
 │   │   └── package.json             # @repo/game-engine (NO React dependency)
 │   ├── shared/                       # Shared types, constants, schemas
@@ -138,7 +136,7 @@ specs/001-project-scaffold/
 │   │   │   │   └── common.test.ts   # Schema validation tests
 │   │   │   └── utils/
 │   │   │       └── result.test.ts   # Result pattern tests
-│   │   ├── vitest.config.ts
+│   │   ├── vitest.config.mts
 │   │   ├── tsconfig.json
 │   │   └── package.json             # @repo/shared (exports field maps subpaths)
 │   └── ui-theme/                     # Design tokens, brand config
@@ -149,7 +147,7 @@ specs/001-project-scaffold/
 │       │       └── config.ts        # Brand configuration (empty scaffold)
 │       ├── tests/
 │       │   └── setup.test.ts        # Verify package builds
-│       ├── vitest.config.ts
+│       ├── vitest.config.mts
 │       ├── tsconfig.json
 │       └── package.json             # @repo/ui-theme
 ├── supabase/
