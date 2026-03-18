@@ -28,7 +28,7 @@ produces:
   - "Killer EventBus event constants at packages/shared/src/constants/events/killer.ts — KILL_EXECUTED, BODY_DISPOSED, HEAT_CHANGED, etc."
   - "Core killer abilities (KA-1 through KA-7) — 5 default abilities and 2 skill-tree-unlocked abilities defined as code-backed systems"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 11: Killer Core Mechanics
@@ -408,6 +408,8 @@ Stealth kill actions display a silence effect VFX. Kill actions show comic-style
 - [x] Result<T,E> for KillSystem.executeKill() and DisposalSystem methods
 - [x] ContentRegistry consumed from the content architecture system — no duplicate creation
 - [x] Seeded RNG for target selection — deterministic for multiplayer consistency
+- [x] XXIX: Art Style Consistency — stealth kill VFX, onomatopoeia effects, and ink-splatter particles follow art-style-guide.md specifications; kill animations are image assets (not procedural)
+- [x] XXXIII: Graceful Visual Degradation — kill execution is mechanically complete without VFX; stealth indicators degrade to HUD-only display if shader layer is unavailable
 
 ----
 

@@ -28,7 +28,7 @@ produces:
   - "HUD components: HealthBar, Minimap, InventoryPanel, InteractionPrompt, ObjectiveTracker"
   - "Role selection page at /game/select-role"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 07: Player and Roles
@@ -635,6 +635,8 @@ Player character sprites use the same SpriteManager system as NPCs (see piece 06
 - [x] Result<T,E> for inventory mutations, run init
 - [x] Auth required before run start (redirect in page component)
 - [x] Accessibility: remappable controls, keyboard navigation for role selection page
+- [x] XXIX: Art Style Consistency — player sprites use same SpriteManager as NPCs (48x48px atlas); role color accents (crimson/blue) follow art-style-guide.md; HUD components styled per visual language
+- [x] XXXIII: Graceful Visual Degradation — HUD components are React overlays that render correctly without Phaser PostFX; role color identity is CSS-based (not shader-dependent)
 
 ----
 

@@ -22,8 +22,10 @@ produces:
   - "Root .nvmrc (24.14.0), .node-version, package.json with workspaces"
   - "Shared types scaffold (packages/shared/src/types/common.ts)"
   - "Shared schemas scaffold (packages/shared/src/schemas/common.ts)"
+  - ".env.example with all required and optional environment variable stubs"
+  - "rate-limiter-flexible v10.0.1 configured in proxy.ts with centralized rate limit config"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 01: Project Scaffold
@@ -125,6 +127,19 @@ The shared package contains two foundational files created in this piece and ext
 A base types file defines the primitive type aliases used project-wide: a string-based identifier type (UUID format), a string-based timestamp type (ISO 8601), and a base data transfer object shape with an id and timestamps.
 
 A base schemas file provides reusable validation schemas for those primitives, plus a standard schema for limit/offset pagination parameters.
+
+### Rate Limiting
+
+`proxy.ts` enforces rate limits using `rate-limiter-flexible` v10.0.1:
+- Rate limit configuration is defined centrally in `apps/web/src/config/security/rate-limits.ts` — no handler defines limits inline
+- Limiter instances are created at module scope in `proxy.ts` (singleton per restart)
+- IP identification uses `request.ip` with `x-forwarded-for` fallback for Azure App Service
+- Auth endpoints: 5 requests per 15 minutes (30-minute block on exceeded)
+- API routes: 30 requests per minute (1-minute block)
+- Server Actions: 20 requests per minute (1-minute block)
+- Authenticated endpoints: 60 requests per minute (30-second block on exceeded)
+- All rate limit rejections return HTTP 429 with a `Retry-After` header
+- In-memory store is used for MVP (resets on restart — acceptable for single-instance B1)
 
 ### Edge Cases
 
@@ -261,7 +276,7 @@ interface BaseDto {
 | Node.js | 24.14.0 | Pin in .nvmrc, Dockerfile, CI |
 | Next.js | 16.1.6 | Turbopack default, App Router |
 | React | 19.2.4 | View Transitions, React Compiler |
-| TypeScript | 5.9.3+ | Upgrade to 6.0.x when stable |
+| TypeScript | 5.9.3 | Staying on 5.9.x until 6.0 stability confirmed |
 | Tailwind CSS | 4.2.1 | CSS-first config (NO tailwind.config.ts) |
 | Phaser | 3.90.0 | In packages/game-engine only |
 | Zustand | latest | In apps/web only (bridge layer) |
@@ -269,6 +284,7 @@ interface BaseDto {
 | Playwright | 1.58.2 | In apps/web only |
 | Pino | 10.x | Structured logging |
 | neverthrow | latest | Result<T,E> pattern |
+| rate-limiter-flexible | 10.0.1 | Rate limiting in proxy.ts (in-memory MVP) |
 | next-safe-action | latest | Server Action validation (skeleton setup) |
 | Sentry | latest | @sentry/nextjs |
 | ESLint | 9.x | Flat config |
@@ -337,6 +353,7 @@ Configure Content Security Policy headers in `proxy.ts`. Include `script-src`, `
 - [x] VIII: Singleton services (lib/ pattern)
 - [x] IX: Runtime version consistency (.nvmrc, Dockerfile, CI all 24.14.0)
 - [x] X: Observability (Pino + Sentry)
+- [x] XXI: Rate limiting in proxy.ts (rate-limiter-flexible, centralized config)
 - [x] XXII: Content Security Policy defined in proxy.ts
 - [x] XXIV: Dependency management (npm audit in CI)
 - [x] XXVI: Centralized tests/ directories
@@ -367,6 +384,9 @@ When this piece is fully implemented, it should produce:
 - `packages/shared/src/utils/result.ts` — neverthrow utilities
 - `.nvmrc` and `.node-version` — both contain "24.14.0"
 - Root `package.json` with workspaces array
+- `.env.example` — stubs for all required and optional environment variables
+- `apps/web/src/config/security/rate-limits.ts` — centralized rate limit configuration
+- `apps/web/src/proxy.ts` — rate limiting integrated via `rate-limiter-flexible` module-scope singletons
 
 ### Dependencies (Consumed from Earlier Pieces)
 

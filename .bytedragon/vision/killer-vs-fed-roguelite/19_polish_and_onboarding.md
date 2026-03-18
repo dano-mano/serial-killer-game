@@ -47,7 +47,7 @@ produces:
   - "apps/web/src/dal/settings/user-settings.ts — getSettings, updateSettings"
   - "apps/web/src/app/actions/settings/save-settings.ts — validated settings save server action"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 19: Polish and Onboarding
@@ -709,8 +709,10 @@ Settings store emits these events after `saveToLocalStorage()` completes. Phaser
 - [x] XXVII: AI-optimized docs — tutorial steps include explicit counter-play introductions
 - [x] XXVIII: WCAG AA — high contrast, colorblind mode, keyboard nav, screen reader, reduced motion
 - [x] XXX: Responsive design — landing page and settings page responsive at all viewport sizes
+- [x] XXIX: Art Style Consistency — all VFX presets (combat, evidence, environment, UI) follow art-style-guide.md; loading screen uses ink-splatter sprite sheet; comic panel transitions use border overlay sprites; PostFX halftone and paper texture shaders registered
 - [x] XXXI: Progressive enhancement — landing page functional without JS (SSR); audio disabled gracefully without user gesture
 - [x] XXXII: Asset loading tiers — loading scene respects critical/standard/deferred tiers defined in PreloadScene
+- [x] XXXIII: Graceful Visual Degradation — 4-level degradation tiers implemented in VFXManager; game fully playable with PostFX disabled; loading screen ink-splatter is a sprite sheet fallback (no shader required)
 
 ### Art Style Integration
 

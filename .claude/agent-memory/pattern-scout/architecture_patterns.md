@@ -4,9 +4,9 @@ description: Key architectural patterns defined by the project constitution v1.1
 type: project
 ---
 
-All patterns from `.specify/memory/constitution.md` v1.1.0 (31 principles). Non-negotiable without a constitution amendment.
+All patterns from `.specify/memory/constitution.md` v1.2.0 (33 principles). Non-negotiable without a constitution amendment.
 
-**Why:** Constitution ratified 2026-03-15, updated to v1.1.0 on 2026-03-16. Added Principle XXII (CSP) and XXIV (Dependency Management). Principles renumbered — use v1.1.0 numbering.
+**Why:** Constitution ratified 2026-03-15, updated to v1.2.0 on 2026-03-18. Added Principle XXIX (Art Style Consistency) and XXXIII (Graceful Visual Degradation). Principles XXIX-XXXI renumbered to XXX-XXXII. Use v1.2.0 numbering.
 
 **How to apply:** Reference these when reporting patterns to orchestrator and when verifying implementation agent work.
 
@@ -65,7 +65,16 @@ Phaser loaded via `next/dynamic` with `ssr: false`.
 - Shared error types: `packages/shared/src/types/errors.ts` (AppError, ErrorCode)
 - ESLint `neverthrow/must-use-result: error` enforces result consumption
 
-## Asset Loading Pattern (Principle XXXI)
+## Art Style Pattern (Principles XXIX, XXXIII — NEW in v1.2.0)
+- Comic-book cel-shaded: thick black outlines, flat color fills, ink-style hatching
+- Hybrid: 90% baked art (always correct) + optional PostFX shaders (enhance, never create style)
+- PostFX classes: `Phaser.Renderer.WebGL.Pipelines.PostFXPipeline` in `packages/game-engine/src/rendering/`
+- 4-level graceful degradation: Full → Reduced → Minimal → Canvas Fallback
+- `MAX_POST_FX_PASSES: 2` (halftone + paper texture)
+- Sprites: 48x48 characters, 32x32 tiles, JSON Hash atlas format, frame-by-frame animation
+- Art style guide: `.bytedragon/vision/killer-vs-fed-roguelite/art-style-guide.md`
+
+## Asset Loading Pattern (Principle XXXII — renumbered from XXXI)
 - Small static: `apps/web/public/assets/`
 - Brand assets: `apps/web/public/branding/`
 - Large game assets: Azure Blob Storage with content-hash filenames, `Cache-Control: immutable`

@@ -22,7 +22,7 @@ produces:
   - "Asset loader utility packages/game-engine/src/utils/asset-loader.ts"
   - "Game constants packages/shared/src/constants/game.ts"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 04: Game Engine Bootstrap
@@ -516,8 +516,10 @@ React components in `apps/web` import via these entry points (e.g., `import { ev
 - [x] VIII: EventBus is a singleton (module-level instance); Phaser game instance managed via useRef
 - [x] XIV: EventBus for one-time signals; Zustand for persistent state — correctly applied
 - [x] XXVI: Tests in `tests/` at each package root
+- [x] XXIX: Art Style Consistency — PostFXPipeline classes registered at boot via `registerPipelines(game)`; rendering directory structure established; art-style-guide.md consulted for shader specifications
 - [x] XXX: Responsive canvas via `Phaser.Scale.FIT` mode
 - [x] XXXII: Asset loading tiers implemented (Critical → Standard → Deferred)
+- [x] XXXIII: Graceful Visual Degradation — PostFX pipeline registration is a boot-time step; game renders correctly if individual pipelines fail to register (degradation tiers apply)
 
 ### Art Style Integration
 

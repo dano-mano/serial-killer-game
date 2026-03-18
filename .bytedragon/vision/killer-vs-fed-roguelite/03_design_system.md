@@ -19,7 +19,7 @@ produces:
   - "Font configuration apps/web/src/app/fonts.ts"
   - "shadcn CLI config apps/web/components.json"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 03: Design System
@@ -441,7 +441,9 @@ These are common mistakes when migrating from v3 to v4:
 - [x] VI: Domain-based organization — `app/common/` for shared, `app/game/` for game-specific (later)
 - [x] XXVI: Tests in `tests/` at package root
 - [x] XXVIII: Dark mode default + light mode for accessibility (WCAG AA contrast ratios)
+- [x] XXIX: Art Style Consistency — AppCard/AppDialog panel variants use comic-panel border treatment; Bangers font wired through token chain; art-style-guide.md consulted for visual language
 - [x] XXX: Responsive design — layouts use `dvh`/`dvw` units for mobile compatibility
+- [x] XXXIII: Graceful Visual Degradation — design tokens provide CSS-only fallback values; component styling remains coherent without PostFX shader layer
 
 ### Art Style Integration
 

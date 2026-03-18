@@ -21,7 +21,7 @@ produces:
   - "Workshop UI page at apps/web/src/app/progression/workshop/page.tsx — Killer crafting page (The Workshop)"
   - "Boot registration additions — killer content registered in _register-all.ts"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 12: Killer Content

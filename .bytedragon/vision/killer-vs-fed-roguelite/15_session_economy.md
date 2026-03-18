@@ -41,7 +41,7 @@ produces:
   - "apps/web/src/app/actions/runs/save-result.ts — validated server action for run persistence"
   - "apps/web/src/app/actions/economy/claim-daily-bonus.ts — server action for first-win daily bonus"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 15: Session Economy

@@ -23,7 +23,7 @@ produces:
   - "Behavioral variation system to prevent robotic-looking patterns"
   - "Entity store bridge: EventBus events for NPC state changes HUD needs"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 06: Entity and NPC System
@@ -575,6 +575,7 @@ The player controller will call `SpriteManager.createCharacterSprite()` with the
 - [x] Singleton pattern for SpriteManager, InteractionManager, PerceptionSystem, NPCSpawner
 - [x] Result<T,E> for spawner functions that can fail (zone not found, invalid spawn point)
 - [x] Tests in `tests/` at package root, mirroring `src/` structure
+- [x] XXIX: Art Style Consistency — character sprites use 48x48px PNG + JSON Hash atlas format per art-style-guide.md; SpriteManager enforces consistent outline treatment across all NPC and player variants
 
 ### Determinism Implementation Requirements
 

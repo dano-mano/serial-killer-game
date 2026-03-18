@@ -30,7 +30,7 @@ Governance principles are in `.specify/memory/constitution.md`. See `.bytedragon
 | Runtime | Node.js | 24.14.0 LTS | Active LTS until Oct 2026 |
 | Framework | Next.js | 16.1.6 | Turbopack, React 19.2, App Router |
 | UI Framework | React | 19.2.4 | View Transitions, React Compiler |
-| Language | TypeScript | 5.9.3+ | Upgrade to 6.0.x when stable |
+| Language | TypeScript | 5.9.3 | Staying on 5.9.x until 6.0 stability confirmed |
 | Styling | Tailwind CSS | 4.2.1 | CSS-first config, Oxide engine |
 | App UI | shadcn/ui | CLI v4 | Accessible components, Radix-based |
 | Marketing UI | Magic UI | — | Animated marketing components |
@@ -51,6 +51,7 @@ Governance principles are in `.specify/memory/constitution.md`. See `.bytedragon
 | Linting | ESLint (flat config) | — | eslint-config-next, barrel file prevention |
 | Logging | Pino | 10.x | Structured JSON, Sentry integration |
 | Error Handling | neverthrow + next-safe-action | — | Type-safe Result pattern + Server Action validation |
+| Rate Limiting | rate-limiter-flexible | 10.0.1 | In-memory MVP, PostgreSQL upgrade path |
 | Package Manager | npm (NOT pnpm, NOT yarn, NOT bun) | — | Bundled with Node.js 24 |
 
 For full research, version details, cost analysis, and architecture decisions:

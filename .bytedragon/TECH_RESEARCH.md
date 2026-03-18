@@ -7,6 +7,8 @@
 
 > Updated: 2026-03-18 — Added Visual Rendering Pipeline section (art asset technical specifications)
 
+> Updated: 2026-03-18 — TypeScript 6.0 released; staying on 5.9.x until stability confirmed. Added Rate Limiting section (rate-limiter-flexible v10.0.1).
+
 ---
 
 ## Table of Contents
@@ -22,6 +24,7 @@
 9. [Testing Infrastructure](#testing-infrastructure)
 10. [Code Quality Tooling](#code-quality-tooling)
 11. [Logging & Error Handling](#logging--error-handling)
+11.5. [Rate Limiting](#rate-limiting)
 12. [Visual Rendering Pipeline](#visual-rendering-pipeline)
 13. [Supabase Development Scripts](#supabase-development-scripts)
 14. [Architecture & Project Structure](#architecture--project-structure) (incl. [Centralization Principles](#centralization-principles), [Zero-Trust Security](#zero-trust-security-architecture))
@@ -41,7 +44,7 @@
 | **Runtime** | Node.js 24 LTS (24.14.0) | Active LTS until Oct 2026, maintenance until April 2028 |
 | **App Shell** | Next.js 16.1.6 | Turbopack default, React 19.2, Cache Components, full SSR |
 | **UI Framework** | React 19.2.4 + React DOM 19.2.4 | View Transitions, useEffectEvent, Activity, React Compiler |
-| **Language** | TypeScript 5.9.3 (upgrade to 6.0.x when stable) | 6.0 RC released March 6, stable expected ~March 17 |
+| **Language** | TypeScript 5.9.3 | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
 | **Styling** | Tailwind CSS 4.2.1 | CSS-first config, Oxide engine (5x faster), no config file needed |
 | **App UI** | shadcn/ui (CLI v4) | 50+ accessible components built on Radix UI, copy-paste, Tailwind v4 native |
 | **Marketing UI** | Magic UI | 150+ animated components for landing pages, hero sections, pricing tables |
@@ -64,6 +67,7 @@
 | **Linting** | ESLint (flat config) with eslint-config-next | Constitution principle enforcement |
 | **Logging** | Pino 10.x | Structured JSON, 5-10x faster than Winston, Sentry integration |
 | **Error Handling** | neverthrow (Result type) + next-safe-action | Type-safe errors across Phaser, React, and Server Actions |
+| **Rate Limiting** | rate-limiter-flexible v10.0.1 | In-memory MVP, PostgreSQL/Redis upgrade path, zero dependencies, ISC license |
 | **Rendering Pipeline** | Phaser PostFXPipeline + PNG/JSON Hash atlases + GLSL shaders | 2-pass max PostFX (halftone + paper texture), 4-level graceful degradation, 48×48px characters, 32×32px tiles |
 
 ### Key Architectural Decision
@@ -128,7 +132,7 @@ All versions verified compatible with each other and Node.js 24 LTS as of March 
 | **Next.js** | `16.1.6` | Turbopack default, React Compiler support, Cache Components |
 | **React** | `19.2.4` | View Transitions, useEffectEvent, Activity |
 | **React DOM** | `19.2.4` | Matches React version |
-| **TypeScript** | `5.9.3` | Upgrade to `6.0.x` when stable (~March 17, 2026) |
+| **TypeScript** | `5.9.3` | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
 | **Tailwind CSS** | `4.2.1` | CSS-first config, Oxide engine, no `tailwind.config.js` |
 | **npm** | Bundled with Node.js 24 | Package manager (no extra install needed) |
 | **shadcn/ui** | CLI v4 (copy-paste, no version pinning) | App UI components |
@@ -190,12 +194,12 @@ No React 20 yet -- 19.2.x is the current stable line.
 
 **Current stable**: `5.9.3` (October 2025)
 
-**TypeScript 6.0**: RC released March 6, 2026. Stable expected ~March 17, 2026.
+**TypeScript 6.0**: Released March 17, 2026. Project stays on 5.9.x until 6.0 stability is confirmed in production.
 - Temporal API support
 - Last JavaScript-based TypeScript release (7.0 will be rewritten in Go)
-- Breaking changes present -- review before upgrading
+- Breaking changes present — review release notes before upgrading
 
-**Recommendation**: Start with `5.9.3`. Upgrade to `6.0.x` once stable (imminent). Next.js 16 requires minimum TypeScript `5.1.0`, so both are compatible.
+**Recommendation**: Stay on `5.9.3` for now. Monitor the ecosystem for 6.0 adoption reports. Next.js 16 requires minimum TypeScript `5.1.0`, so both 5.9.x and 6.0.x are compatible when ready to upgrade.
 
 ### npm (Package Manager)
 
@@ -1069,6 +1073,86 @@ import neverthrowPlugin from 'eslint-plugin-neverthrow'
   rules: { 'neverthrow/must-use-result': 'error' },
 }
 ```
+
+---
+
+## Rate Limiting
+
+**Library**: `rate-limiter-flexible` v10.0.1
+**License**: ISC (permissive, functionally equivalent to MIT)
+**Install**: `npm install rate-limiter-flexible`
+
+### Why rate-limiter-flexible
+
+Constitution Principle XXI mandates centralized rate limiting with per-endpoint configuration, HTTP 429 responses with `Retry-After` headers, and differentiation between authenticated and anonymous endpoints. `rate-limiter-flexible` satisfies all requirements while adding zero external service dependencies for MVP.
+
+| Factor | rate-limiter-flexible v10.0.1 | @upstash/ratelimit v2.0.8 | express-rate-limit v7.x |
+|--------|-------------------------------|---------------------------|-------------------------|
+| In-memory (no Redis) | Yes — `RateLimiterMemory` | No — requires Upstash Redis | Yes |
+| Next.js proxy.ts compatible | Yes — Node.js runtime | Yes (edge-optimized) | No — Express middleware signature |
+| Upgrade to distributed store | Yes — same API across all backends | N/A (Upstash only) | Limited |
+| Supabase PostgreSQL upgrade path | Yes — `RateLimiterPostgres` + `pg` | No | No |
+| Zero runtime dependencies (in-memory) | Yes | No | Yes |
+| Built-in TypeScript types | Yes | Yes | Yes |
+| License | ISC | MIT | MIT |
+
+**@upstash/ratelimit eliminated**: Requires Upstash Redis — no in-memory option. Adds external service cost and vendor lock-in to a B1 deployment that needs zero extra services for MVP.
+
+**express-rate-limit eliminated**: Express middleware signature `(req, res, next)` is incompatible with Next.js 16 `proxy.ts` which uses `(NextRequest) => NextResponse`. Would require an adapter with no benefit.
+
+### Configuration
+
+Rate limits are defined centrally in `apps/web/src/config/security/rate-limits.ts` (Constitution Principles II and XXI). No handler may define its own limit inline.
+
+| Endpoint Category | Limit | Window | Block Duration |
+|-------------------|-------|--------|----------------|
+| Auth (`/api/auth`, `/auth`) | 5 requests | 15 min | 30 min |
+| API routes (`/api/`) | 30 requests | 1 min | 1 min |
+| Server Actions (mutations) | 20 requests | 1 min | 1 min |
+| Authenticated endpoints | 60 requests | 1 min | 30 sec |
+
+### Integration
+
+Rate limiter instances are created at **module scope** in `proxy.ts` — they persist across requests as singletons in the Node.js runtime (Constitution Principle VIII). The proxy identifies clients via `request.ip` with `x-forwarded-for` fallback for Azure App Service reverse proxy headers.
+
+All rate limit responses return HTTP 429 with a `Retry-After` header (seconds until the client may retry). Successful responses include an `X-RateLimit-Remaining` header.
+
+**Key files**:
+- `apps/web/src/config/security/rate-limits.ts` — centralized limit configuration
+- `apps/web/src/proxy.ts` — module-scope limiter instances, consume/reject logic
+
+### Upgrade Path
+
+When scaling beyond a single B1 instance, swap `RateLimiterMemory` for a distributed backend. The `consume()` API is identical across all backends — **zero changes to `proxy.ts` logic required**.
+
+**Option A — PostgreSQL via Supabase (preferred)**:
+Replace `RateLimiterMemory` with `RateLimiterPostgres` using the existing Supabase PostgreSQL connection (`pg` Pool). No new services needed — reuses infrastructure already in the stack.
+
+**Option B — Redis (if Azure Cache for Redis is added)**:
+Replace with `RateLimiterRedis` using `ioredis`. Adds a managed Redis service but provides the lowest latency for rate limit checks at high traffic.
+
+**Limitation to watch**: In-memory store resets on server restart. Acceptable for MVP single-instance B1 deployment, but means brief windows of unenforced limits after restarts. Mitigated by the block duration being short (1 min) relative to typical restart times.
+
+### v10 Breaking Changes
+
+v10.0.0 (March 14, 2025) removed default values for `points` and `duration` — both must be explicit in every constructor call. This is a feature for this project: it enforces that all limits are explicitly declared in the centralized config, preventing accidental misconfiguration.
+
+### Security & Compatibility
+
+| Attribute | Detail |
+|-----------|--------|
+| **Vulnerabilities** | None known (Snyk, GitHub Security Advisories — checked March 2026) |
+| **Node.js** | >= 20.0 (Node.js 24.14.0 LTS compatible) |
+| **Next.js** | Works in `proxy.ts` (Node.js runtime only — not edge runtime) |
+| **TypeScript** | Built-in type definitions, no `@types` package needed |
+| **Performance** | ~2.9M ops/sec in-memory (v10, 10–15% improvement over v9) |
+| **Maintenance** | 3.5k GitHub stars, 61 releases, last release March 2025 |
+
+### Constitution Compliance
+
+- [x] **Principle II**: Rate limit configuration in centralized `config/security/rate-limits.ts`
+- [x] **Principle VIII**: Module-scope singleton instances in `proxy.ts`
+- [x] **Principle XXI**: HTTP 429 + `Retry-After` header; per-endpoint limits; auth vs. anonymous differentiation
 
 ---
 
@@ -2187,7 +2271,7 @@ Phase 4 (Scale):   App Service S1/P0v3 + Azure Front Door Standard ($35/mo)
 - [shadcn/ui Docs](https://ui.shadcn.com) | [Tailwind v4 Guide](https://ui.shadcn.com/docs/tailwind-v4) | [Changelog](https://ui.shadcn.com/docs/changelog)
 - [Magic UI](https://magicui.design/) | [GitHub](https://github.com/magicuidesign/magicui) | [Tailwind v4](https://v3.magicui.design/docs/tailwind-v4)
 - [Radix UI Primitives](https://www.radix-ui.com/primitives) | [Accessibility](https://www.radix-ui.com/primitives/docs/overview/accessibility)
-- [TypeScript 6.0 RC Announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-6-0-rc/)
+- [TypeScript 6.0 Announcement (RC page — stable released March 17, 2026)](https://devblogs.microsoft.com/typescript/announcing-typescript-6-0-rc/)
 - [Best React UI Libraries 2026](https://blog.croct.com/post/best-react-ui-component-libraries)
 
 ### GitHub Container Registry & CI/CD
@@ -2201,6 +2285,18 @@ Phase 4 (Scale):   App Service S1/P0v3 + Azure Front Door Standard ($35/mo)
 ### Analytics & Monitoring
 - [PostHog Pricing](https://posthog.com/pricing) | [Next.js Integration](https://posthog.com/docs/libraries/next-js)
 - [Sentry Pricing](https://sentry.io/pricing/)
+
+### Rate Limiting
+- [rate-limiter-flexible GitHub Repository](https://github.com/animir/node-rate-limiter-flexible)
+- [rate-limiter-flexible npm](https://www.npmjs.com/package/rate-limiter-flexible)
+- [rate-limiter-flexible Releases](https://github.com/animir/node-rate-limiter-flexible/releases)
+- [rate-limiter-flexible PostgreSQL Wiki](https://github.com/animir/node-rate-limiter-flexible/wiki/PostgreSQL)
+- [rate-limiter-flexible Overall Example Wiki](https://github.com/animir/node-rate-limiter-flexible/wiki/Overall-example)
+- [Snyk Security: rate-limiter-flexible](https://security.snyk.io/package/npm/rate-limiter-flexible)
+- [@upstash/ratelimit GitHub](https://github.com/upstash/ratelimit-js)
+- [Next.js 16 proxy.ts Documentation](https://nextjs.org/docs/app/api-reference/file-conventions/proxy)
+- [4 Best Rate Limiting Solutions for Next.js](https://dev.to/ethanleetech/4-best-rate-limiting-solutions-for-nextjs-apps-2024-3ljj)
+- [ISC License (Wikipedia)](https://en.wikipedia.org/wiki/ISC_license)
 
 ### Latency & Networking
 - [Low Latency Gaming](https://www.pubnub.com/blog/low-latency-gaming/)

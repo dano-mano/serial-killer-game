@@ -28,7 +28,7 @@ produces:
   - "Server-side evidence validation DAL"
   - "Counter-play abilities: killer fake evidence and fed off-the-books tactics"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 10: Evidence System
@@ -672,6 +672,7 @@ Evidence markers use a shape-plus-color system for accessibility (colorblind sup
 - [x] RLS: evidence server validation is server-only, never in client bundle
 - [x] Result<T,E> for DAL functions
 - [x] Zero-trust: arrest viability recalculated server-side, client value is untrustworthy
+- [x] XXIX: Art Style Consistency — evidence markers use shape-plus-color system per art-style-guide.md; discovery pulse VFX and accessibility shape redundancy follow visual specifications
 
 ----
 

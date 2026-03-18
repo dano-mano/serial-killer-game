@@ -21,7 +21,7 @@ produces:
   - "Status effect data entries at packages/shared/src/data/status-effects/ — 25 status effect definitions"
   - "Damage type data entries at packages/shared/src/data/damage-types/ — all damage type definitions"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 08: Content Architecture

@@ -21,7 +21,7 @@ produces:
   - "Armory UI page at apps/web/src/app/progression/armory/page.tsx — Fed crafting page (The Armory)"
   - "Boot registration additions — fed content registered in _register-all.ts"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 14: Fed Content

@@ -24,7 +24,7 @@ produces:
   - "Minimap data bridge packages/game-engine/src/world/minimap-data.ts"
   - "Zustand map store apps/web/src/stores/map.ts"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 05: World and Maps
@@ -852,8 +852,10 @@ A* is approximately 50 lines of code. Do NOT add a pathfinding library as a depe
 - [x] XIV: EventBus for zone transition signals (one-time events)
 - [x] XV: No database tables in this piece — all data is client-side runtime state. BiomeConfig is code, not DB.
 - [x] XXVI: Tests in `tests/` at package root
+- [x] XXIX: Art Style Consistency — tileset art uses hand-drawn style with hatching/cross-hatching per art-style-guide.md; biome color palettes follow the defined visual language
 - [x] XXX: Maps scale to viewport via camera zoom; minimap is responsive React component
 - [x] XXXII: Asset loading tiers — deferred tier used for biome-specific tilesheets (loaded in MapScene.preload())
+- [x] XXXIII: Graceful Visual Degradation — map renders correctly without PostFX pipeline; biome color identity preserved in base tile assets (not shader-dependent)
 
 ### Determinism Implementation Requirements
 

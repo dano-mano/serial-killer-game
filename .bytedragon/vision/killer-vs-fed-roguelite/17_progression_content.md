@@ -24,7 +24,7 @@ produces:
   - "Progression layout at apps/web/src/app/progression/layout.tsx"
   - "Boot registration extensions — trophies + equipment + crafting recipes added to _register-all.ts"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 17: Progression Content

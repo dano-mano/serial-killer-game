@@ -43,7 +43,7 @@ produces:
   - "supabase/functions/validate-game-event/index.ts — Edge Function for server-side event validation"
   - "apps/web/src/stores/multiplayer.ts — connection state, opponent presence, lobby state"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 18: Multiplayer Sync
@@ -349,6 +349,7 @@ Player sprite rendering must be deterministic across clients — both clients mu
 - [x] XVI: Zero-trust — killer position never in fed client payload; validated server-side
 - [x] XIX: Input validation — all server actions and Edge Function validate inputs with Zod
 - [x] XXII: Content Security Policy — Supabase Realtime WebSocket origin must be in CSP connect-src
+- [x] XXIX: Art Style Consistency — opponent sprite rendering uses same atlas keys and animation frames as local player; both clients must reference identical art assets per art-style-guide.md
 
 ----
 

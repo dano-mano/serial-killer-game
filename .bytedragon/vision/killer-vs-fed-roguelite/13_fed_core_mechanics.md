@@ -29,7 +29,7 @@ produces:
   - "Fed EventBus event constants at packages/shared/src/constants/events/fed.ts — FED_ARREST_ATTEMPTED, SUSPECT_IDENTIFIED, etc."
   - "Core fed abilities (FA-1 through FA-7) — 7 default investigation abilities defined as code-backed systems"
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 13: Fed Core Mechanics
@@ -389,6 +389,8 @@ Evidence discovery shows a blue pulse VFX. Investigation caption boxes use JetBr
 - [x] Result<T,E> for WitnessSystem.interviewWitness() and ArrestSystem.attemptArrest()
 - [x] ContentRegistry consumed from the content architecture system — no duplicate creation
 - [x] Fed heat is session-scoped only — never persists to DB
+- [x] XXIX: Art Style Consistency — evidence discovery pulse VFX, investigation caption boxes in comic-panel style, and fed blue color accents follow art-style-guide.md visual specifications
+- [x] XXXIII: Graceful Visual Degradation — investigation mechanics function without VFX; evidence discovery falls back to HUD notification if pulse animation is unavailable
 
 ----
 

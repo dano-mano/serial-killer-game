@@ -27,7 +27,7 @@ produces:
   - "Combat constants at packages/shared/src/constants/combat.ts — base damage, dodge chance, invincibility windows, max status effects"
   - "Combat EventBus event constants at packages/shared/src/constants/events/combat.ts — COMBAT_STARTED, DAMAGE_DEALT, ENTITY_DIED, etc."
 created: 2026-03-18
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 09: Combat System
@@ -425,6 +425,8 @@ type CombatStore = {
 - [x] Boss configs data-driven (JSON) not hardcoded
 - [x] Object pooling for projectiles and damage number text objects
 - [x] ContentRegistry consumed from the content architecture system — no duplicate creation
+- [x] XXIX: Art Style Consistency — combat VFX uses onomatopoeia sprites, speed lines as drawn overlays, impact frames per art-style-guide.md; Bangers font for damage numbers; hit flash via shader pass
+- [x] XXXIII: Graceful Visual Degradation — combat remains functional without shader hit flash (fallback to tint); onomatopoeia sprites are image assets (not shader-generated)
 
 ### Art Style Integration
 

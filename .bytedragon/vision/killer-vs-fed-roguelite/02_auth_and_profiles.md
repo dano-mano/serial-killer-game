@@ -20,7 +20,7 @@ produces:
   - "Auth config apps/web/src/config/auth/supabase.ts"
   - "Auth provider component apps/web/src/components/app/auth/auth-provider.tsx"
 created: 2026-03-17
-last_aligned: never
+last_aligned: v1.2.0
 ---
 
 # Vision Piece 02: Auth and Profiles
