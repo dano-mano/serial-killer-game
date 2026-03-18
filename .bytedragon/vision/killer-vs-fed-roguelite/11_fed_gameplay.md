@@ -58,326 +58,51 @@ Implement the federal investigator role's complete gameplay loop. The fed player
 
 The fed is the investigative counterpart to the killer. Where the killer plays offensively and tries to minimize their evidence trail, the fed plays defensively and reactively — building knowledge over time. The asymmetry is intentional: the killer acts, the fed reacts. But the fed has counter-play tools to force the killer out of their comfort zone.
 
-**Win condition**: Arrest the killer with sufficient evidence (`STRONG` or `AIRTIGHT` arrest viability for a clean arrest, or `MODERATE`/`WEAK` with successful combat backup), or defeat the killer in direct combat (vigilante path — lower score reward).
+**Win condition**: Arrest the killer with sufficient evidence (STRONG or AIRTIGHT arrest viability for a clean arrest, or MODERATE/WEAK with successful combat backup), or defeat the killer in direct combat (vigilante path — lower score reward).
 
 **Lose condition**: All targets eliminated AND disposed (killer wins) before arrest can be made, OR fed player health reaches zero in combat.
 
-### Dependency Details (Inline — Do Not Reference Other Documents)
+### Dependency Overview (Inline — Do Not Reference Other Documents)
 
-#### From packages/shared/src/types/common.ts
-```typescript
-type ID = string;          // UUID format
-type Timestamp = string;   // ISO 8601
-```
+This piece builds on the following established systems:
 
-#### From packages/shared/src/utils/result.ts (neverthrow)
-```typescript
-import { Result, ok, err } from 'neverthrow';
-type AppError = { code: string; message: string; context?: Record<string, unknown> };
-type ValidationError = AppError & { code: 'VALIDATION_ERROR'; fields: Record<string, string> };
-type NotFoundError = AppError & { code: 'NOT_FOUND' };
-type UnauthorizedError = AppError & { code: 'UNAUTHORIZED' };
-type DatabaseError = AppError & { code: 'DATABASE_ERROR' };
-```
+**Common utilities (piece 01)**: IDs are UUIDs (strings). Timestamps are ISO 8601 strings. All fallible operations return a Result type with ok/err variants and typed error payloads (AppError, ValidationError, NotFoundError, DatabaseError).
 
-#### From packages/shared/src/types/player.ts (piece 07)
-```typescript
-type PlayerRole = 'KILLER' | 'FED'
-interface PlayerAbility { id: ID; name: string; cooldownMs: number; cost: number; isUnlocked: boolean }
-interface RoleConfig { role: PlayerRole; startingAbilities: PlayerAbility[]; startingItems: InventoryItem[] }
-```
+**Player/role framework (piece 07)**: Provides the role interface contract — the fed must implement getObjectives, getAbilities, getHUDConfig, checkWinCondition, and checkLoseCondition. Also provides player state (role, health, position, inventory, abilities, objectives), run configuration (seed, biome, role, loadout), run state (phase and tick count), inventory item types (WEAPON, TOOL, CONSUMABLE, KEY_ITEM, EVIDENCE_MOD, DISGUISE), and item rarities (COMMON through MYTHIC).
 
-#### From packages/game-engine/src/player/roles/role-interface.ts (piece 07)
-```typescript
-interface RoleInterface {
-  getObjectives(): Objective[];
-  getAbilities(): PlayerAbility[];
-  getHUDConfig(): HUDConfig;
-  checkWinCondition(state: RunState): boolean;
-  checkLoseCondition(state: RunState): boolean;
-}
-```
+**Combat system (piece 08)**: Provides combat state management (phases: INIT, ACTIVE, RESOLVING, ENDED), ability effects (DAMAGE, HEAL, BUFF, DEBUFF, CC with magnitude and duration), status effect application and removal, and the ability to initiate combat with a specific target. Fed uses the combat system for arrest resistance and the vigilante path.
 
-#### From packages/shared/src/types/run.ts (piece 07)
-```typescript
-interface RunConfig { seed: string; biome: Biome; role: PlayerRole; loadout: Loadout }
-interface RunState { phase: 'ACTIVE' | 'COMPLETE'; tickCount: number; startTime: Timestamp }
-interface RunResult { outcome: 'WIN' | 'LOSE'; score: number; durationSeconds: number; materialsEarned: Record<string, number> }
-```
+**Evidence system (piece 09)**: Provides evidence types (FOOTPRINT, DNA, WEAPON_TRACE, BODY, WITNESS, SURVEILLANCE, BROKEN_LOCK, DISTURBED_SCENE, FALSE_EVIDENCE, INFORMANT_REPORT), evidence states (HIDDEN, DISCOVERABLE, DISCOVERED, DESTROYED, DISCREDITED — DISCREDITED means the fed confirmed it was fake evidence), and evidence quality levels (LOW, MEDIUM, HIGH, IRREFUTABLE — IRREFUTABLE cannot be reduced by killer counter-play). The Evidence entity has: id, type, state, quality, position, zone id, linked entity id (which NPC or player generated it), generation timestamp, decay timing, a flag for whether it is false/planted, and discovery tracking. The Case File tracks discovered evidence, witness statements, and a suspect list, and computes an arrest viability score (0-100) mapped to tiers: INSUFFICIENT (under 20, arrest not possible), WEAK (20-39, triggers combat), MODERATE (40-59, target may resist), STRONG (60-79, minor resistance), AIRTIGHT (80-100, clean arrest, bonus score). The evidence manager provides APIs to discover evidence near a position and to query evidence by id. The discovery mechanics module provides area scanning and evidence quality analysis. The case file tracker provides evidence linking to suspects, arrest viability calculation, suspect elimination, and top suspect querying.
 
-#### From packages/shared/src/types/inventory.ts (piece 07)
-```typescript
-interface InventoryItem { id: ID; itemType: ItemType; name: string; rarity: ItemRarity; effect: ItemEffect }
-type ItemType = 'WEAPON' | 'TOOL' | 'CONSUMABLE' | 'KEY_ITEM' | 'EVIDENCE_MOD' | 'DISGUISE'
-type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC'
-interface ItemEffect { statModifiers?: Record<string, number>; abilityUnlock?: string; evidenceModifier?: number }
-```
+**NPC system (piece 06)**: Provides NPC entities with witness state (hasWitnessedEvent, witnessedEventType) and silenced state (isSilenced — set to true by killer witness intimidation). Provides interaction management to trigger interactions with NPCs and crime scenes, and to query interactables near a position.
 
-#### From packages/shared/src/types/combat.ts (piece 08)
-```typescript
-interface CombatState { phase: 'INIT' | 'ACTIVE' | 'RESOLVING' | 'ENDED'; participantIds: ID[] }
-interface Ability { id: ID; name: string; cooldownMs: number; effects: AbilityEffect[] }
-interface AbilityEffect { type: 'DAMAGE' | 'HEAL' | 'BUFF' | 'DEBUFF' | 'CC'; magnitude: number; durationMs?: number }
-interface StatusEffect { id: ID; name: string; type: 'BUFF' | 'DEBUFF'; remainingMs: number }
-```
+**Design system (piece 03)**: Provides common UI components (AppButton, AppCard, AppDialog, AppInput, AppToast) and layout wrappers (PageLayout, GameLayout, AuthLayout).
 
-#### From packages/shared/src/types/evidence.ts (piece 09)
-```typescript
-type EvidenceType =
-  | 'FOOTPRINT'
-  | 'DNA'
-  | 'WEAPON_TRACE'
-  | 'BODY'
-  | 'WITNESS'
-  | 'SURVEILLANCE'
-  | 'BROKEN_LOCK'
-  | 'DISTURBED_SCENE'
-  | 'FALSE_EVIDENCE'
-  | 'INFORMANT_REPORT'
+**Event bus (piece 04)**: Provides the Phaser-to-React signal bridge for emitting and listening to events.
 
-type EvidenceState = 'HIDDEN' | 'DISCOVERABLE' | 'DISCOVERED' | 'DESTROYED' | 'DISCREDITED'
-// DISCREDITED: fed discovered it was FALSE_EVIDENCE; no longer counts toward case
+**ContentRegistry and Effect system (piece 13)**: All skill, ability, item, weapon, and crafting definitions register in typed content registries at boot. The universal Effect type expresses all game mechanic modifications — stat mods (flat or percent), scan radius mods, discovery speed mods, false evidence detection mods, arrest viability mods, heat generation/decay/cost mods, status effect application, ability unlocks, and custom handlers with named parameters.
 
-type EvidenceQuality = 'LOW' | 'MEDIUM' | 'HIGH' | 'IRREFUTABLE'
-// IRREFUTABLE: cannot be reduced below HIGH by any killer counter-play
+### New Data Entities
 
-type Evidence = {
-  id: string
-  type: EvidenceType
-  state: EvidenceState
-  quality: EvidenceQuality
-  pos: Vec2
-  zoneId: string
-  linkedEntityId: string | null
-  generatedBy: string
-  generatedAt: number
-  decayStartAt: number | null
-  decayDurationMs: number | null
-  isFalse: boolean
-  discoveredBy: string | null
-  discoveredAt: number | null
-  notes: string
-}
+This piece introduces the following new conceptual entities:
 
-type CaseFile = {
-  runId: string
-  fedPlayerId: string
-  discoveredEvidence: Evidence[]
-  witnessStatements: WitnessStatement[]
-  suspectIds: string[]
-  arrestViability: number
-  arrestViabilityTier: ArrestViabilityTier
-  lastUpdatedAt: number
-}
+**Fed objectives**: A fed player pursues four objective types — gather evidence, identify the suspect, make an arrest, and prevent kills.
 
-type ArrestViabilityTier = 'INSUFFICIENT' | 'WEAK' | 'MODERATE' | 'STRONG' | 'AIRTIGHT'
-// INSUFFICIENT (<20): arrest not possible
-// WEAK (20-39): arrest attempt triggers combat with target
-// MODERATE (40-59): arrest is possible but target may resist
-// STRONG (60-79): arrest attempt succeeds with minor resistance
-// AIRTIGHT (80-100): clean arrest, no resistance, bonus score
-```
+**Arrest condition**: Maps the 0-100 arrest viability score to five tiers — INSUFFICIENT (under 20, arrest locked), WEAK (20-39, triggers full combat), MODERATE (40-59, brief combat with weakened target), STRONG (60-79, clean arrest, no combat), AIRTIGHT (80-100, perfect arrest, bonus score, no resistance).
 
-#### From packages/game-engine/src/evidence/evidence-manager.ts (piece 09)
-```typescript
-// Key methods available on EvidenceManager singleton:
-discoverEvidence(evidenceId: ID, discoveredBy: PlayerRole): Result<Evidence, AppError>
-getDiscoverableNearPosition(x: number, y: number, radius: number): Evidence[]
-getEvidenceById(id: ID): Evidence | undefined
-```
+**Investigation tools**: The fed uses tools including forensic kit, interview badge, tracking device, evidence bag, and handcuffs. Counter-play tools — wiretap kit, informant badge, entrapment kit, and off-books lab — are unlocked through skill tree progression. Counter-play tools always carry a risk/reward trade-off expressed through fed heat.
 
-#### From packages/game-engine/src/evidence/discovery-mechanics.ts (piece 09)
-```typescript
-// Functions used by fed investigation:
-scanArea(origin: { x: number; y: number }, radius: number, fedScanPower: number): Evidence[]
-analyzeEvidenceQuality(evidence: Evidence, forensicSkillLevel: number): EvidenceQuality
-```
+**Suspect profile**: Represents one NPC (or the killer player) as a potential suspect. Has a link to the entity (entityId), a display name, a list of linked evidence IDs, a suspicion score (0-100, higher means more likely to be the killer), an elimination flag, and notes. All NPCs and the hidden killer player start as suspects at run start.
 
-#### From packages/game-engine/src/evidence/case-file.ts (piece 09)
-```typescript
-// CaseFileTracker instance methods:
-addEvidence(evidence: Evidence): void
-linkEvidenceToSuspect(evidenceId: ID, suspectId: ID): void
-calculateArrestViability(): number   // 0-100 score
-eliminateSuspect(suspectId: ID): void
-getTopSuspect(): ID | undefined
-```
+**Interrogation result**: The outcome of interviewing a witness NPC. Has: the NPC id, the information type provided (location, time, description, action, or fabricated), the content of the information, a reliability score (0-1), and a flag indicating whether it was coerced through rough interrogation. Unreliable witnesses may provide FABRICATED info pointing at innocent NPCs.
 
-#### From packages/game-engine/src/entities/npc.ts (piece 06)
-```typescript
-class NPC extends BaseEntity {
-  role: NPCRole;
-  behavior: NPCBehavior;
-  hasWitnessedEvent: boolean;
-  witnessedEventType?: string;
-  witnessedSuspectDescription?: string;
-  isSilenced: boolean;  // set true by killer's witness intimidation
-}
-```
+**Counter-play ability**: A fed ability that operates outside normal procedure — illegal surveillance, rough interrogation, planted informant, entrapment setup, or off-books forensics. Each has a success chance, a fed heat cost, and an evidence quality modifier. Counter-play evidence is "inadmissible" — it raises suspicion scores but does not count toward arrest viability.
 
-#### From packages/game-engine/src/entities/interaction-manager.ts (piece 06)
-```typescript
-// Fed interacts with NPCs and crime scenes via:
-triggerInteraction(entityId: ID, playerRole: PlayerRole): InteractionResult
-getInteractablesNearPosition(x: number, y: number): InteractableEntity[]
-```
+**Counter-play effect**: Tracks an active counter-play ability's parameters — which ability is active, the success chance, how much fed heat it generates, and the evidence quality modifier (positive for speed, negative for inadmissibility).
 
-#### From packages/game-engine/src/combat/combat-controller.ts (piece 08)
-```typescript
-// Fed can initiate combat with killer (vigilante) via:
-initiateCombat(attackerId: ID, defenderId: ID, config: CombatConfig): CombatState
-```
+**Fed run state**: Accumulates per-run statistics — active suspect profiles, active counter-play effects, current fed heat level (0-100), interrogations performed count, evidence collected count, and arrest attempts count.
 
-#### From packages/game-engine/src/combat/ability-system.ts (piece 08)
-```typescript
-useAbility(abilityId: ID, userId: ID, targetId?: ID): Result<AbilityEffect[], AppError>
-isAbilityReady(abilityId: ID, userId: ID): boolean
-```
-
-#### From apps/web/src/stores/evidence.ts (piece 09)
-```typescript
-// Zustand evidence store — fed reads:
-interface EvidenceStore {
-  discoveredEvidence: Evidence[];
-  caseFile: CaseFile | null;
-  arrestViability: number;
-  arrestViabilityTier: ArrestViabilityTier;
-}
-```
-
-#### From apps/web/src/stores/player.ts (piece 07)
-```typescript
-// Zustand player store — fed reads/writes via EventBus:
-interface PlayerStore {
-  role: PlayerRole;
-  health: number;
-  position: { x: number; y: number };
-  inventory: InventoryItem[];
-  abilities: PlayerAbility[];
-  objectives: Objective[];
-}
-```
-
-#### From apps/web/src/components/app/common/ (piece 03)
-```typescript
-// Available app-layer wrapper components:
-AppButton, AppCard, AppDialog, AppInput, AppToast
-// Layouts:
-PageLayout, GameLayout, AuthLayout
-```
-
-#### From packages/game-engine/src/utils/event-bus.ts (piece 04)
-```typescript
-// EventBus for Phaser→React signals:
-EventBus.emit(event: string, data: unknown): void
-EventBus.on(event: string, callback: (data: unknown) => void): void
-EventBus.off(event: string, callback: (data: unknown) => void): void
-```
-
-#### From packages/shared/src/registry/registries.ts (piece 13 architecture)
-```typescript
-// Content registries — all skill, ability, item, weapon, trophy, crafting definitions
-// register here at boot via registerAllContent()
-export const abilityRegistry: ContentRegistry<AbilityDef>;
-export const skillRegistry: ContentRegistry<SkillDef>;
-export const itemRegistry: ContentRegistry<ItemDef>;
-export const weaponRegistry: ContentRegistry<WeaponDef>;
-export const craftingRecipeRegistry: ContentRegistry<CraftingRecipe>;
-```
-
-#### From packages/shared/src/effects/effect-types.ts (piece 13 architecture)
-```typescript
-// Universal Effect type — all skill/item/ability effects expressed as Effects
-export type Effect =
-  | { type: 'STAT_MOD'; stat: StatId; value: number; modType: 'FLAT' | 'PERCENT' }
-  | { type: 'SCAN_RADIUS_MOD'; percent: number }
-  | { type: 'DISCOVERY_SPEED_MOD'; multiplier: number }
-  | { type: 'FALSE_EVIDENCE_DETECTION_MOD'; percent: number }
-  | { type: 'ARREST_VIABILITY_MOD'; flat: number }
-  | { type: 'HEAT_GENERATION_MOD'; percent: number }
-  | { type: 'HEAT_DECAY_MOD'; percent: number }
-  | { type: 'HEAT_COST_MOD'; percent: number }
-  | { type: 'HEAT_CAP_MOD'; flat: number }
-  | { type: 'APPLY_STATUS'; statusId: string; durationMs?: number; magnitude?: number }
-  | { type: 'ABILITY_UNLOCK'; abilityId: string }
-  | { type: 'CUSTOM'; handler: string; params: Record<string, number | string | boolean> }
-  // ... full union in effect-types.ts
-```
-
-### New Types to Create
-
-**`packages/shared/src/types/fed.ts`**:
-
-```typescript
-import { ID, Timestamp } from './common';
-
-export type FedObjective =
-  | 'GATHER_EVIDENCE'
-  | 'IDENTIFY_SUSPECT'
-  | 'MAKE_ARREST'
-  | 'PREVENT_KILLS'
-
-export type ArrestCondition =
-  | 'INSUFFICIENT'  // <20 viability — arrest not possible
-  | 'WEAK'          // 20-39 — attempt triggers combat with target at full strength
-  | 'MODERATE'      // 40-59 — arrest possible but target may resist
-  | 'STRONG'        // 60-79 — arrest attempt succeeds with minor resistance
-  | 'AIRTIGHT'      // 80-100 — clean arrest, no resistance, bonus score
-
-export type InvestigationTool =
-  | 'FORENSIC_KIT'
-  | 'INTERVIEW_BADGE'
-  | 'TRACKING_DEVICE'
-  | 'EVIDENCE_BAG'
-  | 'HANDCUFFS'
-  // Counter-play tools (unlocked via skill tree):
-  | 'WIRETAP_KIT'        // illegal surveillance
-  | 'INFORMANT_BADGE'    // planted informants
-  | 'ENTRAPMENT_KIT'     // entrapment setup
-  | 'OFFBOOKS_LAB'       // off-the-books forensics
-
-export interface SuspectProfile {
-  entityId: ID;
-  displayName: string;
-  linkedEvidenceIds: ID[];
-  suspicionScore: number;      // 0-100, higher = more likely killer
-  isEliminated: boolean;
-  notes: string[];
-}
-
-export interface InterrogationResult {
-  npcId: ID;
-  infoType: 'LOCATION' | 'TIME' | 'DESCRIPTION' | 'ACTION' | 'FABRICATED';
-  content: string;
-  reliability: number;         // 0-1, affects suspicion score weight
-  isCoerced: boolean;          // true if rough interrogation used
-}
-
-// Counter-play abilities (unlocked via skill tree progression)
-export type CounterPlayAbility =
-  | 'ILLEGAL_SURVEILLANCE'   // off-the-books camera access — faster but inadmissible
-  | 'ROUGH_INTERROGATION'    // coerce NPCs for better intel — risk of complaint
-  | 'PLANTED_INFORMANT'      // turn NPC into active watcher
-  | 'ENTRAPMENT_SETUP'       // stage a scene to draw killer out
-  | 'OFFBOOKS_FORENSICS'     // faster evidence analysis — inadmissible but actionable
-
-export interface CounterPlayEffect {
-  ability: CounterPlayAbility;
-  successChance: number;           // 0-1 probability of full effect
-  heatGenerated: number;           // risk cost — fed "heat" from IA scrutiny
-  evidenceQualityModifier: number; // positive for faster/better, negative for inadmissibility
-  // inadmissible evidence still gives suspicion score boost but not arrest viability
-}
-
-export interface FedRunState {
-  discoveredSuspects: SuspectProfile[];
-  activeCounterPlayEffects: CounterPlayEffect[];
-  fedHeatLevel: number;             // 0-100: IA scrutiny from abusing counter-play
-  interrogationsPerformed: number;
-  evidenceCollected: number;
-  arrestAttempts: number;
-}
-```
+Full TypeScript type definitions (FedObjective, ArrestCondition, InvestigationTool, SuspectProfile, InterrogationResult, CounterPlayAbility, CounterPlayEffect, FedRunState) belong in the plan's "New Types to Create" section.
 
 ### Fed Skill Trees
 
@@ -387,15 +112,10 @@ The fed has three skill trees with 10 skills each (30 total). All trees follow t
 
 - Every skill has 1-5 ranks (configured per skill)
 - Each rank costs materials (scaling cost per rank)
-- **Diminishing returns formula** for percentage bonuses: `effectiveValue = baseValue * rank * (1 / (1 + 0.15 * (rank - 1)))`
-  - Rank 1: 100% of base per rank
-  - Rank 2: 87% of base per rank (total ~187% of rank 1)
-  - Rank 3: 77% of base per rank (total ~231% of rank 1)
-  - Rank 4: 69% of base per rank (total ~276% of rank 1)
-  - Rank 5: 63% of base per rank (total ~313% of rank 1)
-- **Hard cap**: No single skill can provide more than 50% improvement in any one stat. Total from all sources (skills + trophies + equipment) caps at 75%.
+- Percentage bonuses use diminishing returns — higher ranks give less gain per material than lower ranks (rank 5 yields roughly 63% of the base value per rank, for about 313% total vs the base). The diminishing returns formula is defined in piece 13.
+- Hard cap: no single skill can provide more than 50% improvement in any one stat. Total from all sources (skills + trophies + equipment) caps at 75%.
 - Flat bonuses scale linearly and are individually modest.
-- **Tier gating**: Tier N requires at least 2 skills from Tier N-1.
+- Tier gating: Tier N requires at least 2 skills from Tier N-1.
 
 #### Adjusted Skill Costs (Revised — Piece 13 Integration)
 
@@ -417,8 +137,6 @@ The fed has three skill trees with 10 skills each (30 total). All trees follow t
 
 #### FED TREE 1: FORENSICS (Evidence Gathering, Analysis, Quality)
 
-Defined in `packages/shared/src/data/skills/fed-forensics.ts`. Registered via `skillRegistry` at boot.
-
 | # | Skill Name | Tier | Max Rank | Rank Progression | Prerequisites |
 |---|-----------|------|----------|-----------------|---------------|
 | F-F1 | Sharp Eye | 1 | 5 | R1: scan radius +8% | R2: +14% | R3: +19% | R4: +23% | R5: +26% | None |
@@ -435,8 +153,6 @@ Defined in `packages/shared/src/data/skills/fed-forensics.ts`. Registered via `s
 **Hard caps**: Scan radius max +26%. Fake evidence auto-detection max 17% passive (requires active analysis for higher chance). Evidence quality upgrade speed max +33%. No combination allows instant full-map reveal.
 
 #### FED TREE 2: INTERROGATION (Witnesses, Intel, Counter-Play)
-
-Defined in `packages/shared/src/data/skills/fed-interrogation.ts`.
 
 | # | Skill Name | Tier | Max Rank | Rank Progression | Prerequisites |
 |---|-----------|------|----------|-----------------|---------------|
@@ -455,7 +171,7 @@ Defined in `packages/shared/src/data/skills/fed-interrogation.ts`.
 
 #### FED TREE 3: TACTICS (Area Control, Entrapment, Strategic Play)
 
-Defined in `packages/shared/src/data/skills/fed-tactics.ts`. Uses 1.3x cost multiplier (counter-play gating).
+Uses 1.3x cost multiplier (counter-play gating — these abilities directly affect the opponent's experience).
 
 | # | Skill Name | Tier | Max Rank | Rank Progression | Prerequisites |
 |---|-----------|------|----------|-----------------|---------------|
@@ -474,7 +190,7 @@ Defined in `packages/shared/src/data/skills/fed-tactics.ts`. Uses 1.3x cost mult
 
 ### Fed Active Abilities (12)
 
-All abilities implement the `AbilityDef` schema and register in `abilityRegistry`. Default abilities are available at run start. Counter-play abilities (FA-8 through FA-12) are gated behind Interrogation and Tactics tree investment. Each ability has 1-5 ranks that improve effectiveness.
+All abilities register in the content registry at boot. Default abilities are available at run start. Counter-play abilities (FA-8 through FA-12) are gated behind Interrogation and Tactics tree investment. Each ability has 1-5 ranks that improve effectiveness. Rank effect details (as data-driven Effect arrays) are in the plan.
 
 | # | Ability | Default? | Cooldown | Rank 1 | Rank 3 | Rank 5 | Hard Cap |
 |---|---------|----------|----------|--------|--------|--------|----------|
@@ -491,11 +207,11 @@ All abilities implement the `AbilityDef` schema and register in `abilityRegistry
 | FA-11 | Entrapment Setup | Tree (F-T4) | 180s CD | Decoy 60s, heat +20 | 90s, heat +16 | 120s, heat +12, 2 per run | max 2 per run |
 | FA-12 | Off-Books Forensics | Tree (F-I3) | 10s CD | Discovery time x0.5, heat +5 | x0.3, heat +4 | x0.1, heat +3 | min discovery time x0.1 |
 
-Ability rank effects are expressed as `Effect[]` arrays in the data file (using `STAT_MOD`, `SCAN_RADIUS_MOD`, `HEAT_GENERATION_MOD`, etc.). Counter-play abilities use `ABILITY_UNLOCK` effects that fire when the prerequisite skill reaches the required rank.
+Ability rank effects are defined in data files as typed effect arrays (stat modifications, scan radius modifications, heat generation modifiers, etc.). Counter-play abilities are unlocked via ability-unlock effects that fire when the prerequisite skill reaches the required rank.
 
 ### Fed Weapons
 
-Defined in `packages/shared/src/data/weapons/fed-weapons.ts`. Registered via `weaponRegistry`.
+Six weapon definitions registered in the weapon content registry at boot.
 
 | Category | ID | Name | Rarity | Damage | Special |
 |----------|-----|------|--------|--------|---------|
@@ -508,7 +224,7 @@ Defined in `packages/shared/src/data/weapons/fed-weapons.ts`. Registered via `we
 
 ### Fed Tools
 
-Defined in `packages/shared/src/data/items/fed-items.ts`. Registered via `itemRegistry`.
+Eleven tool and item definitions registered in the item content registry at boot.
 
 | ID | Name | Rarity | Effect |
 |----|------|--------|--------|
@@ -528,13 +244,13 @@ Counter-play tools are RARE or higher — they appear rarely in the session shop
 
 ### Fed Boss Items (MYTHIC Tier)
 
-Seven unique hand-crafted items obtainable through specific challenges. Defined in `packages/shared/src/data/boss-items/fed-boss-items.ts`. Registered via `itemRegistry` with `rarity: 'MYTHIC'`. Each requires attunement (5 ghost_tokens, one-time cost). All unique effects use the `CUSTOM` effect handler pattern, registered in `packages/game-engine/src/effects/boss-item-handlers.ts`.
+Seven unique hand-crafted items obtainable through specific challenges. Each requires one-time attunement (5 ghost_tokens) before it can be equipped. All unique effects use a custom handler pattern registered at game initialization.
 
 #### FB-1: The Lie Detector
 - **Slot**: TOOL | **Rarity**: MYTHIC
 - **Unique Effect**: When interviewing a witness, can activate "deep reading" (costs +10 fedHeat). Reveals: (1) whether the witness has been intimidated, (2) whether their testimony is about real or planted evidence, (3) the exact suspicion score the witness has for each nearby NPC. Normal interviews only show reliability.
 - **Custom Handler**: `lie_detector_deep_read` — unlocks extended interview data, applies heat cost, returns enriched NPC state.
-- **Obtain**: Correctly identify the killer in 10 runs without any false arrests. (`{ type: 'CUMULATIVE_STAT', stat: 'correct_identifications', threshold: 10 }`)
+- **Obtain**: Correctly identify the killer in 10 runs without any false arrests.
 - **Trade-off**: High heat cost per use. Takes tool slot. Encourages heat accumulation.
 - **Synergy**: Strong with Interrogation tree (Heat Management offsets cost). Weak alone.
 
@@ -542,7 +258,7 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: TOOL | **Rarity**: MYTHIC
 - **Unique Effect**: Scan ability gains a "quantum mode" alt-fire that pulses 360 degrees across the ENTIRE current zone, revealing all evidence, entities, and camera locations for 5s. 180s cooldown. Evidence revealed this way is tagged "QUANTUM_SCANNED" — quality reduced by 1 tier.
 - **Custom Handler**: `quantum_scanner_pulse` — performs zone-wide entity/evidence reveal, tags discovered evidence with quality reduction.
-- **Obtain**: Discover 500 total evidence pieces across all runs. (`{ type: 'CUMULATIVE_STAT', stat: 'evidence_discovered', threshold: 500 }`)
+- **Obtain**: Discover 500 total evidence pieces across all runs.
 - **Trade-off**: 180s cooldown. Discovered evidence is lower quality. Takes tool slot.
 - **Synergy**: Strong with Forensics tree (quality upgrade skills compensate). Good for Tactics tree.
 
@@ -550,7 +266,7 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: ACCESSORY | **Rarity**: MYTHIC
 - **Unique Effect**: Passively tracks killer movement patterns. After discovering 3+ evidence pieces from the same killer, generates a "profile" showing a zone-level heat map on the minimap indicating where the killer has spent the most time (updated every 30s, with 60s delay from real-time). Not exact position — zone-level only.
 - **Custom Handler**: `profiler_notebook_heatmap` — aggregates killer zone visit history (server-authoritative), renders delayed heat map on fed minimap.
-- **Obtain**: Win 15 runs as Fed with STRONG or better arrest viability. (`{ type: 'WIN_COUNT', role: 'FED', count: 15, condition: 'STRONG_ARREST' }`)
+- **Obtain**: Win 15 runs as Fed with STRONG or better arrest viability.
 - **Trade-off**: Takes accessory slot. 60s delay (historical, not real-time). Requires 3+ evidence discoveries to activate.
 - **Synergy**: Strong with Forensics tree (find evidence faster to activate). General-purpose.
 
@@ -558,7 +274,7 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: ARMOR | **Rarity**: MYTHIC
 - **Unique Effect**: When the fed takes damage, 25% chance to generate MEDIUM quality evidence at the damage location (attacker's DNA/trace). If fed health drops below 25%, all nearby cameras (within 2 zones) automatically activate and record for 30s.
 - **Custom Handler**: `aegis_badge_damage_evidence` — hooks into damage received events, probabilistically generates evidence, triggers camera activation on low-health threshold.
-- **Obtain**: Win 5 runs where the fed was attacked by the killer but still won. (`{ type: 'CONSECUTIVE_WINS', role: 'FED', count: 5, condition: 'ATTACKED_AND_WON' }`)
+- **Obtain**: Win 5 runs where the fed was attacked by the killer but still won.
 - **Trade-off**: Requires taking damage to trigger. No base armor stats. Camera activation only useful if killer is near cameras.
 - **Synergy**: Rewards risky play. Synergizes with Tactics tree (area control near cameras).
 
@@ -566,7 +282,7 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: ACCESSORY | **Rarity**: MYTHIC
 - **Unique Effect**: Doubles the maximum number of planted informants (if FA-10 is unlocked). All informants share information — when one informant reports, ALL others become "alert" and have their watch radius doubled for 15s.
 - **Custom Handler**: `chain_of_command_network` — modifies informant cap, creates inter-informant event relay, temporarily buffs all informants on any single trigger.
-- **Obtain**: Use Planted Informant ability in 25 different runs. (`{ type: 'CUMULATIVE_STAT', stat: 'informant_placements_runs', threshold: 25 }`)
+- **Obtain**: Use the Planted Informant ability in 25 different runs.
 - **Trade-off**: Only useful if FA-10 is unlocked from skill tree. Takes accessory slot. More informants = more heat cost per run.
 - **Synergy**: Requires Interrogation tree investment. Most build-dependent boss item.
 
@@ -574,7 +290,7 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: WEAPON (replaces sidearm) | **Rarity**: MYTHIC
 - **Unique Effect**: Replaces the fed's standard sidearm with a non-lethal "resonance" weapon. On hit: deals 5 damage + applies "Forensic Tag" status (60s). Tagged entities leave a faint glowing trail visible only to the fed. If the tagged entity is the killer, ALL evidence they generate while tagged is automatically discovered (no scan needed) and starts at +1 quality tier.
 - **Custom Handler**: `forensic_resonance_tag` — applies unique tracking status, modifies evidence generation for tagged entities.
-- **Obtain**: Achieve 3 AIRTIGHT arrests. (`{ type: 'CUMULATIVE_STAT', stat: 'airtight_arrests', threshold: 3 }`)
+- **Obtain**: Achieve 3 AIRTIGHT arrests.
 - **Trade-off**: Only 5 damage (much lower than any sidearm). Non-lethal only. Must successfully HIT the killer to apply the tag. 60s duration.
 - **Synergy**: Strong with Forensics tree. Requires combat engagement which most fed builds avoid.
 
@@ -582,13 +298,13 @@ Seven unique hand-crafted items obtainable through specific challenges. Defined 
 - **Slot**: TOOL | **Rarity**: MYTHIC
 - **Unique Effect**: Once per run, the fed can "consult the archives" (15s channel, cannot move). Reveals: the kill method used for the most recent kill, approximate time since last kill (within 30s accuracy), and one random trait of the killer's loadout (e.g., "the suspect is using a bladed weapon" or "the suspect has counter-play abilities").
 - **Custom Handler**: `archives_consult` — reads current match state server-side, reveals select killer loadout information with randomized partial disclosure.
-- **Obtain**: Win 20 runs total as Fed. (`{ type: 'WIN_COUNT', role: 'FED', count: 20 }`)
+- **Obtain**: Win 20 runs total as Fed.
 - **Trade-off**: Once per run. 15s channel time (very vulnerable). Information is partial. Takes tool slot.
 - **Synergy**: General-purpose. Most useful early in the run to guide investigation strategy.
 
 ### Crafting System — "The Armory"
 
-The fed's crafting system is called "The Armory" — the fed requisitions equipment upgrades through their agency. Defined in `packages/shared/src/data/crafting/fed-recipes.ts`. Registered via `craftingRecipeRegistry`. Custom handlers in `packages/game-engine/src/effects/crafting-handlers.ts`.
+The fed's crafting system is called "The Armory" — the fed requisitions equipment upgrades through their agency. Recipes are registered at boot and custom effect handlers are loaded at game initialization.
 
 **Upgrade Slots per Equipment Rarity**:
 - COMMON: 1 slot | UNCOMMON: 1 slot | RARE: 2 slots | LEGENDARY: 2 slots | MYTHIC: 3 slots
@@ -600,125 +316,115 @@ The fed's crafting system is called "The Armory" — the fed requisitions equipm
 
 #### Tier 1: Standard Issue Upgrades (Available by default)
 
-| # | Recipe Name | Category | Effects | Cost | Compatible With |
-|---|------------|----------|---------|------|-----------------|
-| FR-1 | Improved Sights | SIDEARM_MOD | `[{ type: 'STAT_MOD', stat: 'rangedDamage', value: 3, modType: 'FLAT' }]` | 8 evidence_dust + 2 salvage | WEAPON (SIDEARM) |
-| FR-2 | Extended Mag | SIDEARM_MOD | `[{ type: 'STAT_MOD', stat: 'attackSpeed', value: 0.08, modType: 'PERCENT' }]` | 8 evidence_dust + 2 salvage | WEAPON (SIDEARM) |
-| FR-3 | Tactical Vest Upgrade | ARMOR_MOD | `[{ type: 'STAT_MOD', stat: 'maxHealth', value: 12, modType: 'FLAT' }]` | 6 evidence_dust + 3 salvage | ARMOR |
-| FR-4 | Enhanced Lens Assembly | FORENSIC_MOD | `[{ type: 'SCAN_RADIUS_MOD', percent: 0.05 }]` | 10 evidence_dust + 2 salvage | TOOL |
+| # | Recipe Name | Category | Effect Description | Cost | Compatible With |
+|---|------------|----------|--------------------|------|-----------------|
+| FR-1 | Improved Sights | SIDEARM_MOD | +3 ranged damage (flat) | 8 evidence_dust + 2 salvage | WEAPON (SIDEARM) |
+| FR-2 | Extended Mag | SIDEARM_MOD | +8% attack speed | 8 evidence_dust + 2 salvage | WEAPON (SIDEARM) |
+| FR-3 | Tactical Vest Upgrade | ARMOR_MOD | +12 max health (flat) | 6 evidence_dust + 3 salvage | ARMOR |
+| FR-4 | Enhanced Lens Assembly | FORENSIC_MOD | +5% scan radius | 10 evidence_dust + 2 salvage | TOOL |
 
 #### Tier 2: Specialist Upgrades (Skill-gated)
 
-| # | Recipe Name | Category | Effects | Cost | Compatible With | Unlock Condition |
-|---|------------|----------|---------|------|-----------------|------------------|
-| FR-5 | Trace Amplifier | FORENSIC_MOD | `[{ type: 'STAT_MOD', stat: 'evidenceQualityMod', value: 0.10, modType: 'PERCENT' }]` | 15 ED + 4 salvage + 1 GT | TOOL | F-F4 rank 2 |
-| FR-6 | Reinforced Cuffs | TACTICAL_MOD | `[{ type: 'ARREST_VIABILITY_MOD', flat: 3 }]` | 12 ED + 3 salvage + 1 GT | ACCESSORY | F-T4 rank 1 |
-| FR-7 | Scramble-Proof Radio | TACTICAL_MOD | `[{ type: 'CUSTOM', handler: 'scramble_proof_radio', params: { jammingResistPercent: 0.50 } }]` | 14 ED + 3 salvage + 2 GT | ACCESSORY | F-I7 rank 2 |
-| FR-8 | Low-Light Optics | FORENSIC_MOD | `[{ type: 'FALSE_EVIDENCE_DETECTION_MOD', percent: 0.05 }]` | 15 ED + 4 salvage + 2 GT | TOOL | F-F5 rank 3 |
+| # | Recipe Name | Category | Effect Description | Cost | Compatible With | Unlock Condition |
+|---|------------|----------|--------------------|------|-----------------|------------------|
+| FR-5 | Trace Amplifier | FORENSIC_MOD | +10% evidence quality on analysis | 15 ED + 4 salvage + 1 GT | TOOL | F-F4 rank 2 |
+| FR-6 | Reinforced Cuffs | TACTICAL_MOD | +3 arrest viability (flat) | 12 ED + 3 salvage + 1 GT | ACCESSORY | F-T4 rank 1 |
+| FR-7 | Scramble-Proof Radio | TACTICAL_MOD | 50% resistance to surveillance jamming (custom handler) | 14 ED + 3 salvage + 2 GT | ACCESSORY | F-I7 rank 2 |
+| FR-8 | Low-Light Optics | FORENSIC_MOD | +5% chance to auto-flag fake evidence | 15 ED + 4 salvage + 2 GT | TOOL | F-F5 rank 3 |
 
 #### Tier 3: Bureau-Level Requisitions (Achievement-gated)
 
-| # | Recipe Name | Category | Effects | Cost | Compatible With | Unlock Condition |
-|---|------------|----------|---------|------|-----------------|------------------|
-| FR-9 | Forensic Neural Link | FORENSIC_MOD | `[{ type: 'CUSTOM', handler: 'neural_link_auto_tag', params: { autoTagRadius: 64, autoTagChance: 0.15 } }]` | 25 ED + 8 salvage + 5 GT | TOOL | Trophy: Master Detective |
-| FR-10 | Adaptive Armor Weave | ARMOR_MOD | `[{ type: 'STAT_MOD', stat: 'maxHealth', value: 20, modType: 'FLAT' }, { type: 'CUSTOM', handler: 'adaptive_armor_damage_resist', params: { stackPerHit: 0.03, maxStacks: 5, duration: 10 } }]` | 30 ED + 10 salvage + 8 GT | ARMOR | F-T9 unlocked |
+| # | Recipe Name | Category | Effect Description | Cost | Compatible With | Unlock Condition |
+|---|------------|----------|--------------------|------|-----------------|------------------|
+| FR-9 | Forensic Neural Link | FORENSIC_MOD | Passively auto-tags nearby evidence at 15% chance within a medium radius (custom handler) | 25 ED + 8 salvage + 5 GT | TOOL | Trophy: Master Detective |
+| FR-10 | Adaptive Armor Weave | ARMOR_MOD | +20 max health; also builds damage resistance stacks when hit (up to 5 stacks, 3% each, lasting 10s per stack) — custom handler | 30 ED + 10 salvage + 8 GT | ARMOR | F-T9 unlocked |
 
-**Crafted bonuses count toward existing stat caps.** The `StatModifierSystem` enforces all caps universally — crafted effects flow through the same system as skill/trophy/equipment effects.
+**Crafted bonuses count toward existing stat caps.** The stat modifier system enforces all caps universally — crafted effects flow through the same pipeline as skill, trophy, and equipment effects.
 
 **Ghost token allocation decision**: Players must choose between spending ghost tokens on skill ranks (2-4 GT each at R3-R5), boss item attunement (5 GT), or Tier 2-3 crafting recipes (1-8 GT). This creates meaningful resource tension with no single dominant strategy.
 
 ### Investigation System
 
-**`packages/game-engine/src/fed/investigation-system.ts`**
-
 The investigation system drives the fed's core evidence-gathering loop. The fed moves through the map performing three types of investigation actions:
 
-1. **Area Scan**: Active ability — pings a radius around the player, revealing `DISCOVERABLE` evidence as highlighted interactables. Costs ability cooldown. Uses `discovery-mechanics.ts scanArea()`.
+1. **Area Scan**: Active ability — pings a radius around the player, revealing discoverable evidence as highlighted interactables. Costs ability cooldown.
 
-2. **Crime Scene Analysis**: Triggered when fed enters a zone with multiple evidence pieces of the same linked entity. Auto-aggregates evidence into the case file. Provides bonus `+10` to arrest viability for coherent scenes (increased by F-F6 Crime Scene Specialist skill).
+2. **Crime Scene Analysis**: Triggered when the fed enters a zone with multiple evidence pieces linked to the same entity. Auto-aggregates evidence into the case file. Provides a +10 bonus to arrest viability for coherent scenes (bonus increased by the Crime Scene Specialist skill, F-F6).
 
-3. **Forensic Examination**: Interact with individual discovered evidence to increase quality rating (LOW → MEDIUM → HIGH). Uses `discovery-mechanics.ts analyzeEvidenceQuality()`. Higher quality evidence contributes more to arrest viability.
+3. **Forensic Examination**: Interact with individual discovered evidence to increase its quality rating (LOW → MEDIUM → HIGH). Higher quality evidence contributes more to arrest viability.
 
-Evidence discovered via illegal means (counter-play abilities FA-8 `ILLEGAL_SURVEILLANCE`, FA-12 `OFFBOOKS_FORENSICS`) sets `Evidence.isInadmissible = true`. Inadmissible evidence still increases `SuspectProfile.suspicionScore` but does NOT increase `CaseFile.arrestViability`. This creates a meaningful risk/reward: counter-play gives investigative speed at the cost of arrest purity.
+Evidence discovered via illegal means (the Illegal Surveillance ability FA-8 and Off-Books Forensics FA-12) is flagged as inadmissible. Inadmissible evidence still raises a suspect's suspicion score but does NOT increase arrest viability. This creates a meaningful risk/reward: counter-play gives investigative speed at the cost of arrest purity.
 
 ### Witness System
 
-**`packages/game-engine/src/fed/witness-system.ts`**
+NPCs that witnessed a crime event and have not been silenced can be interviewed. The fed player walks up to a witness NPC and triggers the interview interaction.
 
-NPCs that have `NPC.hasWitnessedEvent = true` and `NPC.isSilenced = false` can be interviewed. The fed player walks up to a witness NPC and triggers the interview interaction.
+**Interview outcome**:
+- The type of information revealed is randomly drawn from what the NPC actually witnessed
+- Witness reliability ranges 0.4–1.0 based on NPC role (shopkeeper = 0.9, drunk NPC = 0.4)
+- Unreliable witnesses may generate FABRICATED info pointing at innocent NPCs (false leads)
 
-**Interview outcome** (`InterrogationResult`):
-- `infoType` is randomly drawn from what the NPC actually saw (`witnessedEventType`)
-- `reliability` ranges 0.4–1.0 based on NPC role (shopkeeper = 0.9, drunk NPC = 0.4)
-- Unreliable witnesses may generate `FABRICATED` info pointing at innocent NPCs (false leads)
-
-**Rough interrogation** (counter-play, FA-9 `ROUGH_INTERROGATION`):
+**Rough interrogation** (counter-play, FA-9 Rough Interrogation):
 - Unlocked at Interrogation skill tree F-I4 tier 2
 - Rank determines forced reliability (R1: 0.80, R3: 0.85, R5: 0.90) and heat cost (R1: +15, R5: +10)
-- Generates `fedHeatLevel` increase per use
+- Generates fed heat per use
 - Can extract from silenced witnesses at F-I4 R3+ (double heat cost at lower ranks, decreasing at higher ranks)
-- If `fedHeatLevel > 80`: subsequent arrests are contested even with `STRONG` or `AIRTIGHT` evidence
+- If fed heat exceeds 80: subsequent arrests are contested even with STRONG or AIRTIGHT evidence
 
-**Planted informants** (counter-play, FA-10 `PLANTED_INFORMANT`):
+**Planted informants** (counter-play, FA-10 Planted Informant):
 - Unlocked at Interrogation skill tree F-I5 tier 2
-- Converts a specific NPC into an active watcher — will automatically report the next suspicious player action within its watch radius to the fed player via EventBus `informant-report` event
+- Converts a specific NPC into an active watcher — will automatically report the next suspicious player action within its watch radius to the fed player
 - Max informants scales with F-I5 rank (1→3) and is capped at 4 with all sources combined
-- The NPC continues their routine; notification arrives via EventBus
+- The NPC continues their routine; the report notification arrives automatically
 - Costs fedHeat per placement (scaling down with skill rank)
-- If killer uses `witness-intimidation` on the informant NPC before it reports: informant is silenced (counter-countered). F-I9 Deep Cover Operations provides immunity when killer suspicion is below threshold.
+- If the killer uses witness intimidation on the informant NPC before it reports, the informant is silenced (counter-countered). F-I9 Deep Cover Operations provides immunity when killer suspicion is below threshold.
 
-**Silenced witnesses**: When the killer uses `witness-intimidation` on an NPC before the fed can interview them, `NPC.isSilenced = true`. The fed interaction prompt changes to "Witness unavailable — appears frightened." Fed can attempt FA-9 `ROUGH_INTERROGATION` on silenced witnesses at double the heat cost to extract partial information (F-I4 R3+ reduces this penalty).
+**Silenced witnesses**: When the killer intimidates an NPC before the fed can interview them, that NPC becomes unavailable for normal interview (the interaction prompt changes to "Witness unavailable — appears frightened"). The fed can attempt Rough Interrogation (FA-9) on silenced witnesses at double the heat cost to extract partial information. F-I4 rank 3+ reduces this penalty.
 
 ### Suspect Tracker
 
-**`packages/game-engine/src/fed/suspect-tracker.ts`**
-
-At run start, all NPCs + the hidden killer player are loaded as suspect profiles. The fed's task is to narrow this pool by linking evidence to suspects and eliminating innocents.
+At run start, all NPCs and the hidden killer player are loaded as suspect profiles. The fed's task is to narrow this pool by linking evidence to suspects and eliminating innocents.
 
 **Narrowing mechanics**:
-- Evidence with `linkedEntityId` links to a specific NPC/player — adds to their `suspicionScore`
-- FOOTPRINT/DNA evidence near an NPC's routine path eliminates that NPC from suspicion
-- A `SuspectProfile.suspicionScore > 70` flags them as "primary suspect" in HUD
-- `CaseFileTracker.eliminateSuspect()` marks a profile as `isEliminated = true`, removing from active board
+- Evidence linked to a specific entity raises that entity's suspicion score
+- FOOTPRINT/DNA evidence near an NPC's routine path clears that NPC from suspicion
+- A suspect with a suspicion score above 70 is flagged as "primary suspect" in the HUD
+- The fed can explicitly eliminate a suspect from the board, removing them from the active suspect list
 
-**Killer's fake evidence counter-play** (`EvidenceType.FAKE_EVIDENCE`):
-- Fake evidence planted by the killer will have `linkedEntityId` pointing to an innocent NPC
-- Fake evidence passes normal discovery and adds to the innocent NPC's `suspicionScore`
-- Fed can detect fake evidence by: (a) examining quality at HIGH tier with forensic analysis — transitions state to `DISCREDITED`, or (b) cross-referencing with timeline (fake evidence timestamps don't match NPC routines)
-- The `SuspectBoard.tsx` UI should visually flag evidence pieces where timeline doesn't fit the linked suspect's recorded routine
-- F-F5 Pattern Recognition provides passive auto-flagging (5-17% chance per rank)
-- F-F7 Forensic Intuition adds active detection bonus during forensic analysis
+**Killer's fake evidence counter-play**:
+- Fake evidence planted by the killer links to an innocent NPC, raising that NPC's suspicion score
+- Fake evidence is indistinguishable from real evidence during normal discovery
+- The fed can detect fake evidence by: (a) examining it at HIGH quality via forensic analysis — this transitions it to DISCREDITED status, or (b) cross-referencing with the timeline (fake evidence timestamps don't match the linked NPC's recorded routine)
+- The Suspect Board UI should visually flag evidence pieces where the timestamp doesn't fit the linked suspect's routine
+- F-F5 Pattern Recognition provides passive auto-flagging (5–17% chance per rank)
+- F-F7 Forensic Intuition adds an active detection bonus during forensic analysis
 
 ### Arrest System
 
-**`packages/game-engine/src/fed/arrest-system.ts`**
+Arrest is gated by the case file's arrest viability score (0–100), which maps to five tiers:
 
-Arrest is gated by `CaseFile.arrestViability` (0-100), mapped to `ArrestViabilityTier` / `ArrestCondition`:
-
-| Score | `ArrestCondition` | Outcome |
-|-------|-------------------|---------|
-| 0-19  | `INSUFFICIENT` | Arrest button disabled — "More evidence needed" |
-| 20-39 | `WEAK` | Attempt triggers full combat — killer fights back at full strength |
-| 40-59 | `MODERATE` | Brief combat — killer at 50% health, escapes on win |
-| 60-79 | `STRONG` | Clean arrest — no combat, cinematic takedown |
-| 80-100 | `AIRTIGHT` | Perfect arrest — bonus score, cinematic takedown, no resistance |
+| Score | Tier | Outcome |
+|-------|------|---------|
+| 0–19 | INSUFFICIENT | Arrest button disabled — "More evidence needed" |
+| 20–39 | WEAK | Arrest attempt triggers full combat — killer fights back at full strength |
+| 40–59 | MODERATE | Brief combat — killer starts at 50% health, escapes on win |
+| 60–79 | STRONG | Clean arrest — no combat, cinematic takedown |
+| 80–100 | AIRTIGHT | Perfect arrest — bonus score, cinematic takedown, no resistance |
 
 **Arrest attempt flow**:
 1. Fed selects "Arrest" from interaction with a suspect
-2. System checks `ArrestCondition` against current `arrestViability` score from `CaseFile`
-3. If `AIRTIGHT`: play perfect arrest animation, run ends with fed win + bonus score
-4. If `STRONG`: play arrest animation, run ends with fed win
-5. If `MODERATE`/`WEAK`: combat scene initiates — killer is the boss
-6. If fed wins combat with `WEAK` evidence: partial win (lower score, no "clean arrest" trophy)
-7. If fed wins combat with `MODERATE` evidence: arrest succeeds with normal scoring
+2. The system checks the current arrest viability tier
+3. If AIRTIGHT: perfect arrest animation plays, run ends with fed win + bonus score
+4. If STRONG: arrest animation plays, run ends with fed win
+5. If MODERATE or WEAK: a combat scene initiates — the killer is the boss
+6. If fed wins combat with WEAK evidence: partial win (lower score, no "clean arrest" trophy)
+7. If fed wins combat with MODERATE evidence: arrest succeeds with normal scoring
 
-**Inadmissible evidence penalty**: If `>30%` of case file evidence is `isInadmissible = true`, the viability score cap is reduced to 59 (cannot achieve `STRONG` or `AIRTIGHT` — only `MODERATE` at best). This prevents counter-play-only strategies from trivializing arrest. The F-T10 Ghost Agent capstone skill can retroactively make inadmissible evidence admissible (costs 30 fedHeat, once per run).
+**Inadmissible evidence penalty**: If more than 30% of case file evidence is inadmissible, the viability score cap is reduced to 59 (cannot achieve STRONG or AIRTIGHT — only MODERATE at best). This prevents counter-play-only strategies from trivializing arrest. The F-T10 Ghost Agent capstone skill can retroactively make inadmissible evidence admissible (costs 30 fedHeat, once per run).
 
 ### Vigilante System
 
-**`packages/game-engine/src/fed/vigilante-system.ts`**
-
-The fed can skip the investigation and fight the killer directly if they can find them. Uses `combat-controller.ts initiateCombat()`. No evidence requirement for combat initiation.
+The fed can skip the investigation and fight the killer directly if they can find them. Combat initiates immediately with no evidence requirement.
 
 Trade-offs:
 - Win = fed wins run (killer eliminated)
@@ -729,53 +435,53 @@ Trade-offs:
 
 ### Counter-Play Abilities (Fed)
 
-These abilities actively undermine the killer's ability to operate. They are gated behind Interrogation and Tactics skill tree progression. Each has explicit risk/reward trade-offs expressed as `Effect[]` arrays in the data files.
+These abilities actively undermine the killer's ability to operate. They are gated behind Interrogation and Tactics skill tree progression. Each has explicit risk/reward trade-offs defined in data files.
 
-**`FA-8 ILLEGAL_SURVEILLANCE`** (Unlocked via F-I7 Interrogation tier 3):
+**FA-8: Illegal Surveillance** (Unlocked via F-I7 Interrogation tier 3):
 - Off-the-books access to surveillance cameras the killer may have jammed
-- Bypasses `surveillance-jamming` counter-play from killer side
-- Effect: Restores camera coverage in one zone for 45-85s (scales with F-I7 rank)
-- `fedHeatLevel += 8` (decreasing to +5 at rank 5)
-- Evidence gathered from illegal cameras is `isInadmissible = true`
+- Bypasses the killer's surveillance-jamming counter-play
+- Restores camera coverage in one zone for 45–85s (scales with F-I7 rank)
+- Generates +8 fedHeat (decreasing to +5 at rank 5)
+- Evidence gathered from illegal cameras is inadmissible
 - At rank 5: restored cameras also detect entities with STEALTH status
 
-**`FA-9 ROUGH_INTERROGATION`** (Unlocked via F-I4 Interrogation tier 2):
-- Coerce an NPC into providing high-quality intel regardless of reliability
-- Effect: Forces `InterrogationResult.reliability` to 0.80-0.90 (scales with F-I4 rank), guarantees non-FABRICATED infoType
-- Can extract information from silenced witnesses at F-I4 R3+ (at additional heat cost)
-- `fedHeatLevel += 10-15` (decreasing with rank)
-- If `fedHeatLevel > 80`: NPC files complaint, max `arrestViability` capped at 59 for this run
+**FA-9: Rough Interrogation** (Unlocked via F-I4 Interrogation tier 2):
+- Coerce an NPC into providing high-quality intel regardless of their reliability
+- Forces witness reliability to 0.80–0.90 (scales with F-I4 rank); guarantees non-fabricated information type
+- Can extract information from silenced witnesses at rank 3+ (at additional heat cost)
+- Generates +10–15 fedHeat (decreasing with rank)
+- If fedHeat exceeds 80: the NPC files a complaint, capping arrest viability at 59 for this run
 
-**`FA-10 PLANTED_INFORMANT`** (Unlocked via F-I5 Interrogation tier 2):
+**FA-10: Planted Informant** (Unlocked via F-I5 Interrogation tier 2):
 - Turn a civilian NPC into a one-time automatic reporter
-- Effect: NPC reports next suspicious action within 150-220px radius (scales with F-I5 rank) via EventBus
-- `fedHeatLevel += 6-10` (decreasing with rank)
-- At F-I5 R5: informant survives 1 killer intimidation attempt before being silenced
-- F-I9 Deep Cover Operations adds immunity threshold when killer suspicion is below configured value
+- The NPC reports the next suspicious action within a 150–220 pixel watch radius (scales with F-I5 rank)
+- Generates +6–10 fedHeat (decreasing with rank)
+- At rank 5: informant survives one killer intimidation attempt before being silenced
+- F-I9 Deep Cover Operations adds immunity when the killer's suspicion score is below a threshold
 
-**`FA-11 ENTRAPMENT_SETUP`** (Unlocked via F-T4 Tactics tier 2):
-- Stage a tempting scenario (fake target walking alone, unguarded disposal site) to draw killer out
-- Effect: Spawns a decoy NPC marked as high-priority target in killer HUD for 60-120s (scales with F-T4 rank)
-- If killer approaches decoy: triggers proximity alert to fed player via EventBus `entrapment-triggered`
-- Killer can detect entrapment by observing decoy NPC lacks the usual target indicators (higher ranks mimic behavior better)
-- `fedHeatLevel += 12-20` — entrapment carries legal risk (decreasing with rank)
-- At F-T4 R5: 2 decoys per run
+**FA-11: Entrapment Setup** (Unlocked via F-T4 Tactics tier 2):
+- Stage a tempting scenario (fake target walking alone, unguarded disposal site) to draw the killer out
+- Spawns a decoy NPC marked as a high-priority target in the killer's HUD for 60–120s (scales with F-T4 rank)
+- If the killer approaches the decoy, the fed receives a proximity alert
+- The killer can detect the entrapment by observing that the decoy NPC lacks normal target indicators (higher ranks mimic behavior better)
+- Generates +12–20 fedHeat — entrapment carries legal risk (decreasing with rank)
+- At rank 5: 2 decoys per run
 
-**`FA-12 OFF-BOOKS FORENSICS`** (Unlocked via F-I3 Interrogation tier 1):
+**FA-12: Off-Books Forensics** (Unlocked via F-I3 Interrogation tier 1):
 - Faster forensic processing — skips standard chain-of-custody
-- Effect: Forensic examination time reduced to 10-50% of normal (scales with F-I3 rank), evidence quality boost immediate
-- Evidence processed this way marked `isInadmissible = true`
-- Gives early investigative speed at cost of clean arrest potential
-- `fedHeatLevel += 3-5` per use (decreasing with rank)
+- Forensic examination time reduced to 10–50% of normal (scales with F-I3 rank); evidence quality boost is immediate
+- Evidence processed this way is inadmissible
+- Provides early investigative speed at the cost of clean arrest potential
+- Generates +3–5 fedHeat per use (decreasing with rank)
 
 **Fed Heat System**:
-- `fedHeatLevel` is a per-run accumulator (0-100)
-- Displayed as an IA Scrutiny meter in `FedHUD.tsx`
+- Fed heat is a per-run accumulator (0–100)
+- Displayed as an "IA Scrutiny" meter in the fed's HUD
 - Thresholds:
-  - 0-40: No effect
-  - 41-60: Minor — some NPCs become uncooperative (+20% interview failure chance)
-  - 61-80: Moderate — `arrestViability` cap reduced to 79 (cannot achieve AIRTIGHT)
-  - 81-100: Severe — cap reduced to 59 (cannot achieve STRONG or AIRTIGHT), arrest attempts always trigger brief combat even with strong evidence
+  - 0–40: No effect
+  - 41–60: Minor — some NPCs become uncooperative (+20% interview failure chance)
+  - 61–80: Moderate — arrest viability capped at 79 (cannot achieve AIRTIGHT)
+  - 81–100: Severe — arrest viability capped at 59 (cannot achieve STRONG or AIRTIGHT); arrest attempts always trigger brief combat even with strong evidence
 - The F-T9 Clean Operation skill raises the Severe threshold (81 → 90/95/100 at R1/R2/R3)
 - Heat does NOT persist between runs (session-scoped only)
 
@@ -792,103 +498,72 @@ These archetypes emerge from investing in different primary trees. Players can r
 
 ### HUD Components
 
-**`apps/web/src/components/app/game/hud/FedHUD.tsx`**
-
-React component, "use client", reads from `stores/fed.ts` and `stores/evidence.ts` via Zustand selectors.
+**Fed HUD**: The fed's in-game overlay reads from the fed and evidence stores.
 
 Layout regions:
-- Top-left: HealthBar (from common HUD, piece 07)
-- Top-center: Case Strength Meter (0-100 bar, color-coded: red/yellow/green by threshold)
-- Top-right: IA Scrutiny Meter (0-100 fedHeatLevel, glows red above 60)
-- Left: ObjectiveTracker (from common HUD, piece 07) — current investigation steps
-- Bottom-left: InventoryPanel (from common HUD, piece 07)
-- Bottom-center: Active ability cooldown display (7 ability slots — FA-1 through FA-7 defaults + any unlocked counter-play)
+- Top-left: Health bar (shared common HUD component, piece 07)
+- Top-center: Case Strength Meter (0–100 bar, color-coded red/yellow/green by threshold)
+- Top-right: IA Scrutiny Meter (0–100 fed heat level, glows red above 60)
+- Left: Objective Tracker (shared common HUD component, piece 07) — current investigation steps
+- Bottom-left: Inventory Panel (shared common HUD component, piece 07)
+- Bottom-center: Active ability cooldown display (7 ability slots — FA-1 through FA-7 defaults plus any unlocked counter-play)
 - Bottom-right: Investigation Tools quick-access tray
-- Minimap (from common HUD, piece 07) — overlaid with evidence markers (blue dots)
+- Minimap (shared common HUD component, piece 07) — overlaid with evidence markers (blue dots)
 
-**`apps/web/src/components/app/game/hud/SuspectBoard.tsx`**
-
-The suspect board is a togglable overlay (default: hidden, press Tab to open). It visually mimics a detective's cork board with:
+**Suspect Board**: A togglable overlay (default hidden, press Tab to open). Visually mimics a detective's cork board:
 - NPC profile photos (sprite thumbnails) connected by string/lines to evidence cards
-- Suspects sorted by `suspicionScore` descending
+- Suspects sorted by suspicion score (highest first)
 - Eliminated suspects greyed out
 - Active primary suspect highlighted with pulsing border
 - Evidence cards show: type icon, quality badge, timestamp, linked-suspect name
-- Timeline view: horizontal axis showing time, evidence events plotted — mismatched timestamps on fake evidence are visually distinct (red flag icon)
-- "Arrest" button anchored bottom-right, disabled/enabled by `ArrestCondition`
+- Timeline view: horizontal axis showing time with evidence events plotted — mismatched timestamps on fake evidence are visually distinct (red flag icon)
+- "Arrest" button anchored bottom-right, disabled or enabled based on current arrest viability tier
 
-### Zustand Store
+### Fed State
 
-**`apps/web/src/stores/fed.ts`**
+The fed's client-side state tracks:
+- Suspect profiles and their suspicion scores
+- Interrogation results from witness interviews
+- Active ability cooldowns (per ability, in milliseconds remaining)
+- Current fed heat level (0–100)
+- Current arrest viability tier
+- Active counter-play effects in progress
+- List of NPCs currently acting as planted informants
+- Number of arrest attempts this run
 
-```typescript
-interface FedStore {
-  // State
-  suspects: SuspectProfile[];
-  interrogationResults: InterrogationResult[];
-  activeAbilityCooldowns: Record<string, number>; // abilityId → ms remaining
-  fedHeatLevel: number;
-  arrestCondition: ArrestCondition;  // alias for ArrestViabilityTier in fed context
-  activeCounterPlayEffects: CounterPlayEffect[];
-  plantedInformants: ID[];   // NPC IDs currently acting as informants
-  arrestAttempts: number;
+Actions update state in response to game events (dispatched from the game engine) or directly from HUD interactions.
 
-  // Actions (called via EventBus from Phaser, or directly from React HUD)
-  addSuspect: (profile: SuspectProfile) => void;
-  updateSuspect: (entityId: ID, update: Partial<SuspectProfile>) => void;
-  eliminateSuspect: (entityId: ID) => void;
-  addInterrogationResult: (result: InterrogationResult) => void;
-  setAbilityCooldown: (abilityId: string, ms: number) => void;
-  incrementHeat: (amount: number) => void;
-  setArrestCondition: (condition: ArrestCondition) => void;
-  activateCounterPlay: (effect: CounterPlayEffect) => void;
-  addPlantedInformant: (npcId: ID) => void;
-  removePlantedInformant: (npcId: ID) => void;
-  reset: () => void;
-}
-```
+### Events Emitted
 
-### EventBus Events
+The fed gameplay systems emit events consumed by the React HUD, the session economy (piece 12), and multiplayer sync (piece 14). Key event categories:
+- Evidence discovered (including type and quality)
+- Witness interviewed (including result reliability)
+- Suspect identified or eliminated
+- Arrest attempted, succeeded, or failed
+- Counter-play ability activated (including heat generated)
+- Informant report received
+- Entrapment triggered
+- Fed heat threshold crossed (including new arrest viability cap)
 
-Events emitted by this piece (consumed by React stores and piece 12+):
-- `fed:evidence-discovered` — `{ evidenceId, type, quality }`
-- `fed:witness-interviewed` — `{ npcId, result: InterrogationResult }`
-- `fed:suspect-identified` — `{ entityId, suspicionScore }`
-- `fed:arrest-attempted` — `{ targetId, condition: ArrestCondition }`
-- `fed:arrest-succeeded` — `{ targetId, viabilityScore }`
-- `fed:arrest-failed` — `{ targetId, reason: string }`
-- `fed:counter-play-activated` — `{ ability: CounterPlayAbility, heatGenerated: number }`
-- `fed:informant-report` — `{ npcId, reportedEntityId, eventType: string }`
-- `fed:entrapment-triggered` — `{ decoyNpcId, suspectId }`
-- `fed:heat-threshold-crossed` — `{ level: number, newCap: number }`
+### Win/Lose Conditions
 
-### Win/Lose Condition Implementation
+**Win conditions** (either satisfies a fed victory):
+- Arrest succeeded (any tier from WEAK through AIRTIGHT)
+- Vigilante kill succeeded (combat win without arrest)
 
-In `fed-role.ts`:
-
-```typescript
-checkWinCondition(state: RunState): boolean {
-  // Win if: arrest succeeded OR vigilante kill succeeded
-  return fedStore.getState().arrestSucceeded || fedStore.getState().vigilanteWin;
-}
-
-checkLoseCondition(state: RunState): boolean {
-  // Lose if: player health zero OR all targets eliminated and disposed (killer wins)
-  const playerDead = playerStore.getState().health <= 0;
-  const killerWon = runState.killerObjectivesComplete === true;
-  return playerDead || killerWon;
-}
-```
+**Lose conditions** (either ends the run as a fed loss):
+- Fed player health reaches zero
+- Killer completes all their objectives (killer wins the run)
 
 ### Edge Cases
 
-- **All witnesses silenced**: If killer intimidates all NPCs with `hasWitnessedEvent = true`, the fed must rely solely on physical evidence (footprints, DNA, cameras). This is a valid killer strategy — fed must counter with FA-8 `ILLEGAL_SURVEILLANCE` or FA-12 `OFFBOOKS_FORENSICS` to maintain investigative pressure.
-- **Fake evidence saturation**: If >50% of case file evidence links to innocent NPCs, `SuspectBoard.tsx` highlights a "Investigation Compromised" warning. Fed should use forensic analysis to separate real from fake.
-- **Heat maxed before arrest**: If `fedHeatLevel = 100`, the fed must proceed with combat-based arrest or vigilante path — clean arrest is locked. This is a risk of over-relying on counter-play tools early.
-- **No witnesses + no cameras + no DNA**: Every killer action generates at minimum FOOTPRINT evidence unless silent movement ability + quiet shoes are both active. Footprints cannot be fully eliminated. The fed always has a starting evidence trail.
-- **Arrested wrong NPC**: If fed arrests an innocent NPC (wrong suspect), the arrest animation plays but resolves to "Wrong suspect — case dismissed." Run continues but arrest viability resets to 0 and `fedHeatLevel += 25`. Only one false arrest attempt allowed per run.
-- **Multiplayer sync**: In multiplayer (piece 14), the actual killer player's position data is withheld from the fed player's client — only the evidence trail reveals their presence. Anti-cheat validation server-side ensures the fed cannot query the opponent's position directly. The Profiler's Notebook boss item reads from a server-authoritative, time-delayed record of zone visits — never from real-time position state.
-- **Boss item custom handlers**: If a handler name in a CUSTOM effect does not have a registered handler at runtime, the EffectProcessor logs a warning and skips the effect (forward compatibility). All boss item handlers must be registered in `boss-item-handlers.ts` and loaded at game initialization.
+- **All witnesses silenced**: If the killer intimidates all NPCs who witnessed events, the fed must rely solely on physical evidence (footprints, DNA, cameras). This is a valid killer strategy — the fed must counter with Illegal Surveillance (FA-8) or Off-Books Forensics (FA-12) to maintain investigative pressure.
+- **Fake evidence saturation**: If more than 50% of case file evidence links to innocent NPCs, the Suspect Board shows an "Investigation Compromised" warning. The fed should use forensic analysis to separate real from fake evidence.
+- **Heat maxed before arrest**: If fed heat reaches 100, the fed must proceed with combat-based arrest or the vigilante path — a clean arrest is locked. This is the risk of over-relying on counter-play tools early in the run.
+- **No witnesses + no cameras + no DNA**: Every killer action generates at minimum FOOTPRINT evidence unless the killer has both silent movement ability and quiet shoes active simultaneously. Footprints cannot be fully eliminated, so the fed always has a starting evidence trail.
+- **Arrested wrong NPC**: If the fed arrests an innocent NPC, the arrest resolves to "Wrong suspect — case dismissed." The run continues but arrest viability resets to 0 and fed heat increases by 25. Only one false arrest attempt is allowed per run.
+- **Multiplayer sync**: In multiplayer (piece 14), the actual killer player's position is withheld from the fed's client — only the evidence trail reveals their presence. Anti-cheat validation runs server-side so the fed cannot query the opponent's real-time position. The Profiler's Notebook boss item reads from a server-authoritative, time-delayed record of zone visits — never from real-time position state.
+- **Boss item custom handlers**: If a custom effect handler name is not registered at game initialization, the effect processor logs a warning and skips the effect gracefully (forward compatibility). All boss item handlers must be registered at game startup.
 
 ----
 
@@ -917,6 +592,151 @@ The suspect board is the fed's most complex React component — invest in making
 - Boss item custom handlers must be registered at game initialization (`game-init.ts`) or effects silently skip (no crash)
 - Crafting mods flow through the existing `ProgressionEffectsEngine` alongside skill/trophy effects — no special handling
 - The Armory UI shares component structure with the killer's Workshop, differing only in role-specific theming and recipe filtering
+
+### TypeScript Types
+
+Core types for `packages/shared/src/types/fed.ts`:
+
+```typescript
+// Arrest viability tier (maps score 0-100 to enum)
+type ArrestCondition = 'INSUFFICIENT' | 'WEAK' | 'MODERATE' | 'STRONG' | 'AIRTIGHT';
+
+// A suspect profile maintained by the suspect tracker
+interface SuspectProfile {
+  entityId: ID;
+  displayName: string;
+  suspicionScore: number;       // 0-100
+  isEliminated: boolean;
+  isPrimarySuspect: boolean;    // suspicionScore > 70
+  linkedEvidenceIds: ID[];
+}
+
+// Result from a witness interview
+interface InterrogationResult {
+  npcId: ID;
+  infoType: 'LOCATION' | 'TIMING' | 'DESCRIPTION' | 'FABRICATED';
+  reliability: number;          // 0.4–1.0
+  targetEntityId: ID | null;   // may point to innocent NPC if FABRICATED
+  timestamp: number;
+}
+
+// A counter-play ability available to the fed
+interface CounterPlayAbility {
+  id: string;                  // e.g. 'FA-8', 'FA-9'
+  name: string;
+  isDefault: false;
+  unlockSource: 'SKILL_TREE';
+  heatCostPerRank: number[];   // index = rank - 1
+  effects: Effect[];
+}
+
+// An active counter-play effect in progress this run
+interface CounterPlayEffect {
+  abilityId: string;
+  expiresAt: number;           // ms timestamp
+  isInadmissible: boolean;
+}
+
+// Fed-specific run state (extends base RunState)
+interface FedRunState {
+  arrestViability: number;     // 0-100
+  arrestCondition: ArrestCondition;
+  fedHeatLevel: number;        // 0-100 — session scoped only
+  arrestAttempts: number;
+  arrestSucceeded: boolean;
+  vigilanteWin: boolean;
+  inadmissibleEvidenceCount: number;
+  totalEvidenceCount: number;
+}
+
+// Fed objective (registered via ContentRegistry)
+interface FedObjective {
+  id: string;
+  description: string;
+  type: 'INVESTIGATE' | 'INTERVIEW' | 'IDENTIFY' | 'ARREST';
+  completionCondition: string; // human-readable for display
+}
+
+// Investigation tool definition
+interface InvestigationTool {
+  id: string;
+  name: string;
+  slot: 'TOOL';
+  abilityId: string;           // links to FA-x ability definition
+  description: string;
+}
+```
+
+### Zustand Store Interface
+
+For `apps/web/src/stores/fed.ts`:
+
+```typescript
+interface FedStore {
+  // State
+  suspects: SuspectProfile[];
+  interrogationResults: InterrogationResult[];
+  activeAbilityCooldowns: Record<string, number>; // abilityId → ms remaining
+  fedHeatLevel: number;
+  arrestCondition: ArrestCondition;
+  activeCounterPlayEffects: CounterPlayEffect[];
+  plantedInformants: ID[];   // NPC IDs currently acting as informants
+  arrestAttempts: number;
+  arrestSucceeded: boolean;
+  vigilanteWin: boolean;
+
+  // Actions (called via EventBus from Phaser, or directly from React HUD)
+  addSuspect: (profile: SuspectProfile) => void;
+  updateSuspect: (entityId: ID, update: Partial<SuspectProfile>) => void;
+  eliminateSuspect: (entityId: ID) => void;
+  addInterrogationResult: (result: InterrogationResult) => void;
+  setAbilityCooldown: (abilityId: string, ms: number) => void;
+  incrementHeat: (amount: number) => void;
+  setArrestCondition: (condition: ArrestCondition) => void;
+  activateCounterPlay: (effect: CounterPlayEffect) => void;
+  addPlantedInformant: (npcId: ID) => void;
+  removePlantedInformant: (npcId: ID) => void;
+  setArrestSucceeded: (value: boolean) => void;
+  setVigilanteWin: (value: boolean) => void;
+  reset: () => void;
+}
+```
+
+### EventBus Events
+
+Events emitted by fed systems (consumed by React stores and pieces 12+):
+
+```typescript
+// Typed event payloads for fed: namespace
+'fed:evidence-discovered'  → { evidenceId: ID, type: EvidenceType, quality: EvidenceQuality }
+'fed:witness-interviewed'  → { npcId: ID, result: InterrogationResult }
+'fed:suspect-identified'   → { entityId: ID, suspicionScore: number }
+'fed:arrest-attempted'     → { targetId: ID, condition: ArrestCondition }
+'fed:arrest-succeeded'     → { targetId: ID, viabilityScore: number }
+'fed:arrest-failed'        → { targetId: ID, reason: string }
+'fed:counter-play-activated' → { ability: CounterPlayAbility, heatGenerated: number }
+'fed:informant-report'     → { npcId: ID, reportedEntityId: ID, eventType: string }
+'fed:entrapment-triggered' → { decoyNpcId: ID, suspectId: ID }
+'fed:heat-threshold-crossed' → { level: number, newCap: number }
+```
+
+### Win/Lose Condition Implementation
+
+In `packages/game-engine/src/player/roles/fed-role.ts`:
+
+```typescript
+checkWinCondition(state: RunState): boolean {
+  // Win if: arrest succeeded OR vigilante kill succeeded
+  return fedStore.getState().arrestSucceeded || fedStore.getState().vigilanteWin;
+}
+
+checkLoseCondition(state: RunState): boolean {
+  // Lose if: player health zero OR all targets eliminated and disposed (killer wins)
+  const playerDead = playerStore.getState().health <= 0;
+  const killerWon = state.killerObjectivesComplete === true;
+  return playerDead || killerWon;
+}
+```
 
 ### File Structure
 

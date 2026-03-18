@@ -36,7 +36,7 @@ last_aligned: never
 
 ----
 
-Set up the complete visual design foundation for the game's non-game UI: Tailwind CSS v4 theme configuration with a dark-first color palette suited to the serial killer thriller genre, shadcn/ui and Magic UI component installation, app-layer wrappers around vendor components, centralized design tokens in the ui-theme package, and layout scaffolding for auth pages, marketing pages, and full-screen game view.
+Set up the complete visual design foundation for the game's non-game UI: a Tailwind CSS theme with a dark-first color palette suited to the serial killer thriller genre, a UI component library installation, app-layer wrappers around vendor components, centralized design tokens, and layout scaffolding for auth pages, marketing pages, and full-screen game view.
 
 This piece provides all UI primitives that auth pages, HUD components, menus, and marketing sections will import. It does not implement game mechanics — it creates the visual language.
 
@@ -44,79 +44,184 @@ This piece provides all UI primitives that auth pages, HUD components, menus, an
 
 The game's aesthetic is dark, tense, and noir-influenced. Think dimly lit crime scenes, neon-tinted surveillance footage, police procedural UI elements contrasted with predator-POV darkness. The palette should evoke:
 
-- **Killer perspective**: deep blacks, crimson accents, shadowed environments
-- **Fed perspective**: muted blues, manila case file yellows, institutional greens
+- **Killer perspective**: deep blacks, crimson accents, shadowed environments — danger and predation
+- **Fed perspective**: muted institutional blues — authority and investigation
 - **Shared UI**: near-black backgrounds, off-white text, high-contrast interactive elements
 
-Dark mode is the **default and primary mode**. Light mode is a secondary accessibility option. All components MUST look correct in dark mode first.
+Dark mode is the **default and primary mode**. Light mode is a secondary accessibility option. All components must look correct in dark mode first.
 
-### Tailwind v4 Theme Configuration
+### Tailwind CSS Theme
 
-**Critical**: Tailwind CSS v4 uses CSS-first configuration. There is NO `tailwind.config.ts` file. All theme values are defined via `@theme inline { }` in `apps/web/src/app/globals.css`. The `@theme inline` variant enables runtime CSS custom property access (required for dynamic theming).
+The chosen version of Tailwind CSS uses CSS-first configuration — there is no JavaScript config file. The entire theme is defined via a CSS `@theme` block in the global stylesheet. This enables runtime CSS custom property access, which is required for the game to dynamically read color values for the Phaser canvas and other programmatic uses.
 
-**`apps/web/src/app/globals.css`**:
+The color palette is organized into semantic groups:
+- **Background and surface**: a range of near-black tones from page background through elevated surfaces
+- **Borders**: subtle separators matching the dark palette
+- **Text**: primary (near-white), secondary (muted), and inverse (for light backgrounds)
+- **Killer / accent colors**: crimson red family — danger, action, killer theme
+- **Fed / investigation colors**: muted blue family — authority, investigation
+- **Status colors**: standard success (green), warning (amber), danger (red), info (blue)
+
+Typography variables define three font families: a clean sans-serif for body text, a bold display font for headers and HUD labels, and a monospace font for codes and procedural data.
+
+A light mode override block redefines the surface and text tokens when the light theme class is applied to the root element.
+
+### Design Tokens Package
+
+The UI theme package provides JavaScript access to design token values for code that cannot use CSS (such as the Phaser canvas). It mirrors the CSS custom properties as typed constants:
+
+- **Colors module**: All color values as a typed object with a `ColorKey` type
+- **Typography module**: Font family strings and a complete size scale in rem values
+- **Spacing module**: Custom spacing values for HUD and panel contexts
+- **Brand config**: Game name, tagline, description, and Open Graph metadata
+
+### Fonts
+
+Three Google Fonts are loaded via the Next.js font optimization system:
+- **Inter**: Clean, readable body text — menus, descriptions, UI labels
+- **Bebas Neue**: Bold, uppercase display font — game title, section headers, HUD labels (theatrical)
+- **JetBrains Mono**: Monospace for evidence codes, item IDs, investigation data (procedural feel)
+
+All three fonts are configured with CSS variable names that match the theme's font variables. The font variables are applied to the `<html>` element via className in the root layout.
+
+### shadcn/ui Components
+
+Install the following shadcn/ui components into the vendor component directory. These files are IMMUTABLE — never edit them directly. Customization happens only in app-layer wrappers.
+
+Components to install:
+- `button` — primary interactive element
+- `card` — container for panels, menus, info boxes
+- `dialog` — modals for confirmations, item details, game over screens
+- `dropdown-menu` — context menus, settings dropdowns
+- `input` — text inputs for forms
+- `label` — accessible form labels
+- `separator` — visual dividers
+- `toast` (via Sonner) — notification system
+- `tabs` — tab navigation (inventory, objectives, etc.)
+- `badge` — item rarity indicators, status tags
+- `progress` — health bars, loading progress (used outside the canvas)
+- `scroll-area` — scrollable panels for long lists
+- `avatar` — player profile display
+
+### Magic UI Components
+
+Install the following Magic UI components into the vendor component directory. These are used on marketing and landing pages and for select dramatic UI moments in menus. They must NOT be used in the game HUD — they have CSS animation overhead unsuitable for high-frequency component rendering.
+
+Components to install:
+- `animated-beam` — connection animations on the marketing page (killer↔fed)
+- `border-beam` — glowing borders for selected items, active states
+- `shimmer-button` — CTA button for marketing/landing page
+- `text-reveal` — dramatic text reveal for game title on landing page
+- `number-ticker` — animated stat counters on leaderboards
+- `meteors` — particle background for landing page
+
+### App-Layer Wrapper Components
+
+Feature code must always import from the app component layer, never from the vendor directory directly. This layer:
+- Applies game-specific styling defaults over the vendor base
+- Adds game-specific prop variants (e.g., an accent variant for the killer theme, a fed variant for the fed theme)
+- Provides a stable import contract — vendor component internals can change without updating feature code
+
+Wrapper components to create in the shared app component directory:
+- **AppButton**: Extends the base button with `accent` and `fed` variant support and game-themed defaults
+- **AppCard**: Wraps the card with game-themed border colors and surface background
+- **AppDialog**: Wraps the dialog with a dark overlay and game-themed content area
+- **AppInput**: Wraps the input with dark-theme styling and error state display
+- **AppToast**: Configures and exports the Sonner toast provider with game theme applied
+
+### Layout Components
+
+Three layout components scaffold the primary page types:
+
+- **PageLayout**: Full-height page with navigation header, content area, and footer. Used for landing page, profile, leaderboards, and settings.
+- **GameLayout**: Full-screen layout (full viewport height and width, no scroll) for the game canvas with no navigation. The Phaser canvas fills the entire area; React HUD components overlay it using absolute positioning. Used for all game routes.
+- **AuthLayout**: Centered card layout with dark background, game logo, and a centered form panel. Used for login and signup pages.
+
+### Theme Provider
+
+A client-side theme provider manages dark/light mode switching:
+- Default: dark mode
+- Applies a dark or light class to the root HTML element
+- Respects the system color scheme preference on first visit, then persists the user's choice
+- The light class triggers the light mode CSS variable overrides defined in the global stylesheet
+
+### Component Import Convention
+
+The import chain flows strictly in one direction: feature code imports from the domain app layer, which imports from shared app-layer wrappers, which in turn import from vendor components. Never skip a level. Feature code does not import from vendor components directly.
+
+### Edge Cases
+
+- **Tailwind class scanning**: Tailwind scans files for class usage automatically. Dynamic class strings (e.g., assembled via template literals) must use full class names, not assembled fragments — Tailwind cannot statically analyze assembled strings.
+- **shadcn CSS variable naming**: shadcn/ui uses its own CSS variable names internally. When configuring the component installer, verify that the variable names align with the theme variables defined in the global stylesheet.
+- **Font loading**: The Next.js font optimization system loads fonts at build time and injects them via className on the root element — not via style tags. All three fonts must be applied to the root HTML element.
+- **Magic UI performance**: Never use animated Magic UI components inside the game canvas area or in components that mount and unmount frequently.
+- **GameLayout z-index**: The Phaser canvas renders at the base z-index layer. React HUD overlay components must use absolute positioning and higher z-index values to appear above the canvas.
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Start with the `globals.css` theme definition as the foundation — everything else depends on the CSS custom properties being available. Then install shadcn/ui CLI, configure `components.json`, install individual components. Then create app-layer wrappers. Magic UI components can be added last.
+
+### Theme CSS — `apps/web/src/app/globals.css`
 
 ```css
 @import "tailwindcss";
 
 @theme inline {
-  /* Color palette — dark-first thriller aesthetic */
   --color-background: #0a0a0f;
   --color-surface: #12121a;
   --color-surface-elevated: #1a1a25;
   --color-border: #2a2a3a;
   --color-border-subtle: #1e1e2d;
 
-  /* Text */
   --color-text-primary: #e8e8f0;
   --color-text-secondary: #9090a8;
   --color-text-muted: #60607a;
   --color-text-inverse: #0a0a0f;
 
-  /* Brand / accent — crimson red for danger, action, killer theme */
   --color-accent: #c41e3a;
   --color-accent-hover: #e02040;
   --color-accent-subtle: #3a0a14;
   --color-accent-foreground: #ffffff;
 
-  /* Fed / investigation — muted blue */
   --color-fed: #1e5ba8;
   --color-fed-hover: #2470cc;
   --color-fed-subtle: #0a1e3a;
   --color-fed-foreground: #ffffff;
 
-  /* Status colors */
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   --color-info: #3b82f6;
 
-  /* Typography */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bebas-neue), var(--font-sans);
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
-  /* Spacing scale — extends Tailwind defaults */
   --spacing-game-hud: 1rem;
   --spacing-panel: 1.5rem;
 
-  /* Border radius */
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
 
-  /* Shadows */
   --shadow-panel: 0 4px 24px 0 rgba(0, 0, 0, 0.6);
   --shadow-overlay: 0 8px 48px 0 rgba(0, 0, 0, 0.8);
 }
 
-/* Dark mode (default) — CSS class-based switching via ThemeProvider */
 :root {
   color-scheme: dark;
 }
 
-/* Light mode override (accessibility) */
 .light {
   --color-background: #f5f5f7;
   --color-surface: #ffffff;
@@ -131,13 +236,10 @@ Dark mode is the **default and primary mode**. Light mode is a secondary accessi
 }
 ```
 
-### Design Tokens Package
+### Design Tokens — `packages/ui-theme/src/tokens/`
 
-**`packages/ui-theme/src/tokens/colors.ts`**:
-
+**colors.ts**:
 ```typescript
-// JS access to design token values — mirrors CSS custom properties
-// Used for programmatic access (Phaser canvas, Chart.js, etc.)
 export const colors = {
   background: '#0a0a0f',
   surface: '#12121a',
@@ -158,37 +260,26 @@ export const colors = {
 export type ColorKey = keyof typeof colors
 ```
 
-**`packages/ui-theme/src/tokens/typography.ts`**:
-
+**typography.ts**:
 ```typescript
 export const typography = {
   fontSans: 'Inter, ui-sans-serif, system-ui, sans-serif',
   fontDisplay: 'Bebas Neue, Inter, sans-serif',
   fontMono: 'JetBrains Mono, ui-monospace, monospace',
   sizes: {
-    xs: '0.75rem',
-    sm: '0.875rem',
-    base: '1rem',
-    lg: '1.125rem',
-    xl: '1.25rem',
-    '2xl': '1.5rem',
-    '3xl': '1.875rem',
-    '4xl': '2.25rem',
-    '5xl': '3rem',
+    xs: '0.75rem', sm: '0.875rem', base: '1rem', lg: '1.125rem',
+    xl: '1.25rem', '2xl': '1.5rem', '3xl': '1.875rem',
+    '4xl': '2.25rem', '5xl': '3rem',
   },
 } as const
 ```
 
-**`packages/ui-theme/src/tokens/spacing.ts`**:
-
+**spacing.ts**:
 ```typescript
-export const spacing = {
-  gameHud: '1rem',
-  panel: '1.5rem',
-} as const
+export const spacing = { gameHud: '1rem', panel: '1.5rem' } as const
 ```
 
-**`packages/ui-theme/src/brand/config.ts`**:
+### Brand Config — `packages/ui-theme/src/brand/config.ts`
 
 ```typescript
 export const brand = {
@@ -205,49 +296,20 @@ export const brand = {
 } as const
 ```
 
-### Font Configuration
-
-**`apps/web/src/app/fonts.ts`**:
+### Font Config — `apps/web/src/app/fonts.ts`
 
 ```typescript
 import { Inter, Bebas_Neue, JetBrains_Mono } from 'next/font/google'
 
-export const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
-export const bebasNeue = Bebas_Neue({
-  weight: '400',
-  subsets: ['latin'],
-  variable: '--font-bebas-neue',
-  display: 'swap',
-})
-
-export const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
-  display: 'swap',
-})
+export const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
+export const bebasNeue = Bebas_Neue({ weight: '400', subsets: ['latin'], variable: '--font-bebas-neue', display: 'swap' })
+export const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono', display: 'swap' })
 ```
 
-Apply in `apps/web/src/app/layout.tsx`:
-```typescript
-import { inter, bebasNeue, jetbrainsMono } from './fonts'
+Apply in `apps/web/src/app/layout.tsx` — add all three variables to the `<html>` element className.
 
-// In the html element className:
-// `${inter.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`
-```
+### shadcn CLI Config — `apps/web/components.json`
 
-Fonts rationale:
-- **Inter**: Clean, readable body text — menus, descriptions, UI labels
-- **Bebas Neue**: Bold, uppercase display font — game title, section headers, HUD labels (theatrical)
-- **JetBrains Mono**: Monospace for evidence codes, item IDs, investigation data (procedural feel)
-
-### shadcn/ui Components
-
-**Configuration**: `apps/web/components.json` must point to the vendor directory:
 ```json
 {
   "$schema": "https://ui.shadcn.com/schema.json",
@@ -270,40 +332,9 @@ Fonts rationale:
 }
 ```
 
-Install these shadcn/ui components into `apps/web/src/components/vendor/shadcn/`:
-- `button` — primary interactive element
-- `card` — container for panels, menus, info boxes
-- `dialog` — modals for confirmations, item details, game over screens
-- `dropdown-menu` — context menus, settings dropdowns
-- `input` — text inputs for forms
-- `label` — accessible form labels
-- `separator` — visual dividers
-- `toast` (via Sonner) — notification system
-- `tabs` — tab navigation (inventory, objectives, etc.)
-- `badge` — item rarity indicators, status tags
-- `progress` — health bars, loading progress (used outside the canvas)
-- `scroll-area` — scrollable panels for long lists
-- `avatar` — player profile display
+### App-Layer Wrapper Signatures
 
-**IMPORTANT**: The files in `apps/web/src/components/vendor/shadcn/` are IMMUTABLE. Never edit them directly. Customization happens only in the app-layer wrappers.
-
-### Magic UI Components
-
-Install into `apps/web/src/components/vendor/magic-ui/`:
-- `animated-beam` — for connection animations on the marketing page (killer↔fed)
-- `border-beam` — glowing borders for selected items, active states
-- `shimmer-button` — CTA button for marketing/landing page
-- `text-reveal` — dramatic text reveal for game title on landing page
-- `number-ticker` — animated stat counters on leaderboards
-- `meteors` — particle background for landing page
-
-These are used on marketing/landing pages and for select dramatic UI moments in menus. They MUST NOT be used in the game HUD (performance constraint).
-
-### App-Layer Wrapper Components
-
-Feature code MUST import from `components/app/`, never from `components/vendor/` directly.
-
-**`apps/web/src/components/app/common/AppButton.tsx`**:
+**AppButton** (`apps/web/src/components/app/common/AppButton.tsx`):
 ```typescript
 'use client'
 import { Button } from '../../vendor/shadcn/button'
@@ -313,103 +344,44 @@ interface AppButtonProps extends ButtonProps {
   variant?: 'default' | 'accent' | 'fed' | 'ghost' | 'destructive' | 'outline'
 }
 
-// Wraps Button with game-themed default variant and className conventions
 export function AppButton({ variant = 'default', className, ...props }: AppButtonProps) { ... }
 ```
 
-**`apps/web/src/components/app/common/AppCard.tsx`**:
+**AppCard**: wraps `Card`, `CardContent`, `CardHeader`, `CardTitle`, `CardDescription` — applies surface background and game-themed border colors.
+
+**AppDialog**: wraps `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle` — applies dark overlay and themed content area.
+
+**AppInput**: wraps `Input` — applies dark-theme styling and error state display prop.
+
+**AppToast**: configures and exports Sonner `Toaster` with game theme; feature code uses `import { toast } from 'sonner'` directly.
+
+### Layout Component Implementations
+
+**GameLayout** (`apps/web/src/components/app/common/layout/GameLayout.tsx`):
 ```typescript
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../vendor/shadcn/card'
-// Wraps Card with game-themed border colors and surface background
+// className: "w-screen h-dvh overflow-hidden relative bg-background"
+// No navigation, no footer, no scroll
 ```
 
-**`apps/web/src/components/app/common/AppDialog.tsx`**:
+**AuthLayout** (`apps/web/src/components/app/common/layout/AuthLayout.tsx`):
 ```typescript
-'use client'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../vendor/shadcn/dialog'
-// Wraps Dialog with dark overlay and game-themed content area
+// Centered dark background with a centered card panel and game logo above form
 ```
 
-**`apps/web/src/components/app/common/AppInput.tsx`**:
+**PageLayout** (`apps/web/src/components/app/common/layout/PageLayout.tsx`):
 ```typescript
-'use client'
-import { Input } from '../../vendor/shadcn/input'
-// Wraps Input with dark-theme styling, error state display
+// Full height, navigation header, scrollable content area, footer
 ```
 
-**`apps/web/src/components/app/common/AppToast.tsx`**:
-```typescript
-// Re-exports configured Sonner Toaster with game theme applied
-// Usage: import { toast } from 'sonner' anywhere in app-layer code
-```
+### Theme Provider — `apps/web/src/components/app/common/theme-provider.tsx`
 
-### Layout Components
-
-**`apps/web/src/components/app/common/layout/PageLayout.tsx`**:
-```typescript
-// Standard page layout: full height, navigation header, content area, footer
-// Used for: landing page, profile page, leaderboards, settings
-```
-
-**`apps/web/src/components/app/common/layout/GameLayout.tsx`**:
-```typescript
-// Full-screen layout for the game canvas — no navigation, no scrolling
-// 100dvh × 100dvw, overflow hidden
-// Hosts the Phaser canvas (full screen) with React HUD overlay (position: absolute)
-// Used for: /game/* routes
-```
-
-**`apps/web/src/components/app/common/layout/AuthLayout.tsx`**:
-```typescript
-// Centered card layout for auth pages
-// Dark background, centered panel, game logo above form
-// Used for: /login, /signup
-```
-
-### Theme Provider
-
-**`apps/web/src/components/app/common/theme-provider.tsx`**:
 ```typescript
 'use client'
-// Uses next-themes or manual localStorage approach
-// Provides: dark (default) / light toggle
-// Adds .dark or .light class to <html> element
-// Respects prefers-color-scheme on first visit, then persists user preference
+// next-themes or manual localStorage
+// Adds .dark or .light class to <html>
+// Default: dark
+// Respects prefers-color-scheme on first visit, then persists choice
 ```
-
-Dark mode is default. The `.dark` class activates the dark variables (which are the `@theme inline` defaults). The `.light` class applies the `.light` override block defined in `globals.css`.
-
-### Component Import Convention
-
-```
-Feature code
-  → apps/web/src/components/app/[domain]/MyComponent.tsx
-    → apps/web/src/components/app/common/AppButton.tsx
-      → apps/web/src/components/vendor/shadcn/button.tsx  (IMMUTABLE)
-```
-
-Never skip a level. Feature code does not import from `vendor/` directly.
-
-### Edge Cases
-
-- **Tailwind v4 purge**: Tailwind v4 scans for class usage automatically. Ensure dynamic class strings (template literals like `` `text-${color}` ``) use full class names, not dynamic fragments.
-- **shadcn dark mode**: shadcn/ui uses CSS variables that must match our `@theme inline` variable names. Verify variable names align (e.g., `--background`, `--foreground`, etc.) when configuring `components.json`.
-- **Font loading**: `next/font/google` loads fonts at build time. All fonts must be specified in `fonts.ts` and applied to the `<html>` element via className — not via `<style>` tags.
-- **Magic UI performance**: Magic UI animated components use CSS animations and occasional JavaScript. Never use them inside the game canvas area or in components that mount/unmount frequently.
-- **GameLayout z-index**: The Phaser canvas renders at z-index 0. React HUD overlay renders at z-index 10+. All HUD components must use `position: absolute` and appropriate z-index values.
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Start with the `globals.css` theme definition as the foundation — everything else depends on the CSS custom properties being available. Then install shadcn/ui CLI, configure `components.json`, install individual components. Then create app-layer wrappers. Magic UI components can be added last.
 
 ### Key Library Versions
 

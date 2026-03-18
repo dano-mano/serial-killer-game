@@ -40,11 +40,113 @@ last_aligned: never
 
 ----
 
-Bootstrap the complete Turborepo monorepo for a browser-based asymmetric roguelite game built with Next.js 16, Phaser 3, and Supabase. This piece creates the entire development infrastructure — every subsequent feature depends on this foundation.
+Bootstrap the complete Turborepo monorepo for a browser-based asymmetric roguelite game. This piece creates the entire development infrastructure — every subsequent feature depends on this foundation.
 
 ### Monorepo Structure
 
-The project uses Turborepo with four packages:
+The project uses a monorepo build system with four packages that enforce a strict dependency topology:
+
+- **Web app**: The Next.js application. Contains the App Router pages, React components organized by domain, a centralized config module, a Data Access Layer, Zustand stores, singleton service clients (logger, error tracking), and Server Actions.
+- **Game engine**: All Phaser game code. This package must never import React — the isolation between game engine and UI framework is a hard architectural rule.
+- **Shared**: Types, constants, schemas, and utilities used by both the web app and the game engine. No framework dependencies.
+- **UI theme**: Design tokens and brand configuration. No framework dependencies.
+
+Supporting directories at the root: a database migrations folder, a cloud functions folder, and GitHub Actions CI/CD workflows.
+
+### Environment Configuration
+
+The application uses a centralized configuration module that validates all environment variables at startup using a schema validation library. The application must refuse to start if any required variable is missing or invalid — no lazy validation at first use. No code outside the configuration module may read environment variables directly.
+
+Required environment variables include:
+- The Supabase project URL and anonymous key (both public, available to the client)
+- The Supabase service role key (server-only, must never be exposed to client bundles)
+- The Sentry data source name for error tracking
+- A Sentry auth token for CI/CD source map uploads
+- Optional analytics keys for PostHog
+- An optional Azure Blob Storage base URL for game asset delivery
+
+### Structured Logging
+
+A singleton logger provides all application logging:
+- In development: human-readable, colorized console output
+- In production: structured JSON with consistent fields (timestamp, level, message, context object)
+- Errors are automatically forwarded to the error tracking service
+- No direct console usage in production code — all output routes through the logger
+
+### Error Tracking
+
+A singleton error tracking client is initialized separately for client-side and server-side contexts:
+- Client-side: captures error boundary failures and includes component context
+- Server-side: captures request context (route, method, user ID) without personal data
+- Source maps are uploaded during CI/CD so stack traces reference original source
+
+### Error Handling
+
+All data access and game logic uses an explicit Result pattern (ok/err) rather than thrown exceptions:
+- A Result wrapper type encapsulates either a success value or a typed error
+- Common error categories: base application error, validation failure, not-found, unauthorized, database error
+- Errors can be serialized for transport across process boundaries
+- Convention: DAL functions and game engine logic return Result values; Server Actions use a safe action wrapper; React error boundaries handle unrecoverable thrown exceptions
+
+### ESLint Configuration
+
+The linter enforces two critical custom rules in addition to standard TypeScript and Next.js rules:
+- No barrel files: index files that merely re-export other modules are rejected
+- No direct environment variable access: reading environment variables is only permitted within the centralized config module
+
+The barrel file restriction does not apply to package boundary entry points in the game-engine and shared packages.
+
+### Testing Infrastructure
+
+Three testing layers are configured:
+- **Unit and component tests**: A workspace-aware test runner with per-package configuration. Component testing in the web app uses a React testing library. Tests live in a centralized tests directory at each package root, mirroring the source structure.
+- **End-to-end tests**: A browser automation framework is configured in the web app with a basic scaffold and an example test.
+- All test files use a `.test.ts` or `.test.tsx` suffix.
+
+### Docker
+
+A multi-stage container build produces a minimal production image:
+1. First stage installs all dependencies
+2. Second stage runs the build (producing a standalone output)
+3. Third stage copies only the standalone output — no development dependencies in production
+
+Public environment variables are injected at build time as build arguments. Secret server-side variables are provided at runtime via the hosting environment, never baked into the image.
+
+### CI/CD
+
+**On pull request**: lint, test, and build all packages; audit dependencies for critical or high severity vulnerabilities; verify the Node.js version matches the pinned engine requirement.
+
+**On push to main**: run all CI checks, build and push a Docker image to a container registry, then deploy to the hosting service.
+
+### Shared Types Scaffold
+
+The shared package contains two foundational files created in this piece and extended by every subsequent piece:
+
+A base types file defines the primitive type aliases used project-wide: a string-based identifier type (UUID format), a string-based timestamp type (ISO 8601), and a base data transfer object shape with an id and timestamps.
+
+A base schemas file provides reusable validation schemas for those primitives, plus a standard schema for limit/offset pagination parameters.
+
+### Edge Cases
+
+- Application MUST fail fast on startup if required env vars are missing (not at first use)
+- The container build must handle the monorepo structure correctly (prune for the web app only)
+- CI must cache dependency and build caches for performance
+- The barrel file lint rule must not false-positive on package boundary entry points in the shared and game-engine packages
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Use `npx create-turbo@latest` as starting point, then restructure to match the required monorepo layout. Alternatively, scaffold manually to ensure exact structure compliance with the constitution.
+
+### Directory Structure
 
 ```
 /
@@ -111,17 +213,7 @@ The project uses Turborepo with four packages:
 └── package.json                 # Workspaces definition
 ```
 
-### Package Naming Convention
-
-- `@repo/game-engine` — Phaser game code
-- `@repo/shared` — Shared types, constants, schemas, utilities
-- `@repo/ui-theme` — Design tokens and brand configuration
-
-### Environment Configuration
-
-Centralized environment config at `apps/web/src/config/env.ts` using Zod validation. The application MUST fail to start if required environment variables are missing or invalid. No direct `process.env` access anywhere else in the codebase.
-
-Initial environment variables:
+### Environment Variables
 
 | Variable | Type | Required | Description |
 |----------|------|----------|-------------|
@@ -134,104 +226,26 @@ Initial environment variables:
 | `NEXT_PUBLIC_POSTHOG_HOST` | string (URL) | No | PostHog instance URL |
 | `AZURE_BLOB_STORAGE_URL` | string (URL) | No | Azure Blob Storage base URL for game assets |
 
-### Structured Logging
+### Shared Types — `packages/shared/src/types/common.ts`
 
-Pino 10.x singleton at `apps/web/src/lib/logger/pino.ts`:
-- Development: pretty-printed console output with colors
-- Production: structured JSON with consistent fields (timestamp, level, message, context)
-- Sentry integration: errors automatically forwarded to Sentry
-- No `console.log` in production code — all logging through Pino
+```typescript
+type ID = string        // UUID format
+type Timestamp = string // ISO 8601
 
-### Error Tracking
+interface BaseDto {
+  id: ID
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+```
 
-Sentry singleton at `apps/web/src/lib/sentry/client.ts`:
-- Client-side: automatic error boundary capture, component context
-- Server-side: request context (route, method, user ID without PII)
-- Source map uploading in CI/CD pipeline
+### Shared Schemas — `packages/shared/src/schemas/common.ts`
 
-### Error Handling
-
-neverthrow Result pattern utilities at `packages/shared/src/utils/result.ts`:
-- `Result<T, E>` wrapper with standard `ok()` and `err()` constructors
-- Common error types: `AppError` (base), `ValidationError`, `NotFoundError`, `UnauthorizedError`, `DatabaseError`
-- Error serialization utilities for crossing process boundaries
-- Convention: DAL functions and game engine logic return `Result<T, E>`. Server Actions use `next-safe-action`. React error boundaries catch thrown exceptions.
-
-### ESLint Configuration
-
-Flat config at `eslint.config.mjs`:
-- `eslint-config-next` base
-- Custom rule: no barrel files (reject `index.ts` that re-export)
-- Custom rule: no direct `process.env` access outside `config/` directories
-- TypeScript-ESLint strict rules
-- Per-package config overrides where needed
-
-### Testing Infrastructure
-
-- **Vitest 4.1.0**: Workspace config at root (`vitest.workspace.ts`) with per-package configs
-- **React Testing Library 16.3.2**: Configured in `apps/web/vitest.config.ts` for component testing
-- **Playwright 1.58.2**: Config at `apps/web/playwright.config.ts`, basic scaffold with example test
-- Tests live in `tests/` at each package root, mirroring `src/` structure
-- `.test.ts` / `.test.tsx` suffix required
-
-### Docker
-
-Multi-stage Dockerfile using `node:24-alpine`:
-1. **deps stage**: `npm ci` (all dependencies for build)
-2. **build stage**: `turbo build --filter=web` (Next.js standalone output)
-3. **runner stage**: Copy standalone output, `node server.js` (minimal image)
-
-`NEXT_PUBLIC_*` variables set as build-args. Server-side secrets set at runtime via Azure App Service Application Settings (never baked into image).
-
-### CI/CD
-
-**ci.yml** (on PR):
-1. Setup Node.js 24.14.0
-2. `npm ci`
-3. `turbo lint`
-4. `turbo test`
-5. `turbo build`
-6. `npm audit` (fail on critical/high)
-7. Validate Node.js version matches `engines.node`
-
-**deploy.yml** (on push to main):
-1. Run CI checks
-2. Docker build with build-args for `NEXT_PUBLIC_*` vars
-3. Push to ghcr.io
-4. Deploy to Azure App Service (pull from ghcr.io)
-
-### Shared Types Scaffold
-
-`packages/shared/src/types/common.ts`:
-- `type ID = string` (UUID format)
-- `type Timestamp = string` (ISO 8601)
-- `type Result<T, E> = import('neverthrow').Result<T, E>`
-- Base DTO interface with `id` and timestamps
-
-`packages/shared/src/schemas/common.ts`:
-- `idSchema` — Zod UUID validator
-- `timestampSchema` — Zod ISO 8601 validator
-- `paginationSchema` — Zod schema for limit/offset pagination
-
-### Edge Cases
-
-- Application MUST fail fast on startup if required env vars are missing (not at first use)
-- Dockerfile MUST handle Turborepo monorepo structure (prune for web app)
-- GitHub Actions MUST cache `node_modules` and Turborepo cache for performance
-- ESLint must not false-positive on `packages/shared/` package.json `exports` field (these are package boundary entry points, not barrel files)
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Use `npx create-turbo@latest` as starting point, then restructure to match the required monorepo layout. Alternatively, scaffold manually to ensure exact structure compliance with the constitution.
+```typescript
+// idSchema — Zod UUID validator
+// timestampSchema — Zod ISO 8601 validator
+// paginationSchema — Zod schema for limit/offset pagination
+```
 
 ### Package Configuration
 

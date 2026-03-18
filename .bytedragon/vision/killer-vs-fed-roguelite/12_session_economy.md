@@ -56,324 +56,75 @@ last_aligned: never
 
 Implement the within-run economy that completes the single-run gameplay loop. Session coins are earned through role-appropriate actions, spent at an in-run shop offering random temporary powerups, and consumed in random encounter events. At run end, a scoring system computes performance and awards persistent materials — including the scarce ghost_token currency and new salvage_parts material — used by meta-progression (the persistent-progression feature). Run results are saved to the database. This piece transforms isolated role systems into a cohesive run loop with clear start, middle, and end.
 
-### Dependency Details (Inline — Do Not Reference Other Documents)
+### Dependency Overview
 
-#### From packages/shared/src/types/common.ts
-```typescript
-type ID = string;          // UUID format
-type Timestamp = string;   // ISO 8601
-```
+**From piece 01 (foundation)**: Structured logging (Pino) available via a shared logger module. All environment variables accessed through a typed env config module — never directly via process.env.
 
-#### From packages/shared/src/utils/result.ts (neverthrow)
-```typescript
-import { Result, ok, err } from 'neverthrow';
-type AppError = { code: string; message: string; context?: Record<string, unknown> };
-type ValidationError = AppError & { code: 'VALIDATION_ERROR'; fields: Record<string, string> };
-type DatabaseError = AppError & { code: 'DATABASE_ERROR' };
-```
+**From piece 02 (Supabase)**: Server-side Supabase client for database access (DAL functions). Used for persisting run history and daily bonus tracking.
 
-#### From packages/shared/src/types/player.ts (piece 07)
-```typescript
-type PlayerRole = 'KILLER' | 'FED'
-```
+**From piece 03 (design system)**: Shared UI components (buttons, cards, dialogs, inputs, toasts) and layout components for the shop panel, encounter dialog, and results page.
 
-#### From packages/shared/src/types/run.ts (piece 07)
-```typescript
-interface RunConfig { seed: string; biome: Biome; role: PlayerRole; loadout: Loadout }
-interface RunState { phase: 'ACTIVE' | 'COMPLETE'; tickCount: number; startTime: Timestamp }
-interface RunResult { outcome: 'WIN' | 'LOSE'; score: number; durationSeconds: number; materialsEarned: Record<string, number> }
-```
+**From piece 04 (infrastructure)**: EventBus for emitting and receiving game events between the Phaser game engine and React stores.
 
-#### From packages/game-engine/src/run/run-manager.ts (piece 07)
-```typescript
-// Run lifecycle hooks this piece extends:
-onRunStart(config: RunConfig): void    // session-economy initializes here
-onRunEnd(result: RunResult): void      // scoring runs here, results persisted
-```
+**From piece 07 (player/role framework)**: Player role (KILLER or FED), run configuration (seed, biome, role, loadout), run state (phase, tick count, start time), run result (outcome, score, duration, materials earned). Run manager lifecycle hooks: `onRunStart` (where session economy initializes) and `onRunEnd` (where scoring and persistence happen). Inventory types: item ID, type, name, rarity (COMMON through MYTHIC), effect. Inventory actions: add item, remove item.
 
-#### From packages/shared/src/types/inventory.ts (piece 07)
-```typescript
-interface InventoryItem { id: ID; itemType: ItemType; name: string; rarity: ItemRarity; effect: ItemEffect }
-type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC'
-```
+**From piece 08 (combat)**: Status effect type (ID, name, buff/debuff type, remaining duration in milliseconds). Status effect system functions: apply and remove status effects on entities. Temp powerups are applied as status effects.
 
-#### From packages/game-engine/src/player/inventory.ts (piece 07)
-```typescript
-addItem(item: InventoryItem): Result<void, AppError>
-removeItem(itemId: ID): Result<void, AppError>
-```
+**From piece 10 (killer gameplay)**: Killer run state data consumed for scoring: targets eliminated, targets disposed, evidence destroyed. Killer Zustand store with kill count, disposal count, and evidence destroyed count.
 
-#### From packages/shared/src/types/combat.ts (piece 08)
-```typescript
-interface StatusEffect { id: ID; name: string; type: 'BUFF' | 'DEBUFF'; remainingMs: number }
-```
+**From piece 11 (fed gameplay)**: Fed run state data consumed for scoring: evidence collected, interrogations performed, arrest attempts, arrest condition (INSUFFICIENT/WEAK/MODERATE/STRONG/AIRTIGHT). Fed Zustand store with those same fields plus current arrest condition tier.
 
-#### From packages/game-engine/src/combat/status-effects.ts (piece 08)
-```typescript
-// Temp powerups applied as status effects via:
-applyStatusEffect(entityId: ID, effect: StatusEffect): void
-removeStatusEffect(entityId: ID, effectId: ID): void
-```
+### New Data Entities
 
-#### From packages/shared/src/types/killer.ts (piece 10)
-```typescript
-// Killer scoring criteria consumed from:
-interface KillerObjective { targetsEliminated: number; targetsDisposed: number; evidenceDestroyed: number }
-```
+**Session currency**: A transient coin balance earned during a run and reset at run end. Tracks total earned and total spent for scoring breakdown.
 
-#### From packages/shared/src/types/fed.ts (piece 11)
-```typescript
-// Fed scoring criteria consumed from:
-interface FedRunState { evidenceCollected: number; interrogationsPerformed: number; arrestAttempts: number }
-type ArrestCondition = 'INSUFFICIENT' | 'WEAK' | 'MODERATE' | 'STRONG' | 'AIRTIGHT'
-```
+**Persistent currency**: A map of material type names to integer amounts. Material types: evidence_dust (fed wins), blood_marks (killer wins), ghost_tokens (good/excellent wins + bonuses), case_files (fed investigation bonuses), shadow_coins (killer evasion bonuses), salvage_parts (equipment dismantling only). All material type keys are validated server-side before any database insert.
 
-#### From apps/web/src/stores/killer.ts (piece 10)
-```typescript
-// Killer Zustand store — economy reads:
-interface KillerStore { targets: KillerTarget[]; kills: number; disposals: number; evidenceDestroyed: number }
-```
+**Shop offering**: A single item available in the in-run shop. Has a powerup reference, display name, description, icon key, session coin price, applicable role (KILLER/FED/SHARED), and rarity (COMMON/UNCOMMON/RARE).
 
-#### From apps/web/src/stores/fed.ts (piece 11)
-```typescript
-// Fed Zustand store — economy reads:
-interface FedStore { evidenceCollected: number; interrogationsPerformed: number; arrestCondition: ArrestCondition }
-```
+**Random encounter**: A scripted event that may trigger on zone transitions. Has a title, description, a list of player choices, a trigger probability per zone crossing (0–1), and a cooldown zone count (how many zones before the same encounter can repeat).
 
-#### From packages/game-engine/src/utils/event-bus.ts (piece 04)
-```typescript
-EventBus.emit(event: string, data: unknown): void
-EventBus.on(event: string, callback: (data: unknown) => void): void
-```
+**Encounter choice**: One option within an encounter. Has a label, description, optional coin cost, and an outcome describing what happens when selected (coin change, powerup granted, evidence modifier, heat modifier, suspicion modifier, item granted, narrative text).
 
-#### From apps/web/src/components/app/common/ (piece 03)
-```typescript
-AppButton, AppCard, AppDialog, AppInput, AppToast
-PageLayout, GameLayout
-```
+**Ghost token bonus**: A record of an additional ghost token award from a special source (first win of day, biome first-clear, achievement milestone, weekly challenge). Tracks source, amount, and when claimed. Server-side tracking required — never trust client.
 
-#### From apps/web/src/lib/supabase/server.ts (piece 02)
-```typescript
-// Server-side Supabase client for DAL:
-createServerClient(): SupabaseClient
-```
+**Salvage part drop**: Records how many salvage parts a piece of equipment yields when dismantled. Rates by rarity: COMMON 1, UNCOMMON 2, RARE 4, LEGENDARY 8. MYTHIC equipment cannot be dismantled.
 
-#### From apps/web/src/lib/logger/pino.ts (piece 01)
-```typescript
-import logger from '@/lib/logger/pino';
-logger.info({ context }, 'message');
-logger.error({ error, context }, 'message');
-```
+**Temporary powerup**: A run-only buff applied as a status effect. Has role applicability, rarity, a list of stat effects (each with a stat name, modifier value, modifier type FLAT/PERCENT, and duration: full-run/one-zone/timed-milliseconds), and a status effect identifier used to apply/remove it from entities.
 
-#### From apps/web/src/config/env.ts (piece 01)
-```typescript
-// All env vars accessed through this module, never process.env directly
-import { env } from '@/config/env';
-```
+### Database Tables
 
-### New Types to Create
+**run_history table**: Records the outcome of each completed run. One row per run. Fields:
+- Run ID (UUID primary key)
+- User ID (foreign key to auth.users, cascade delete)
+- Role played (KILLER or FED, validated server-side)
+- Biome name
+- Final score (integer, default 0)
+- Duration in seconds (integer, default 0)
+- Targets eliminated (nullable integer — relevant for killer only)
+- Evidence collected (nullable integer — relevant for fed only)
+- Outcome (WIN, LOSE, or ABANDONED)
+- Materials earned (JSONB map of material type to integer amount — e.g., `{"evidence_dust": 3, "ghost_tokens": 2}`)
+- Created timestamp
 
-**`packages/shared/src/types/economy.ts`**:
+Indexed by user ID + created timestamp descending (for run history queries ordered most-recent first). Row-level security: users can SELECT and INSERT their own rows. Run history is immutable — no UPDATE or DELETE.
 
-```typescript
-import { ID, Timestamp } from './common';
+**user_daily_bonus table**: Tracks when each user last claimed the first-win-of-the-day ghost token bonus. One row per user per role. Fields:
+- User ID (foreign key to auth.users, cascade delete)
+- Role (KILLER or FED)
+- Last claimed date (DATE, not timestamp — server uses UTC date for comparison)
 
-export interface SessionCurrency {
-  coins: number;           // earned/spent within run, resets at run end
-}
-
-export interface PersistentCurrency {
-  materials: Record<string, number>;
-  // Keys: 'evidence_dust', 'blood_marks', 'ghost_tokens', 'case_files',
-  //       'shadow_coins', 'salvage_parts'
-  // All material type constants defined in constants/economy.ts
-  // Material type validation server-side before any DB insert
-}
-
-export interface ShopOffering {
-  id: ID;
-  powerupId: string;          // references TempPowerup by id
-  name: string;
-  description: string;
-  iconKey: string;
-  price: number;              // session coins
-  role: 'KILLER' | 'FED' | 'SHARED';
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE';
-}
-
-export interface PriceTag {
-  amount: number;
-  currency: 'SESSION_COINS';
-}
-
-export interface RandomEncounter {
-  id: string;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  title: string;
-  description: string;
-  choices: EncounterChoice[];
-  triggerProbability: number;   // 0-1 per zone crossing
-  cooldownZones: number;        // zones before same encounter can appear again
-}
-
-export interface EncounterChoice {
-  label: string;
-  description: string;
-  cost?: PriceTag;
-  outcome: EncounterOutcome;
-}
-
-export interface EncounterOutcome {
-  coinsChange?: number;
-  powerupGranted?: string;      // TempPowerup id
-  evidenceModifier?: number;
-  heatModifier?: number;        // fed heat level change
-  suspicionModifier?: number;   // killer suspicion level change
-  itemGranted?: string;         // InventoryItem id
-  narrativeText: string;
-}
-
-// Ghost token bonus sources (server-side tracking required)
-export interface GhostTokenBonus {
-  source: 'FIRST_WIN_OF_DAY' | 'BIOME_FIRST_CLEAR' | 'ACHIEVEMENT_MILESTONE' | 'WEEKLY_CHALLENGE';
-  amount: number;
-  claimedAt: Timestamp;
-}
-
-// Salvage parts awarded when player dismantles equipment
-export interface SalvagePartDrop {
-  equipmentId: ID;
-  equipmentRarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
-  // MYTHIC cannot be dismantled
-  salvageAmount: number;
-}
-```
-
-**`packages/shared/src/types/powerups.ts`**:
-
-```typescript
-export type PowerupDuration = 'RUN' | 'ZONE' | 'TIMED_MS';
-
-export interface PowerupEffect {
-  stat: string;                    // e.g. 'moveSpeed', 'damageOutput', 'scanRadius'
-  modifier: number;                // flat or percentage (determined by modifierType)
-  modifierType: 'FLAT' | 'PERCENT';
-  duration: PowerupDuration;
-  durationMs?: number;             // required if duration === 'TIMED_MS'
-}
-
-export interface TempPowerup {
-  id: string;
-  name: string;
-  description: string;
-  iconKey: string;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE';
-  effects: PowerupEffect[];
-  statusEffectId: string;          // maps to status-effects.ts for application
-}
-```
-
-### Database Schema
-
-**`supabase/migrations/XXX_run_history.sql`**:
-
-```sql
-CREATE TABLE run_history (
-  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id          UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role             TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
-  biome            TEXT NOT NULL,
-  score            INTEGER NOT NULL DEFAULT 0,
-  duration_seconds INTEGER NOT NULL DEFAULT 0,
-  targets_eliminated INTEGER,       -- nullable: only relevant for killer role
-  evidence_collected INTEGER,       -- nullable: only relevant for fed role
-  outcome          TEXT NOT NULL CHECK (outcome IN ('WIN', 'LOSE', 'ABANDONED')),
-  materials_earned JSONB NOT NULL DEFAULT '{}',
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Index for user run history queries (most recent first)
-CREATE INDEX idx_run_history_user_id_created_at
-  ON run_history (user_id, created_at DESC);
-
--- Row-Level Security
-ALTER TABLE run_history ENABLE ROW LEVEL SECURITY;
-
--- Users can read their own run history
-CREATE POLICY "run_history_select_own"
-  ON run_history FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Users can insert their own run results (via server action — service role bypasses)
-CREATE POLICY "run_history_insert_own"
-  ON run_history FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- No update or delete: run history is immutable
-```
-
-The `materials_earned` JSONB column stores material type keys mapped to integer amounts, e.g.:
-```json
-{ "evidence_dust": 3, "blood_marks": 1, "ghost_tokens": 2, "salvage_parts": 0 }
-```
-
-Material type constants are defined in `packages/shared/src/constants/economy.ts` and validated server-side before insert. Valid keys: `evidence_dust`, `blood_marks`, `ghost_tokens`, `case_files`, `shadow_coins`, `salvage_parts`.
-
-**`supabase/migrations/XXX_daily_bonus.sql`**:
-
-```sql
--- Tracks when a user last claimed their first-win-of-the-day bonus
--- Required for server-side daily bonus validation (cannot trust client timestamps)
-CREATE TABLE user_daily_bonus (
-  user_id       UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role          TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
-  last_claimed  DATE NOT NULL,
-  -- Date (not timestamp) so timezone-aware comparison is correct at the server level
-  -- Server uses UTC date; client display converts to local timezone
-  UNIQUE (user_id, role)
-  -- One daily bonus record per user per role
-);
-
-ALTER TABLE user_daily_bonus ENABLE ROW LEVEL SECURITY;
-
--- Users can read their own daily bonus state
-CREATE POLICY "user_daily_bonus_select_own"
-  ON user_daily_bonus FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Server action upserts via service role (bypasses RLS)
--- No client-side insert allowed
-```
+Unique constraint on (user_id, role). Row-level security: users can read their own rows. All writes done by server-side service role — no client-side insert allowed.
 
 ### Session Economy Manager
 
-**`packages/game-engine/src/economy/session-economy.ts`**
+The session economy manager tracks coin state during a run. It is entirely client-side during play; the server validates final totals when the run result is saved.
 
-Manages session coin state during a run. Entirely client-side during play; server validates final totals via the run result save action.
+State tracked: current coin balance, total earned this run, total spent this run, and coins earned broken down by category (for the scoring breakdown display).
 
-```typescript
-interface SessionEconomyState {
-  coins: number;
-  totalEarned: number;
-  totalSpent: number;
-  coinsEarnedByCategory: Record<string, number>;
-}
+Actions: initialize (called at run start, optional starting coins), earn coins (amount + category), spend coins (fails gracefully if insufficient — never allows negative balance), check if player can afford an amount, get current balance, get a state snapshot, reset (called at run end).
 
-class SessionEconomyManager {
-  private state: SessionEconomyState;
-
-  initialize(startingCoins?: number): void;    // called by run-manager on run start
-  earn(amount: number, category: string): void; // category for scoring breakdown
-  spend(amount: number): Result<void, AppError>; // returns err if insufficient coins
-  canAfford(amount: number): boolean;
-  getBalance(): number;
-  getSnapshot(): SessionEconomyState;
-  reset(): void;                                // called by run-manager on run end
-}
-```
-
-**Coin earning rates** (defined in `constants/economy.ts`):
+**Coin earning rates**:
 
 | Killer Action | Coins | Category |
 |---------------|-------|---------|
@@ -402,25 +153,7 @@ Events listened on EventBus to trigger coin earning:
 
 ### In-Session Shop
 
-**`packages/game-engine/src/economy/session-shop.ts`**
-
-The shop appears at fixed locations within each biome map (1-2 per map, marked on minimap). Players can open the shop overlay, browse a randomly-selected pool of temporary powerups, and buy them with session coins.
-
-```typescript
-interface ShopState {
-  currentOfferings: ShopOffering[];   // 3-4 offerings at a time
-  rerollCount: number;
-  rerollCost: number;                 // increases per reroll: 10, 20, 40, 80
-  isOpen: boolean;
-}
-
-class SessionShop {
-  // Seed-based offering generation (deterministic for multiplayer)
-  generateOfferings(runSeed: string, visitNumber: number, role: PlayerRole): ShopOffering[];
-  purchase(offeringId: ID, economy: SessionEconomyManager): Result<TempPowerup, AppError>;
-  reroll(economy: SessionEconomyManager): Result<ShopOffering[], AppError>;
-}
-```
+The shop appears at fixed locations within each biome map (1–2 per map, marked on the minimap). Players can open the shop overlay, browse a randomly-selected pool of temporary powerups, and buy them with session coins.
 
 **Offering pool composition**:
 - 1 RARE offering (role-specific, ~25% reroll chance to see)
@@ -428,15 +161,13 @@ class SessionShop {
 - 1 UNCOMMON offering (shared)
 - 1 COMMON offering (shared)
 
-**Price scaling**: Base prices increase 20% per shop visit after the second visit. Prices are pre-baked into `ShopOffering.price` at generation time.
+**Price scaling**: Base prices increase 20% per shop visit after the second visit. Prices are computed at generation time (not recalculated on purchase).
 
-**Reroll**: Costs session coins (10 → 20 → 40 → 80 per reroll, doubling). Generates new offerings from same seed pool (deterministic). Reroll is seeded so both multiplayer players see same reroll sequence — neither can see the other's shop visit timing.
+**Reroll**: Costs session coins (10 → 20 → 40 → 80 per reroll, doubling). Generates new offerings from the same seed pool (deterministic — both multiplayer players see the same reroll sequence regardless of when they visit).
 
 ### Temporary Powerups
 
-**`packages/game-engine/src/economy/temp-powerups.ts`**
-
-All powerups are `TempPowerup` objects applied via `status-effects.ts`. They persist for the run duration (unless `ZONE` or `TIMED_MS` scoped).
+All powerups are applied as status effects. They persist for the run duration unless explicitly scoped to one zone or a timed duration in milliseconds.
 
 **Killer powerups** (sample — full set in implementation):
 
@@ -471,19 +202,16 @@ Powerups are applied by calling `status-effects.ts applyStatusEffect()`. Run-dur
 
 ### Random Encounters
 
-**`packages/game-engine/src/economy/random-encounters.ts`**
-
-Random encounters trigger on zone transitions. Each zone crossing rolls against `encounter.triggerProbability` (default 0.15, increases to 0.25 after zone 4). One encounter per zone maximum. A cooldown system prevents repeating the same encounter within `cooldownZones` transitions.
+Random encounters trigger on zone transitions. Each zone crossing has a 15% chance of triggering an encounter (rising to 25% after zone 4). At most one encounter triggers per zone. A cooldown prevents the same encounter from repeating within a configured number of zone transitions.
 
 **Encounter trigger flow**:
-1. Player crosses zone boundary → EventBus `zone:player-entered` fires
-2. Economy manager rolls probability check
-3. If triggered: select valid encounter for current role with no active cooldown
-4. Emit EventBus `encounter:triggered` with encounter data
-5. React `EncounterDialog.tsx` renders the choice UI
-6. Player choice resolves → `EncounterOutcome` applied → EventBus `encounter:resolved`
+1. Player crosses a zone boundary — a zone-entered event fires
+2. The economy manager performs a probability check
+3. If triggered: the system selects a valid encounter for the current role with no active cooldown
+4. The encounter dialog renders in the React UI
+5. The player selects a choice — the outcome is applied, and an encounter-resolved event fires
 
-**Killer encounters** (`killer-encounters.ts`):
+**Killer encounters**:
 
 | Encounter | Description | Choices |
 |-----------|-------------|---------|
@@ -493,7 +221,7 @@ Random encounters trigger on zone transitions. Each zone crossing rolls against 
 | Underground Fence | Sell excess items | Sell item for 150% value, Pass |
 | False Lead Tip | Anonymous tip about a "suspicious NPC" | Plant evidence near tip NPC (costs cleanup kit), Ignore |
 
-**Fed encounters** (`fed-encounters.ts`):
+**Fed encounters**:
 
 | Encounter | Description | Choices |
 |-----------|-------------|---------|
@@ -503,7 +231,7 @@ Random encounters trigger on zone transitions. Each zone crossing rolls against 
 | Evidence Locker | Unsecured evidence from old case | Take it (receives relevant evidence, +30 arrest viability, +10 heat — technically illegal), Secure and tag (+15 score bonus, no evidence) |
 | Witness in Danger | A witness NPC is being approached by suspect | Rush to protect (+15 viability if saved), Set up surveillance (entrapment-lite, +10 viability, +12 heat) |
 
-**Shared encounters** (`shared-encounters.ts`):
+**Shared encounters**:
 
 | Encounter | Description | Choices |
 |-----------|-------------|---------|
@@ -513,29 +241,23 @@ Random encounters trigger on zone transitions. Each zone crossing rolls against 
 
 ### Run Scoring
 
-**`packages/game-engine/src/run/run-scoring.ts`**
-
-Score is computed at run end from `SessionEconomyState.coinsEarnedByCategory` and role-specific run data.
+Score is computed at run end from the session economy's coin-earned-by-category breakdown and role-specific run data.
 
 **Killer scoring formula**:
-```
-baseScore = (kills × 500) + (disposed_kills × 300) + (evidence_destroyed × 50)
-bonuses = (bonus_objectives × 200) + (evasion_bonus × 150)
-timeBonus = max(0, (TARGET_TIME - actual_seconds) × 2)   // TARGET_TIME = 600s (10 min)
-penalties = (evidence_left_count × -30) + (witnesses_alive × -20)
-finalScore = (baseScore + bonuses + timeBonus + penalties) × difficultyMultiplier
-```
+- Base score: kills × 500, disposed kills × 300, evidence destroyed × 50
+- Bonuses: bonus objectives × 200, evasion bonus × 150
+- Time bonus: max(0, (600 seconds − actual seconds) × 2) — rewards fast runs
+- Penalties: evidence left on map × −30, witnesses still alive × −20
+- Final score: (base + bonuses + time bonus + penalties) × biome difficulty multiplier
 
 **Fed scoring formula**:
-```
-baseScore = (evidence_collected × 100) + (witnesses_interviewed × 80)
-arrestBonus = { STRONG: 2000, MODERATE: 1200, WEAK_COMBAT: 800, VIGILANTE: 400 }[arrestOutcome]
-investigationBonus = (suspects_eliminated × 50) + (bonus_objectives × 200)
-penalties = (wrong_arrest_penalty × -300) + (inadmissible_evidence_count × -20)
-finalScore = (baseScore + arrestBonus + investigationBonus + penalties) × difficultyMultiplier
-```
+- Base score: evidence collected × 100, witnesses interviewed × 80
+- Arrest bonus by tier: STRONG 2000, MODERATE 1200, combat-resolved 800, vigilante 400
+- Investigation bonus: suspects eliminated × 50, bonus objectives × 200
+- Penalties: wrong arrest × −300, inadmissible evidence count × −20
+- Final score: (base + arrest bonus + investigation bonus + penalties) × biome difficulty multiplier
 
-`difficultyMultiplier` is set by biome difficulty configuration from `types/biome.ts BiomeDifficulty`.
+The biome difficulty multiplier is defined in the biome configuration.
 
 **Performance tier thresholds** (used for material earn rate calculations):
 
@@ -549,35 +271,18 @@ finalScore = (baseScore + arrestBonus + investigationBonus + penalties) × diffi
 
 ### Run Results and Material Rewards
 
-**`packages/game-engine/src/run/run-results.ts`**
+Material rewards are computed from the final score and run outcome. Ghost tokens are the central gating currency with multiple sources. Salvage parts are a separate material type earned through equipment dismantling (not from runs directly — the material type appears in the same materials map for consistency but must always be 0 in run save submissions).
 
-Material rewards are computed from `finalScore` and `outcome`. Ghost tokens are now a central gating currency with multiple sources. Salvage parts are a new material type from equipment dismantling (awarded separately by the crafting system — not via runs directly, but the material type appears in the same `materialsEarned` map).
-
-```typescript
-function computeMaterialRewards(
-  score: number,
-  outcome: 'WIN' | 'LOSE',
-  role: PlayerRole,
-  biome: Biome
-): Record<string, number> {
-  // Base materials from score tiers
-  // WIN: full materials, LOSE: 40% materials
-  // Role-specific material types
-  // Biome bonus materials (rare materials from specific biomes)
-  // Ghost tokens: only on good/excellent WIN outcomes
-}
-```
-
-**Material types** (defined in `constants/economy.ts`):
+**Material types**:
 
 | Material | Source | Used For |
 |----------|--------|---------|
-| `evidence_dust` | Fed wins | Fed skill tree unlocks (R1-R5), fed crafting recipes |
-| `blood_marks` | Killer wins | Killer skill tree unlocks (R1-R5), killer crafting recipes |
-| `ghost_tokens` | Good/excellent wins + bonuses | Tier 3-5 skill ranks, boss item attunement (5 GT), legendary crafting recipes (5-10 GT) |
-| `case_files` | Fed investigation bonuses | Fed trophies |
-| `shadow_coins` | Killer evasion bonuses | Killer trophies |
-| `salvage_parts` | Equipment dismantling (Armory/Workshop) | Crafting recipe material cost |
+| evidence_dust | Fed wins | Fed skill tree unlocks (R1–R5), fed crafting recipes |
+| blood_marks | Killer wins | Killer skill tree unlocks (R1–R5), killer crafting recipes |
+| ghost_tokens | Good/excellent wins + bonuses | Tier 3–5 skill ranks, boss item attunement (5 GT), legendary crafting recipes (5–10 GT) |
+| case_files | Fed investigation bonuses | Fed trophies |
+| shadow_coins | Killer evasion bonuses | Killer trophies |
+| salvage_parts | Equipment dismantling (Armory/Workshop) | Crafting recipe material cost |
 
 **Updated material earn rates per performance tier**:
 
@@ -592,12 +297,12 @@ function computeMaterialRewards(
 
 **Ghost token bonuses** (additional sources beyond run performance):
 
-| Source | Amount | Frequency | Implementation |
-|--------|--------|-----------|----------------|
-| First win of the day | +1 | Daily per role | Server-side via `user_daily_bonus` table |
-| Biome first-clear | +3 | Once per biome per role | Checked against `run_history` post-run |
-| Achievement milestones (every 5th trophy unlocked) | +2 | Milestone | Triggered by `unlock-resolver.ts` |
-| Weekly challenge completion | +3 to +5 | Weekly | Requires weekly challenge system (future feature) |
+| Source | Amount | Frequency | Verification |
+|--------|--------|-----------|--------------|
+| First win of the day | +1 | Daily per role | Server-side — tracked in daily bonus table (date-based, UTC) |
+| Biome first-clear | +3 | Once per biome per role | Server-side — checked against run history for prior WIN on that biome+role |
+| Achievement milestones (every 5th trophy unlocked) | +2 | Milestone | Server-side — triggered by the unlock resolver at trophy grant time |
+| Weekly challenge completion | +3 to +5 | Weekly | Future feature — not implemented in this piece |
 
 **Salvage parts** (new material type):
 - Earned by dismantling equipment in the Armory/Workshop — NOT from runs directly
@@ -616,252 +321,94 @@ This creates meaningful resource tension with no single dominant strategy. Playe
 
 ### Ghost Token Tracker
 
-**`packages/game-engine/src/economy/ghost-token-tracker.ts`**
+The ghost token tracker handles bonus ghost token sources that require server-side state validation (first-win-of-the-day, biome first-clear). It calls server actions to check and claim bonuses — never trusts client-side claims.
 
-Handles calculation of ghost token bonuses that require server-side state (daily bonus, biome first-clear). The tracker calls server actions to check and claim bonuses — never trusts client-side claims.
+At run end the tracker: (1) receives the run result and role information, (2) calls server actions to check each applicable bonus source, (3) aggregates the confirmed bonus amounts, (4) adds them to the final materials earned map.
 
-```typescript
-class GhostTokenTracker {
-  // Called at run end to check all applicable ghost token bonuses
-  async calculateBonuses(
-    userId: string,
-    runResult: RunResult,
-    role: PlayerRole,
-    biome: string
-  ): Promise<GhostTokenBonus[]>;
-
-  // Returns ghost tokens earned from bonuses (for inclusion in materialsEarned)
-  async getTotalBonusTokens(bonuses: GhostTokenBonus[]): Promise<number>;
-}
-```
-
-The tracker emits no ghost tokens from bonuses until the server action confirms the claim. Ghost tokens from run performance (good/excellent wins) are computed deterministically from score and included in the base `materialsEarned` calculation.
+Ghost tokens from run performance (good/excellent WIN outcomes) are computed deterministically from the score and do not require server-side bonus validation. Bonus tokens from special sources (daily/biome) are validated and claimed server-side before being included in the materials earned display.
 
 ### DAL and Server Actions
 
-**`apps/web/src/dal/runs/history.ts`**:
+**Run history DAL**: Provides functions to save a run result (inserts one row into run_history), retrieve a user's run history (paginated, most recent first), and retrieve a single run by ID. Input fields: role, biome, score, duration in seconds, targets eliminated (killer only), evidence collected (fed only), outcome, and the materials earned map.
 
-```typescript
-import { Result } from 'neverthrow';
-import { AppError, DatabaseError } from '@repo/shared/src/utils/result';
+**Daily bonus DAL**: Checks whether a user has already claimed the first-win-of-the-day ghost token bonus for their current role (by querying user_daily_bonus for today's date in UTC). If not yet claimed, upserts the record and returns true (bonus granted). If already claimed, returns false (no bonus). Called by the claim-daily-bonus server action after a win is confirmed.
 
-export interface RunHistoryDTO {
-  id: string;
-  userId: string;
-  role: 'KILLER' | 'FED';
-  biome: string;
-  score: number;
-  durationSeconds: number;
-  targetsEliminated: number | null;
-  evidenceCollected: number | null;
-  outcome: 'WIN' | 'LOSE' | 'ABANDONED';
-  materialsEarned: Record<string, number>;
-  createdAt: string;
-}
+**Save-result server action**: A validated server action using next-safe-action and Zod. Authenticates the user, validates all input fields, applies anti-cheat logic, then calls the run history DAL to persist the result.
 
-export interface SaveRunInput {
-  role: 'KILLER' | 'FED';
-  biome: string;
-  score: number;
-  durationSeconds: number;
-  targetsEliminated?: number;
-  evidenceCollected?: number;
-  outcome: 'WIN' | 'LOSE' | 'ABANDONED';
-  materialsEarned: Record<string, number>;
-}
+**Claim-daily-bonus server action**: Called after a WIN is saved. Checks server-side whether the first-win-of-the-day bonus applies (queries the daily bonus DAL). Returns 0 or 1 ghost tokens to add to the materials earned. Client cannot claim this directly — only valid as a post-WIN server-side step.
 
-export async function saveRunResult(
-  userId: string,
-  input: SaveRunInput
-): Promise<Result<RunHistoryDTO, DatabaseError>>;
+**Anti-cheat validations** in the save-result server action:
+- Score plausibility: score divided by duration in seconds must not exceed a server-defined maximum rate (e.g., 50 coins/second equivalent)
+- Material consistency: total materials must match the expected reward for the given score tier
+- Known material types only: only the six valid material type keys are accepted; unknown keys cause the entire request to be rejected (not silently stripped — rejection surfaces bugs in the reward calculation code)
+- Role-data consistency: killer submissions without targets eliminated, or fed submissions without evidence collected, are rejected
+- Ghost token cap: ghost tokens in the submission must not exceed score-based tokens plus server-calculated eligible bonuses (verified independently using the daily bonus and run history tables)
 
-export async function getRunHistory(
-  userId: string,
-  limit?: number,
-  offset?: number
-): Promise<Result<RunHistoryDTO[], DatabaseError>>;
+### HUD and UI Components
 
-export async function getRunById(
-  runId: string,
-  userId: string
-): Promise<Result<RunHistoryDTO, AppError>>;
-```
-
-**`apps/web/src/dal/economy/daily-bonus.ts`**:
-
-```typescript
-// Check and claim first-win-of-the-day ghost token bonus
-// Called by claim-daily-bonus.ts server action
-// Returns true if bonus was successfully claimed (not already claimed today)
-export async function checkAndClaimDailyBonus(
-  userId: string,
-  role: 'KILLER' | 'FED'
-): Promise<Result<boolean, DatabaseError>>;
-```
-
-**`apps/web/src/app/actions/runs/save-result.ts`**:
-
-Server Action using `next-safe-action`. Validates input with Zod, authenticates user, calls DAL, returns typed result.
-
-```typescript
-'use server';
-import { createSafeActionClient } from 'next-safe-action';
-import { z } from 'zod';
-
-const VALID_MATERIAL_TYPES = [
-  'evidence_dust', 'blood_marks', 'ghost_tokens',
-  'case_files', 'shadow_coins', 'salvage_parts'
-] as const;
-
-const saveRunResultSchema = z.object({
-  role: z.enum(['KILLER', 'FED']),
-  biome: z.string().min(1),
-  score: z.number().int().min(0),
-  durationSeconds: z.number().int().min(0),
-  targetsEliminated: z.number().int().min(0).optional(),
-  evidenceCollected: z.number().int().min(0).optional(),
-  outcome: z.enum(['WIN', 'LOSE', 'ABANDONED']),
-  materialsEarned: z.record(z.enum(VALID_MATERIAL_TYPES), z.number().int().min(0)),
-});
-
-// Validation: score must be plausible given duration (anti-cheat: max 50 coins/second)
-// Validation: if KILLER role, targetsEliminated required; if FED role, evidenceCollected required
-// Validation: ghost_tokens must not exceed max possible for score tier + eligible bonuses
-// Validation: salvage_parts in materialsEarned must be 0 (salvage earned via dismantling only)
-```
-
-**`apps/web/src/app/actions/economy/claim-daily-bonus.ts`**:
-
-```typescript
-'use server';
-// Called after a win is recorded, before final materials are returned to client
-// Checks server-side whether first-win-of-the-day bonus applies
-// Upserts user_daily_bonus table
-// Returns additional ghost tokens to add to materialsEarned (0 or 1)
-// Client cannot claim this bonus directly — only valid post-win
-```
-
-**Anti-cheat validations** in server action:
-- Score plausibility: `score / durationSeconds <= MAX_SCORE_RATE` (server-defined constant)
-- Material consistency: `sum(materialsEarned.values)` must match expected reward for given score tier
-- Known material types only: only `VALID_MATERIAL_TYPES` keys accepted; unknown keys rejected (not silently stripped — reject the request to surface bugs)
-- Role-data consistency: killer without `targetsEliminated` or fed without `evidenceCollected` is rejected
-- Ghost token cap: ghost tokens in `materialsEarned` must not exceed `scoreBasedTokens + eligibleBonusTokens`; the server independently calculates eligible bonuses using `user_daily_bonus` and `run_history` tables
-
-### HUD Components
-
-**`apps/web/src/components/app/game/hud/ShopPanel.tsx`**
-
-React component, "use client". Renders when `economyStore.shopState.isOpen === true`.
-
-Layout:
+**Shop panel**: Renders when the economy store indicates the shop is open.
 - Header: "Shop — [N] coins" with coin icon
-- Offerings grid: 2×2 card layout (ShopOffering cards with rarity border colors)
-- Each card: icon, name, description, price badge, "Buy" button (disabled if insufficient coins)
-- Footer: "Reroll — [N] coins" button, close button
-- Powerup cards show rarity with color border: grey (COMMON), blue (UNCOMMON), gold (RARE)
+- Offerings grid: 2×2 card layout with rarity border colors (grey/blue/gold for COMMON/UNCOMMON/RARE)
+- Each card: icon, name, description, price badge, Buy button (disabled if insufficient coins)
+- Footer: Reroll button showing current reroll cost, close button
 
-**`apps/web/src/components/app/game/hud/EncounterDialog.tsx`**
-
-React component using `AppDialog`. Renders when `economyStore.activeEncounter` is set.
-
-Layout:
+**Encounter dialog**: Renders when an encounter is active. Uses the shared dialog component.
 - Title: encounter title
 - Body: encounter description narrative text
-- Choice buttons (2-3): each shows label, description, cost (if any), outcome hint
-- No "cancel" — player must choose. Timer: 30 seconds to choose (auto-selects first option on timeout)
+- Choice buttons (2–3): each shows label, description, cost if any, outcome hint
+- No cancel option — player must choose. Auto-selects first option after 30 seconds.
 
-**Results Page** — `apps/web/src/app/game/results/page.tsx`
-
-Server Component that reads `run-results.ts` store data (passed via searchParams or via client component hydration).
-
-Sections:
+**Post-run results page**: Server Component rendered after run completion.
 - Outcome banner: WIN / LOSE with role-appropriate imagery
 - Score breakdown: table showing each scoring category and its contribution
 - Materials earned: icon + amount per material type, including ghost tokens with explicit label
-- Ghost token bonuses applied this run (daily bonus, biome first-clear) shown separately with source label
-- Best moments: top 3 actions (highest single-action coin earns)
-- Continue button: → progression page or main menu
-- Play Again button: → role selection with same biome
+- Ghost token bonuses shown separately with their source label (daily bonus, biome first-clear, etc.)
+- Best moments: top 3 single-action coin earns
+- Continue button (to progression page or main menu) and Play Again button (same biome)
 
-### Zustand Stores
+### Economy State
 
-**`apps/web/src/stores/economy.ts`**:
+**Economy store** tracks:
+- Current coin balance and total earned this run
+- Shop state: open/closed, current offerings (3–4 items), reroll count, current reroll cost
+- Active temporary powerups applied this run
+- Active encounter waiting for player choice (null if none)
 
-```typescript
-interface EconomyStore {
-  coins: number;
-  totalEarned: number;
-  shopState: {
-    isOpen: boolean;
-    offerings: ShopOffering[];
-    rerollCount: number;
-    rerollCost: number;
-  };
-  activePowerups: TempPowerup[];
-  activeEncounter: RandomEncounter | null;
-  // Actions
-  earnCoins: (amount: number, category: string) => void;
-  spendCoins: (amount: number) => boolean;   // returns false if insufficient
-  openShop: (offerings: ShopOffering[]) => void;
-  closeShop: () => void;
-  purchasePowerup: (offeringId: string) => void;
-  setRerollCost: (cost: number) => void;
-  addPowerup: (powerup: TempPowerup) => void;
-  removePowerup: (powerupId: string) => void;
-  setActiveEncounter: (encounter: RandomEncounter | null) => void;
-  reset: () => void;
-}
-```
+Actions: earn coins (with category), spend coins (returns false if insufficient), open/close shop, purchase a powerup offering, update reroll cost, add/remove active powerups, set/clear active encounter, reset.
 
-**`apps/web/src/stores/run-results.ts`**:
+**Run results store** tracks:
+- Whether the run is complete, outcome, score, duration, score breakdown by category
+- Materials earned (including ghost tokens from run performance plus bonuses)
+- Ghost token bonuses by source (for display on results screen)
+- Whether the result has been saved to the server
 
-```typescript
-interface RunResultsStore {
-  isComplete: boolean;
-  outcome: 'WIN' | 'LOSE' | 'ABANDONED' | null;
-  score: number;
-  durationSeconds: number;
-  scoreBreakdown: Record<string, number>;
-  materialsEarned: Record<string, number>;  // includes ghost_tokens from run + bonuses
-  ghostTokenBonuses: GhostTokenBonus[];     // daily/biome/achievement bonuses for display
-  savedToServer: boolean;
-  // Actions
-  setResult: (result: RunResult, breakdown: Record<string, number>) => void;
-  setMaterialsEarned: (materials: Record<string, number>) => void;
-  setGhostTokenBonuses: (bonuses: GhostTokenBonus[]) => void;
-  markSaved: () => void;
-  reset: () => void;
-}
-```
+### Events Emitted
 
-### EventBus Events
-
-Events emitted by this piece:
-- `shop:opened` — `{ offerings: ShopOffering[] }`
-- `shop:item-purchased` — `{ powerup: TempPowerup, coinsSpent: number }`
-- `shop:rerolled` — `{ newOfferings: ShopOffering[], coinsSpent: number }`
-- `encounter:triggered` — `{ encounter: RandomEncounter }`
-- `encounter:resolved` — `{ encounterId: string, choiceIndex: number, outcome: EncounterOutcome }`
-- `economy:coins-earned` — `{ amount: number, category: string, newBalance: number }`
-- `economy:coins-spent` — `{ amount: number, newBalance: number }`
-- `run:scoring-complete` — `{ score: number, breakdown: Record<string, number> }`
-- `run:materials-calculated` — `{ materials: Record<string, number> }`
-- `run:ghost-token-bonuses-claimed` — `{ bonuses: GhostTokenBonus[], total: number }`
-- `run:saved-to-server` — `{ runId: string }`
+Events fired by the session economy systems (consumed by React stores and piece 14):
+- Shop opened (with current offerings)
+- Shop item purchased (powerup acquired, coins spent)
+- Shop rerolled (new offerings, coins spent)
+- Encounter triggered (encounter data)
+- Encounter resolved (encounter ID, choice made, outcome)
+- Coins earned (amount, category, new balance)
+- Coins spent (amount, new balance)
+- Scoring complete (final score, breakdown)
+- Materials calculated (materials earned map)
+- Ghost token bonuses claimed (bonuses list, total amount)
+- Result saved to server (run ID)
 
 ### Edge Cases
 
-- **Insufficient coins at shop**: "Buy" buttons disabled; reroll button disabled if can't afford reroll cost. Never allow negative coin balance.
-- **Run abandoned mid-session**: If player closes tab or disconnects, emit `run:abandoned` via beforeunload. Server Action still fires with `outcome: 'ABANDONED'` — awards 40% materials if score > 0. Ghost token bonuses (daily, biome first-clear) are NOT awarded on abandoned runs.
-- **Score anti-cheat failure**: If server action rejects score as implausible, save with `score = 0` and log warning. Do not block run history creation — silently correct. Player receives minimum materials (1 primary, 0 ghost tokens).
-- **Encounter during shop**: If encounter triggers while shop is open, queue the encounter and show after shop closes. Never layer two overlays.
-- **Multiplayer coin sync**: In multiplayer, session coins are per-player and NOT synced to opponent. Each player's economy runs independently. Only final scores and materials are synced at run end.
-- **Material type validation failure**: Unknown `materialsEarned` keys from client cause the entire request to be rejected (not silently stripped). This surfaces bugs in the reward calculation code rather than hiding them.
-- **Daily bonus race condition**: If two run-end save requests arrive within the same second (unlikely but possible), `user_daily_bonus` upsert with `ON CONFLICT DO UPDATE` handles idempotency. The bonus is awarded at most once per day per role regardless.
-- **Ghost token cap exceeded**: If client sends more ghost tokens than are theoretically possible for the score tier + eligible bonuses, the server rejects the materialsEarned field with a validation error and saves with corrected ghost token amount. This protects the ghost token economy from client manipulation.
-- **Biome first-clear check**: Checked server-side by querying `run_history` for any prior WIN on the given biome+role combination. The 3 GT bonus fires only if no prior WIN exists. This requires the biome first-clear check to happen BEFORE the current run is inserted (or within the same transaction). Use a database transaction: check → insert run → conditionally award bonus.
-- **Salvage parts in run materialsEarned**: `salvage_parts` in the `materialsEarned` field must always be 0 when submitted from a run save (salvage comes from dismantling, not runs). The server action validates this and rejects non-zero values. The material type exists in the map for schema consistency but is earned through a different flow.
+- **Insufficient coins at shop**: Buy buttons are disabled; reroll button is disabled if player cannot afford the current reroll cost. The coin balance never goes negative.
+- **Run abandoned mid-session**: If the player closes the tab or disconnects, a beforeunload handler fires a save attempt with outcome ABANDONED. An abandoned run awards 40% of materials if score > 0. Ghost token bonuses (daily, biome first-clear) are not awarded on abandoned runs.
+- **Score anti-cheat failure**: If the server action rejects the score as implausible, the run is saved with score 0 and the discrepancy is logged. Run history creation is not blocked. Player receives minimum materials (1 primary, 0 ghost tokens).
+- **Encounter during shop**: If an encounter triggers while the shop is open, the encounter is queued and shown after the shop closes. Two overlays never display simultaneously.
+- **Multiplayer coin sync**: In multiplayer, session coins are per-player and not synced to the opponent. Each player's economy runs independently. Only final scores and materials are synced at run end.
+- **Material type validation failure**: Unknown material type keys from the client cause the entire save request to be rejected (not silently stripped). This surfaces bugs in the reward calculation code.
+- **Daily bonus race condition**: If two save requests arrive within the same second (e.g., double-submit), the daily bonus upsert uses conflict handling to ensure the bonus is awarded at most once per day per role.
+- **Ghost token cap exceeded**: If the client submits more ghost tokens than theoretically possible for the score tier plus eligible bonuses, the server rejects with a validation error and saves with the corrected amount. This protects the ghost token economy from client manipulation.
+- **Biome first-clear check**: Checked server-side by querying run_history for any prior WIN on the given biome + role combination. The 3 ghost token bonus fires only if no prior WIN exists. The check must happen before the current run is inserted (use a database transaction: check → insert → conditionally award bonus).
+- **Salvage parts in run submission**: Salvage parts in the materials earned map must always be 0 in a run save submission (salvage comes from dismantling, not runs). The server action validates this and rejects non-zero values. The material type exists in the schema for consistency but is earned through a different flow.
 
 ----
 
@@ -889,6 +436,239 @@ Ghost token bonuses (daily, biome first-clear) require server-side verification 
 - Daily bonus uses a DATE (not TIMESTAMP) column in `user_daily_bonus` — server UTC date, never client date
 - Ghost token economy is scarce by design (~0.7-1.0 per run for competent players). The multiple sinks (skills, boss items, crafting) ensure players always have meaningful allocation decisions even after many runs.
 - Salvage parts have only one source (dismantling) and one sink (crafting). They are NOT in the run reward path and must be validated as zero in run save requests.
+
+### Session Economy Manager and Shop
+
+Key class signatures for the game engine side:
+
+```typescript
+// packages/game-engine/src/economy/session-economy.ts
+class SessionEconomyManager {
+  initialize(startingCoins?: number): void;
+  earn(amount: number, category: string): void;
+  spend(amount: number): Result<void, AppError>;
+  canAfford(amount: number): boolean;
+  getBalance(): number;
+  getSnapshot(): SessionCurrency;
+  reset(): void;
+}
+
+// packages/game-engine/src/economy/session-shop.ts
+class SessionShop {
+  generateOfferings(runSeed: string, visitNumber: number, role: PlayerRole): ShopOffering[];
+  purchase(offeringId: ID, economy: SessionEconomyManager): Result<TempPowerup, AppError>;
+  reroll(economy: SessionEconomyManager): Result<ShopOffering[], AppError>;
+}
+
+// packages/game-engine/src/economy/ghost-token-tracker.ts
+class GhostTokenTracker {
+  async calculateBonuses(userId: string, runResult: RunResult, role: PlayerRole, biome: string): Promise<GhostTokenBonus[]>;
+  async getTotalBonusTokens(bonuses: GhostTokenBonus[]): Promise<number>;
+}
+```
+
+### TypeScript Types
+
+Core types for `packages/shared/src/types/economy.ts`:
+
+```typescript
+import { ID, Timestamp } from './common';
+
+export interface SessionCurrency {
+  coins: number;           // earned/spent within run, resets at run end
+  totalEarned: number;
+  totalSpent: number;
+  coinsEarnedByCategory: Record<string, number>;
+}
+
+export interface PersistentCurrency {
+  materials: Record<string, number>;
+  // Keys: 'evidence_dust', 'blood_marks', 'ghost_tokens', 'case_files',
+  //       'shadow_coins', 'salvage_parts'
+}
+
+export interface ShopOffering {
+  id: ID;
+  powerupId: string;
+  name: string;
+  description: string;
+  iconKey: string;
+  price: number;              // session coins
+  role: 'KILLER' | 'FED' | 'SHARED';
+  rarity: 'COMMON' | 'UNCOMMON' | 'RARE';
+}
+
+export interface PriceTag {
+  amount: number;
+  currency: 'SESSION_COINS';
+}
+
+export interface RandomEncounter {
+  id: string;
+  role: 'KILLER' | 'FED' | 'SHARED';
+  title: string;
+  description: string;
+  choices: EncounterChoice[];
+  triggerProbability: number;   // 0-1 per zone crossing
+  cooldownZones: number;
+}
+
+export interface EncounterChoice {
+  label: string;
+  description: string;
+  cost?: PriceTag;
+  outcome: EncounterOutcome;
+}
+
+export interface EncounterOutcome {
+  coinsChange?: number;
+  powerupGranted?: string;      // TempPowerup id
+  evidenceModifier?: number;
+  heatModifier?: number;
+  suspicionModifier?: number;
+  itemGranted?: string;         // InventoryItem id
+  narrativeText: string;
+}
+
+export interface GhostTokenBonus {
+  source: 'FIRST_WIN_OF_DAY' | 'BIOME_FIRST_CLEAR' | 'ACHIEVEMENT_MILESTONE' | 'WEEKLY_CHALLENGE';
+  amount: number;
+  claimedAt: Timestamp;
+}
+
+export interface SalvagePartDrop {
+  equipmentId: ID;
+  equipmentRarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
+  salvageAmount: number;
+}
+```
+
+Types for `packages/shared/src/types/powerups.ts`:
+
+```typescript
+export type PowerupDuration = 'RUN' | 'ZONE' | 'TIMED_MS';
+
+export interface PowerupEffect {
+  stat: string;
+  modifier: number;
+  modifierType: 'FLAT' | 'PERCENT';
+  duration: PowerupDuration;
+  durationMs?: number;          // required if duration === 'TIMED_MS'
+}
+
+export interface TempPowerup {
+  id: string;
+  name: string;
+  description: string;
+  iconKey: string;
+  role: 'KILLER' | 'FED' | 'SHARED';
+  rarity: 'COMMON' | 'UNCOMMON' | 'RARE';
+  effects: PowerupEffect[];
+  statusEffectId: string;       // maps to status-effects.ts for application
+}
+```
+
+### DAL Signatures
+
+For `apps/web/src/dal/runs/history.ts`:
+
+```typescript
+export interface RunHistoryDTO {
+  id: string;
+  userId: string;
+  role: 'KILLER' | 'FED';
+  biome: string;
+  score: number;
+  durationSeconds: number;
+  targetsEliminated: number | null;
+  evidenceCollected: number | null;
+  outcome: 'WIN' | 'LOSE' | 'ABANDONED';
+  materialsEarned: Record<string, number>;
+  createdAt: string;
+}
+
+export interface SaveRunInput {
+  role: 'KILLER' | 'FED';
+  biome: string;
+  score: number;
+  durationSeconds: number;
+  targetsEliminated?: number;
+  evidenceCollected?: number;
+  outcome: 'WIN' | 'LOSE' | 'ABANDONED';
+  materialsEarned: Record<string, number>;
+}
+
+export async function saveRunResult(userId: string, input: SaveRunInput): Promise<Result<RunHistoryDTO, DatabaseError>>;
+export async function getRunHistory(userId: string, limit?: number, offset?: number): Promise<Result<RunHistoryDTO[], DatabaseError>>;
+export async function getRunById(runId: string, userId: string): Promise<Result<RunHistoryDTO, AppError>>;
+```
+
+### Zustand Store Interfaces
+
+For `apps/web/src/stores/economy.ts`:
+
+```typescript
+interface EconomyStore {
+  coins: number;
+  totalEarned: number;
+  shopState: {
+    isOpen: boolean;
+    offerings: ShopOffering[];
+    rerollCount: number;
+    rerollCost: number;
+  };
+  activePowerups: TempPowerup[];
+  activeEncounter: RandomEncounter | null;
+  // Actions
+  earnCoins: (amount: number, category: string) => void;
+  spendCoins: (amount: number) => boolean;
+  openShop: (offerings: ShopOffering[]) => void;
+  closeShop: () => void;
+  purchasePowerup: (offeringId: string) => void;
+  setRerollCost: (cost: number) => void;
+  addPowerup: (powerup: TempPowerup) => void;
+  removePowerup: (powerupId: string) => void;
+  setActiveEncounter: (encounter: RandomEncounter | null) => void;
+  reset: () => void;
+}
+```
+
+For `apps/web/src/stores/run-results.ts`:
+
+```typescript
+interface RunResultsStore {
+  isComplete: boolean;
+  outcome: 'WIN' | 'LOSE' | 'ABANDONED' | null;
+  score: number;
+  durationSeconds: number;
+  scoreBreakdown: Record<string, number>;
+  materialsEarned: Record<string, number>;
+  ghostTokenBonuses: GhostTokenBonus[];
+  savedToServer: boolean;
+  // Actions
+  setResult: (result: RunResult, breakdown: Record<string, number>) => void;
+  setMaterialsEarned: (materials: Record<string, number>) => void;
+  setGhostTokenBonuses: (bonuses: GhostTokenBonus[]) => void;
+  markSaved: () => void;
+  reset: () => void;
+}
+```
+
+### EventBus Events
+
+```typescript
+'shop:opened'                    → { offerings: ShopOffering[] }
+'shop:item-purchased'            → { powerup: TempPowerup, coinsSpent: number }
+'shop:rerolled'                  → { newOfferings: ShopOffering[], coinsSpent: number }
+'encounter:triggered'            → { encounter: RandomEncounter }
+'encounter:resolved'             → { encounterId: string, choiceIndex: number, outcome: EncounterOutcome }
+'economy:coins-earned'           → { amount: number, category: string, newBalance: number }
+'economy:coins-spent'            → { amount: number, newBalance: number }
+'run:scoring-complete'           → { score: number, breakdown: Record<string, number> }
+'run:materials-calculated'       → { materials: Record<string, number> }
+'run:ghost-token-bonuses-claimed'→ { bonuses: GhostTokenBonus[], total: number }
+'run:saved-to-server'            → { runId: string }
+```
 
 ### Ghost Token Economy Design
 

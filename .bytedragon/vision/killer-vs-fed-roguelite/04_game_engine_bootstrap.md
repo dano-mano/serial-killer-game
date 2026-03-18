@@ -43,229 +43,183 @@ Set up the Phaser 3 game instance within the Next.js 16 application. This includ
 
 ### Core Architecture: Phaser + React Isolation
 
-**Constitutional requirement**: Phaser code MUST NOT import React. React code MUST NOT import Phaser internals. This is an absolute boundary.
+Phaser code must never import React. React code must never import Phaser internals. This is an absolute architectural boundary.
 
-The bridge pattern:
-```
-Phaser Scene
-  ↓ emits events via EventBus (one-time signals)
-  ↓ writes to Zustand stores (continuous state)
-React Component
-  ↑ reads Zustand stores (subscribes to state)
-  ↑ receives EventBus events (handles signals)
-```
+The bridge pattern has two channels:
 
-- **EventBus**: For one-time signals (player died, item picked up, run ended). Fire-and-forget. React components subscribe to these to trigger side effects.
-- **Zustand stores**: For continuous state (health, position, inventory, current scene). Phaser writes; React reads. State persists between EventBus events.
-- **React → Phaser**: React uses the Phaser game instance reference (stored in a React ref) to call `game.events.emit()` for user-initiated actions (pause, resume, restart). Alternatively, stores a reference to specific scenes.
+- **EventBus** (one-time signals): When something happens in the game (player died, item picked up, run ended), Phaser emits an event on a shared event emitter. React components subscribe to these events to trigger side effects (show UI, update records, navigate).
+- **Zustand stores** (continuous state): Phaser writes state (health, position, inventory, current scene) directly to Zustand stores. React components subscribe to the store and re-render when values change. State persists between events.
 
-### Phaser Game Configuration
+**React → Phaser direction**: React holds a reference to the Phaser game instance (stored in a React ref, never in React state). React calls `game.events.emit()` to trigger high-level game controls (pause, resume, restart).
 
-**`packages/game-engine/src/config/game-config.ts`**:
+### Game Configuration
+
+Base resolution: 1280×720. The canvas fits its parent container using a FIT scale mode that maintains 16:9 aspect ratio — letterboxing on non-16:9 screens is acceptable for V1. The canvas background matches the app's near-black background color.
+
+Physics: Arcade Physics (top-down, no gravity). This is the correct choice for a top-down roguelite. It provides efficient axis-aligned bounding box collision detection suitable for movement and hitboxes without the complexity of Matter.js.
+
+Scene list: Boot and Preload scenes are registered in this piece. Later pieces add their scenes (Map, Combat, GameOver, Results) to the same list.
+
+### Scenes
+
+**Boot Scene**: Loads only the critical assets needed to display a loading screen (background, progress bar sprite). Immediately transitions to the Preload scene.
+
+**Preload Scene**: Displays a loading progress bar using the critical assets from Boot. Loads all standard (shared) assets — UI sprites, common NPC sprites, shared tilesets. When loading completes, emits `PRELOAD_COMPLETE` on the EventBus. The actual game start is triggered by React after the user selects a role — Phaser waits for the signal.
+
+### EventBus
+
+A singleton event emitter instance (using Phaser's built-in event emitter to avoid any React dependency in the game-engine package). Both Phaser scenes and React components import the same module-level instance.
+
+Phaser emits events: `eventBus.emit(EVENT_NAME, payload)`
+
+React subscribes in `useEffect` and cleans up on unmount: `eventBus.on(EVENT_NAME, handler)` / `eventBus.off(EVENT_NAME, handler)`
+
+The EventBus is the only cross-boundary mechanism for one-time events. Phaser does not access React state. React does not call Phaser scene methods directly except via the game instance ref for high-level controls.
+
+### Event System
+
+Event names are string constants (not an enum) to maintain compatibility with Phaser's event emitter. Each event has a typed payload interface in the shared package.
+
+Events defined in this piece:
+- `game:preload-complete` — assets loaded, game ready to start
+- `game:scene-changed` — active scene transitioned, with from/to scene names
+- `game:player-died` — player death with cause (combat, evidence, timeout) and role
+- `game:run-started` — new run initiated
+- `game:run-ended` — run finished (win or lose)
+- `game:zone-entered` / `game:zone-exited` — player entered or left a named zone
+- `game:item-picked-up` — item acquired
+
+Later pieces add their own events to the constants object and payload types file.
+
+### Game Constants
+
+Numeric game configuration values are shared constants:
+- Target and physics tick rate: 60 Hz
+- AI tick rate: 12 Hz (NPC AI updates every 5 frames for performance)
+- Base resolution: 1280×720
+- Tile size: 32 pixels per tile
+- Player movement speeds: walk (120 px/s), run (200 px/s), sneak (60 px/s)
+- Interaction range: 48 pixels radius
+
+### Zustand Stores
+
+**Game store** tracks the high-level game lifecycle:
+- `phase`: the current game phase — idle, loading, running, paused, game-over, or results
+- `currentScene`: the active Phaser scene key (null when not in game)
+- `fps`: current frame rate for debug display
+
+**Player store** (stub in this piece, extended by piece 07):
+- `userId`, `displayName` — set by AuthProvider when user authenticates
+- `health`, `maxHealth` — current HP (initialized to 100/100)
+- `position` — current tile coordinates, or null
+
+Each domain gets its own store file. No single massive store.
+
+### React PhaserGame Component
+
+A client-side React component that owns the Phaser game instance lifecycle:
+- Renders a `<div>` that Phaser uses as its canvas parent
+- On mount: dynamically imports Phaser (via `import('phaser')` inside `useEffect` — this is critical for SSR prevention), creates the game instance, sets phase to `loading`
+- On unmount: calls `game.destroy(true)` to remove the canvas, resets the store to idle
+
+**Critical**: Phaser is imported dynamically inside `useEffect`, never at module scope. This ensures Phaser never runs during server-side rendering. The game instance is stored in a React `ref` (not `state`) so React does not re-render when the game instance changes.
+
+### Asset Loader Utility
+
+A utility module in the game-engine package provides typed wrappers around Phaser's asset loading API:
+- `loadImages(scene, assets)` — loads image assets by key and path
+- `loadAtlases(scene, atlases)` — loads sprite atlas assets
+- `loadTilemaps(scene, tilemaps)` — loads Tiled JSON tilemaps
+- `getAssetUrl(relativePath, baseUrl?)` — constructs the correct URL for an asset: uses the Azure Blob Storage base URL if provided, falls back to `/assets/` for local development
+
+The asset loader receives the blob storage URL as a parameter — it does not access environment variables directly.
+
+Asset loading tiers (three levels):
+- **Critical**: BootScene — assets needed before the loading screen can render
+- **Standard**: PreloadScene — shared assets used across all game modes
+- **Deferred**: Individual scenes (MapScene, etc.) — biome-specific and role-specific assets loaded just before needed
+
+### Edge Cases
+
+- **SSR prevention**: Phaser must never run during server-side rendering. The dynamic `import('phaser')` inside `useEffect` guarantees this. Never import Phaser at module scope in any file under `apps/web/`.
+- **Hot reload during development**: Next.js hot-reloads cause the PhaserGame component to unmount and remount. The cleanup function (`game.destroy(true)`) must run cleanly — verify no Phaser instances accumulate in memory during development.
+- **Canvas resizing**: Phaser's FIT scale mode handles window resizes automatically. The React container div must use relative sizing (`w-full h-full`), not fixed pixels, so Phaser's scale manager has accurate parent dimensions.
+- **Multiple game instances**: Only one Phaser game instance may exist at a time. The `useRef` pattern and cleanup function enforce this. Navigation that re-mounts PhaserGame without cleanup would create multiple instances.
+- **EventBus memory leaks**: React components that subscribe to EventBus events must unsubscribe in `useEffect` cleanup. Missing cleanup leaves stale handlers after component unmount.
+- **Zustand store reset on game end**: The cleanup in PhaserGame resets phase to idle. Full state reset logic (clearing inventory, health, position) is added in later pieces.
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Reference the official Phaser + Next.js template at https://phaser.io/tutorials/making-your-first-phaser-3-game-with-nextjs as a starting point for the EventBus pattern and React component structure. The key pattern (dynamic import, useEffect mounting, useRef for instance) comes directly from Phaser's official guidance for Next.js integration.
+
+### Phaser Game Config — `packages/game-engine/src/config/game-config.ts`
 
 ```typescript
 import Phaser from 'phaser'
 import { BootScene } from '../scenes/boot-scene'
 import { PreloadScene } from '../scenes/preload-scene'
-// Additional scenes imported and added to scene list in later pieces
 
 export function createGameConfig(parent: string): Phaser.Types.Core.GameConfig {
   return {
-    type: Phaser.AUTO,          // WebGL with Canvas fallback
-    parent,                     // DOM element ID where canvas is inserted
+    type: Phaser.AUTO,
+    parent,
     width: 1280,
     height: 720,
-    backgroundColor: '#0a0a0f', // Matches --color-background CSS variable
-    pixelArt: false,            // Smooth rendering (assets are not pixel art)
+    backgroundColor: '#0a0a0f',
+    pixelArt: false,
     antialias: true,
     scale: {
-      mode: Phaser.Scale.FIT,   // Fit canvas to parent while maintaining aspect ratio
+      mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     physics: {
       default: 'arcade',
-      arcade: {
-        gravity: { x: 0, y: 0 }, // Top-down game — no gravity
-        debug: false,             // Set to true during development via env config
-      },
+      arcade: { gravity: { x: 0, y: 0 }, debug: false },
     },
     scene: [BootScene, PreloadScene],
-    // Additional scenes (MapScene, CombatScene) registered in later pieces
   }
 }
 ```
 
-Physics: **Arcade Physics** is the correct choice for this top-down roguelite. Matter.js would add unnecessary complexity. Arcade Physics provides efficient AABB collision detection suitable for movement and hitboxes.
-
-Resolution strategy: 1280×720 base resolution. `Phaser.Scale.FIT` scales the canvas to fill the parent container (the full-screen GameLayout div) while maintaining 16:9 aspect ratio. Letterboxing appears on non-16:9 screens — acceptable for V1.
-
-### Scene Keys
-
-**`packages/game-engine/src/scenes/scene-keys.ts`**:
+### Scene Keys — `packages/game-engine/src/scenes/scene-keys.ts`
 
 ```typescript
 export const SceneKey = {
   BOOT: 'BootScene',
   PRELOAD: 'PreloadScene',
-  MAP: 'MapScene',           // Registered by the world-and-maps feature
-  COMBAT: 'CombatScene',     // Registered by the combat-system feature
-  GAME_OVER: 'GameOverScene', // Registered by the player-and-roles feature
-  RESULTS: 'ResultsScene',   // Registered by the session-economy feature
+  MAP: 'MapScene',           // Added by world-and-maps
+  COMBAT: 'CombatScene',     // Added by combat-system
+  GAME_OVER: 'GameOverScene', // Added by player-and-roles
+  RESULTS: 'ResultsScene',   // Added by session-economy
 } as const
 
 export type SceneKey = typeof SceneKey[keyof typeof SceneKey]
 ```
 
-### Boot Scene
-
-**`packages/game-engine/src/scenes/boot-scene.ts`**:
-
-```typescript
-import Phaser from 'phaser'
-import { SceneKey } from './scene-keys'
-
-export class BootScene extends Phaser.Scene {
-  constructor() {
-    super({ key: SceneKey.BOOT })
-  }
-
-  preload() {
-    // Load CRITICAL assets only (loading screen background, progress bar sprite)
-    // Critical tier: assets needed before any content renders
-    // Everything else deferred to PreloadScene or MapScene
-    this.load.image('loading-bg', '/assets/loading/background.png')
-  }
-
-  create() {
-    // Transition to preload scene immediately after critical assets ready
-    this.scene.start(SceneKey.PRELOAD)
-  }
-}
-```
-
-### Preload Scene
-
-**`packages/game-engine/src/scenes/preload-scene.ts`**:
-
-```typescript
-import Phaser from 'phaser'
-import { SceneKey } from './scene-keys'
-import { eventBus } from '../events/event-bus'
-import { GAME_EVENTS } from '@repo/shared/constants/events'
-
-export class PreloadScene extends Phaser.Scene {
-  constructor() {
-    super({ key: SceneKey.PRELOAD })
-  }
-
-  preload() {
-    // Display loading progress bar using critical assets from BootScene
-    this.createLoadingBar()
-
-    // Load STANDARD assets: UI sprites, common NPC sprites, shared tilesets
-    // Asset loading tiers (Constitution XXXI):
-    //   Critical: BootScene (loading screen itself)
-    //   Standard: PreloadScene (shared game assets)
-    //   Deferred: MapScene and specific scenes (biome-specific, role-specific)
-    this.load.on('progress', (value: number) => {
-      this.updateProgressBar(value)
-    })
-
-    // Standard asset loading here (added incrementally as later pieces define assets)
-  }
-
-  create() {
-    // Signal to React that preloading is complete
-    eventBus.emit(GAME_EVENTS.PRELOAD_COMPLETE)
-    // Actual scene start (MapScene or RoleSelectScene) triggered by React
-    // after user selects role — Phaser waits for signal
-  }
-
-  private createLoadingBar() { /* progress bar implementation */ }
-  private updateProgressBar(value: number) { /* update bar fill */ }
-}
-```
-
-### EventBus
-
-**`packages/game-engine/src/events/event-bus.ts`**:
+### EventBus — `packages/game-engine/src/events/event-bus.ts`
 
 ```typescript
 import Phaser from 'phaser'
 
-// Phaser.Events.EventEmitter is a typed event emitter
-// Using Phaser's built-in emitter to avoid React dependency
 class GameEventBus extends Phaser.Events.EventEmitter {
-  constructor() {
-    super()
-  }
+  constructor() { super() }
 }
 
-// Singleton — exported as a module-level instance
-// Both Phaser scenes and React components import this same instance
 export const eventBus = new GameEventBus()
 ```
 
-**Usage in Phaser scenes** (no React imports):
-```typescript
-import { eventBus } from '../events/event-bus'
-import { GAME_EVENTS } from '@repo/shared/constants/events'
-
-// Emit: fire-and-forget signal
-eventBus.emit(GAME_EVENTS.PLAYER_DIED, { causeOfDeath: 'combat' })
-```
-
-**Usage in React components** ("use client" required):
-```typescript
-import { eventBus } from '@repo/game-engine/events/event-bus'
-import { GAME_EVENTS } from '@repo/shared/constants/events'
-
-// Subscribe in useEffect, cleanup on unmount
-useEffect(() => {
-  const handler = (payload: PlayerDiedPayload) => { /* update UI */ }
-  eventBus.on(GAME_EVENTS.PLAYER_DIED, handler)
-  return () => { eventBus.off(GAME_EVENTS.PLAYER_DIED, handler) }
-}, [])
-```
-
-The EventBus is the ONLY cross-boundary communication mechanism for one-time events. Phaser does NOT access React state. React does NOT call Phaser scene methods directly (except via the game instance ref for high-level controls).
-
-### Shared Event Types
-
-**`packages/shared/src/types/events.ts`**:
+### Event Constants — `packages/shared/src/constants/events.ts`
 
 ```typescript
-// All EventBus event payload types — typed at the boundary
-export interface PlayerDiedPayload {
-  causeOfDeath: 'combat' | 'evidence' | 'timeout'
-  role: 'KILLER' | 'FED'
-}
-
-export interface PreloadCompletePayload {
-  // No payload — signal only
-}
-
-export interface SceneChangedPayload {
-  from: string
-  to: string
-}
-
-export interface ZoneEnteredPayload {
-  zoneId: string
-  zoneName: string
-}
-
-// Additional payloads added as later pieces define their events
-```
-
-### Shared Event Constants
-
-**`packages/shared/src/constants/events.ts`**:
-
-```typescript
-// String constants for all EventBus event names
-// Using string constants (not enum) for Phaser EventEmitter compatibility
-
 export const GAME_EVENTS = {
   PRELOAD_COMPLETE: 'game:preload-complete',
   SCENE_CHANGED: 'game:scene-changed',
@@ -275,34 +229,45 @@ export const GAME_EVENTS = {
   ZONE_ENTERED: 'game:zone-entered',
   ZONE_EXITED: 'game:zone-exited',
   ITEM_PICKED_UP: 'game:item-picked-up',
-  // Additional event names added in later pieces
 } as const
 
 export type GameEventName = typeof GAME_EVENTS[keyof typeof GAME_EVENTS]
 ```
 
-### Game Constants
+### Event Payload Types — `packages/shared/src/types/events.ts`
 
-**`packages/shared/src/constants/game.ts`**:
+```typescript
+export interface PlayerDiedPayload {
+  causeOfDeath: 'combat' | 'evidence' | 'timeout'
+  role: 'KILLER' | 'FED'
+}
+
+export interface SceneChangedPayload { from: string; to: string }
+
+export interface ZoneEnteredPayload { zoneId: string; zoneName: string }
+
+export interface PreloadCompletePayload {} // signal only
+```
+
+### Game Constants — `packages/shared/src/constants/game.ts`
 
 ```typescript
 export const GAME_CONFIG = {
   TARGET_FPS: 60,
-  PHYSICS_TICK_RATE: 60,    // Hz — matches target FPS for Arcade Physics
-  AI_TICK_RATE: 12,          // Hz — NPC AI updates at 1/5 of physics rate (every 5 frames)
+  PHYSICS_TICK_RATE: 60,
+  AI_TICK_RATE: 12,
   BASE_RESOLUTION: { width: 1280, height: 720 },
-  TILE_SIZE: 32,             // Pixels per tile (32×32 tiles)
-  PLAYER_SPEED_WALK: 120,    // Pixels per second
+  TILE_SIZE: 32,
+  PLAYER_SPEED_WALK: 120,
   PLAYER_SPEED_RUN: 200,
   PLAYER_SPEED_SNEAK: 60,
-  INTERACTION_RANGE: 48,     // Pixels — interaction radius for items and NPCs
+  INTERACTION_RANGE: 48,
 } as const
 ```
 
-### Zustand Game Stores
+### Zustand Stores
 
 **`apps/web/src/stores/game.ts`**:
-
 ```typescript
 'use client'
 import { create } from 'zustand'
@@ -319,22 +284,18 @@ interface GameStore {
 }
 
 export const useGameStore = create<GameStore>((set) => ({
-  phase: 'idle',
-  currentScene: null,
-  fps: 0,
+  phase: 'idle', currentScene: null, fps: 0,
   setPhase: (phase) => set({ phase }),
   setCurrentScene: (currentScene) => set({ currentScene }),
   setFps: (fps) => set({ fps }),
 }))
 ```
 
-**`apps/web/src/stores/player.ts`**:
-
+**`apps/web/src/stores/player.ts`** (stub — extended by piece 07):
 ```typescript
 'use client'
 import { create } from 'zustand'
 
-// Stub store — extended by the player-and-roles feature with role, inventory, abilities
 interface PlayerStore {
   userId: string | null
   displayName: string | null
@@ -348,11 +309,7 @@ interface PlayerStore {
 }
 
 export const usePlayerStore = create<PlayerStore>((set) => ({
-  userId: null,
-  displayName: null,
-  health: 100,
-  maxHealth: 100,
-  position: null,
+  userId: null, displayName: null, health: 100, maxHealth: 100, position: null,
   setUserId: (userId) => set({ userId }),
   setDisplayName: (displayName) => set({ displayName }),
   setHealth: (health) => set({ health }),
@@ -360,11 +317,7 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
 }))
 ```
 
-Zustand stores use a flat structure per store. Do NOT create a single massive store. Each domain gets its own store file.
-
-### React PhaseGame Component
-
-**`apps/web/src/components/app/game/phaser-game.tsx`**:
+### PhaserGame Component — `apps/web/src/components/app/game/phaser-game.tsx`
 
 ```typescript
 'use client'
@@ -380,33 +333,25 @@ export function PhaserGame() {
   const setCurrentScene = useGameStore((s) => s.setCurrentScene)
 
   useEffect(() => {
-    // Phaser must only be instantiated client-side
-    // Dynamic import ensures Phaser never runs during SSR
-    let game: Phaser.Game
-
     async function initGame() {
       const { default: Phaser } = await import('phaser')
       const { createGameConfig } = await import('@repo/game-engine/config/game-config')
-
       const config = createGameConfig(PHASER_PARENT_ID)
-      game = new Phaser.Game(config)
-      gameRef.current = game
+      gameRef.current = new Phaser.Game(config)
       setPhase('loading')
     }
 
     initGame()
 
     return () => {
-      // Cleanup: destroy Phaser instance when component unmounts
-      // This happens when navigating away from /game
       if (gameRef.current) {
-        gameRef.current.destroy(true) // true = remove canvas from DOM
+        gameRef.current.destroy(true)
         gameRef.current = null
         setPhase('idle')
         setCurrentScene(null)
       }
     }
-  }, []) // Empty deps — create once, destroy on unmount
+  }, [])
 
   return (
     <div
@@ -419,131 +364,54 @@ export function PhaserGame() {
 }
 ```
 
-**Critical implementation notes**:
-- Use dynamic `import('phaser')` inside `useEffect` — never at the top of the file. This prevents Phaser from being included in the SSR bundle.
-- Use `useRef` (not `useState`) for the game instance — React must NOT re-render when the game instance changes.
-- The parent div fills the GameLayout's full-screen container.
-- The component emits nothing to EventBus itself — it's a mount/unmount lifecycle wrapper.
-
 ### Game Page and Layout
 
 **`apps/web/src/app/game/layout.tsx`**:
-
 ```typescript
 import type { ReactNode } from 'react'
-
-// Full-screen layout for all game routes
-// No navigation header, no footer, no scroll
 export default function GameLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="w-screen h-dvh overflow-hidden relative bg-background">
-      {children}
-    </div>
-  )
+  return <div className="w-screen h-dvh overflow-hidden relative bg-background">{children}</div>
 }
 ```
 
 **`apps/web/src/app/game/page.tsx`**:
-
 ```typescript
 import { PhaserGame } from '../../components/app/game/phaser-game'
-
-// The game page — full-screen Phaser canvas
-// HUD overlay components are added by the player-and-roles feature
 export default function GamePage() {
   return (
     <main className="w-full h-full relative">
-      {/* Phaser canvas fills entire area */}
       <PhaserGame />
-
-      {/* HUD overlay — added in later pieces, absolute positioned */}
-      {/* <GameHUD /> */}
+      {/* HUD overlay components added in later pieces */}
     </main>
   )
 }
 ```
 
-### Asset Loader Utility
-
-**`packages/game-engine/src/utils/asset-loader.ts`**:
+### Asset Loader — `packages/game-engine/src/utils/asset-loader.ts`
 
 ```typescript
 import Phaser from 'phaser'
 
-// Asset loading tiers per Constitution XXXI (progressive enhancement):
-//   Critical: Loaded in BootScene — required for loading screen itself
-//   Standard: Loaded in PreloadScene — shared across all game modes
-//   Deferred: Loaded in specific scenes — biome/role-specific assets
-
 export type AssetTier = 'critical' | 'standard' | 'deferred'
 
-interface AssetDefinition {
-  key: string
-  path: string
-  tier: AssetTier
-}
-
-// Azure Blob Storage URL construction for large game assets
-// Base URL from centralized env config at apps/web/src/config/env.ts
 export function getAssetUrl(relativePath: string, blobStorageBaseUrl?: string): string {
-  if (blobStorageBaseUrl) {
-    return `${blobStorageBaseUrl}/${relativePath}`
-  }
-  // Fallback to /public/assets/ for development without blob storage
-  return `/assets/${relativePath}`
+  return blobStorageBaseUrl
+    ? `${blobStorageBaseUrl}/${relativePath}`
+    : `/assets/${relativePath}`
 }
 
-// Load a set of image assets into a Phaser scene
-export function loadImages(scene: Phaser.Scene, assets: AssetDefinition[]) {
-  assets.forEach(({ key, path }) => {
-    scene.load.image(key, path)
-  })
+export function loadImages(scene: Phaser.Scene, assets: Array<{key: string; path: string; tier: AssetTier}>) {
+  assets.forEach(({ key, path }) => scene.load.image(key, path))
 }
 
-// Load sprite atlas assets
-export function loadAtlases(
-  scene: Phaser.Scene,
-  atlases: Array<{ key: string; imagePath: string; dataPath: string }>
-) {
-  atlases.forEach(({ key, imagePath, dataPath }) => {
-    scene.load.atlas(key, imagePath, dataPath)
-  })
+export function loadAtlases(scene: Phaser.Scene, atlases: Array<{key: string; imagePath: string; dataPath: string}>) {
+  atlases.forEach(({ key, imagePath, dataPath }) => scene.load.atlas(key, imagePath, dataPath))
 }
 
-// Load tilemaps
-export function loadTilemaps(
-  scene: Phaser.Scene,
-  tilemaps: Array<{ key: string; path: string }>
-) {
-  tilemaps.forEach(({ key, path }) => {
-    scene.load.tilemapTiledJSON(key, path)
-  })
+export function loadTilemaps(scene: Phaser.Scene, tilemaps: Array<{key: string; path: string}>) {
+  tilemaps.forEach(({ key, path }) => scene.load.tilemapTiledJSON(key, path))
 }
 ```
-
-The `blobStorageBaseUrl` is read from centralized env config (`AZURE_BLOB_STORAGE_URL`). The asset loader does NOT access `process.env` directly — it receives the URL as a parameter from the calling scene, which gets it from the Phaser game config (which is initialized server-side via Next.js and passed as configuration).
-
-### Edge Cases
-
-- **SSR prevention**: Phaser absolutely must not run during server-side rendering. The dynamic `import('phaser')` inside `useEffect` guarantees this. Never import Phaser at module scope in any file within `apps/web/`.
-- **Hot reload during development**: When Next.js hot-reloads a page, the `PhaserGame` component unmounts and remounts. The cleanup function (`game.destroy(true)`) must run cleanly. Verify no Phaser instances accumulate in the browser's JavaScript heap during development.
-- **Canvas resizing**: Phaser's `Scale.FIT` mode handles window resizes automatically. However, the React container div must use `w-full h-full` (not fixed pixels) so Phaser's scale manager has accurate parent dimensions.
-- **Multiple game instances**: There MUST be only one Phaser game instance at a time. The `useRef` pattern and cleanup function enforce this. Navigation that re-mounts `PhaserGame` without proper cleanup would create multiple instances — confirm cleanup runs before re-creation.
-- **EventBus memory leaks**: React components that subscribe to EventBus events MUST unsubscribe in the `useEffect` cleanup. Missing cleanup leads to stale event handlers after component unmount.
-- **Zustand store reset on game end**: When a run ends, game and player stores must be reset to initial state. The cleanup in `PhaserGame` partially handles this — later pieces add full reset logic.
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Reference the official Phaser + Next.js template at https://phaser.io/tutorials/making-your-first-phaser-3-game-with-nextjs as a starting point for the EventBus pattern and React component structure. The key pattern (dynamic import, useEffect mounting, useRef for instance) comes directly from Phaser's official guidance for Next.js integration.
 
 ### Key Library Versions
 

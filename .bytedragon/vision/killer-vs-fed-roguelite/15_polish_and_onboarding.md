@@ -56,209 +56,246 @@ Transform the functional game into a polished, accessible experience. This piece
 
 Polish does not change gameplay logic — it augments feedback, smooths flow, and reduces friction. Every audio and VFX addition should reinforce the game's asymmetric tension: the killer's audio cues are dark and stealthy; the fed's audio cues are procedural and investigative. Screen effects communicate information (red flash on detection, blue pulse on evidence discovery) without obscuring gameplay.
 
-### Dependency Details (Inline — Do Not Reference Other Documents)
+### Dependencies (Inline — Do Not Reference Other Documents)
 
-#### From packages/shared/src/types/common.ts
-```typescript
-type ID = string;          // UUID format
-type Timestamp = string;   // ISO 8601
-```
+From piece 01: string UUID identifiers and ISO 8601 timestamps; database error and not-found error types; structured logger; environment config.
 
-#### From packages/shared/src/utils/result.ts (neverthrow)
-```typescript
-import { Result, ok, err } from 'neverthrow';
-type AppError = { code: string; message: string; context?: Record<string, unknown> };
-type DatabaseError = AppError & { code: 'DATABASE_ERROR' };
-```
+From piece 02: browser-side and server-side Supabase clients.
 
-#### From packages/shared/src/types/player.ts (piece 07)
-```typescript
-type PlayerRole = 'KILLER' | 'FED'
-```
+From piece 03: standard UI components (AppButton, AppCard, AppDialog, AppInput, AppToast; PageLayout, GameLayout, AuthLayout) and Magic UI animated components (AnimatedBeam, BlurFade, BorderBeam, MagicCard, MarqueeDemo, and others available in the vendor directory — never modify these, only compose them).
 
-#### From packages/game-engine/src/utils/event-bus.ts (piece 04)
-```typescript
-EventBus.emit(event: string, data: unknown): void
-EventBus.on(event: string, callback: (data: unknown) => void): void
-```
+From piece 04: EventBus with emit and on methods; scene keys for boot, preload, map, combat, shop, and loading scenes.
 
-#### From packages/game-engine/src/scenes/ (pieces 04-14)
-```typescript
-// Scene keys available:
-const SCENE_KEYS = {
-  BOOT: 'BootScene', PRELOAD: 'PreloadScene', MAP: 'MapScene',
-  COMBAT: 'CombatScene', SHOP: 'ShopScene', LOADING: 'LoadingScene'
-}
-```
+From piece 05: the 12 biomes (rural, city, cruise ship, office building, amusement park, shopping mall, airport, abandoned asylum, remote island, ghost town, concert venue, subway network).
 
-#### From packages/shared/src/types/biome.ts (piece 05)
-```typescript
-type Biome =
-  | 'rural'
-  | 'city'
-  | 'cruise_ship'
-  | 'office_building'
-  | 'amusement_park'
-  | 'shopping_mall'
-  | 'airport'
-  | 'abandoned_asylum'
-  | 'remote_island'
-  | 'ghost_town'
-  | 'concert_venue'
-  | 'subway_network'
-```
+From piece 07: player role (killer or fed).
 
-#### From packages/shared/src/types/combat.ts (piece 08)
-```typescript
-interface StatusEffect { id: ID; name: string; type: 'BUFF' | 'DEBUFF'; remainingMs: number }
-```
+From piece 08: status effect structure (ID, name, type as buff or debuff, remaining duration in milliseconds).
 
-#### From packages/shared/src/types/evidence.ts (piece 09)
-```typescript
-type EvidenceType =
-  | 'FOOTPRINT'
-  | 'DNA'
-  | 'WEAPON_TRACE'
-  | 'BODY'
-  | 'WITNESS'
-  | 'SURVEILLANCE'
-  | 'BROKEN_LOCK'
-  | 'DISTURBED_SCENE'
-  | 'FALSE_EVIDENCE'
-  | 'INFORMANT_REPORT'
-```
+From piece 09: evidence types (footprint, DNA, weapon trace, body, witness, surveillance, broken lock, disturbed scene, false evidence, informant report).
 
-#### From packages/shared/src/types/progression.ts (piece 13)
-```typescript
-interface Trophy { id: ID; name: string; rarity: string }
-interface Equipment { id: ID; name: string; rarity: string }
-```
+From piece 13: trophy (ID, name, rarity) and equipment (ID, name, rarity) structures.
 
-#### From packages/shared/src/types/multiplayer.ts (piece 14)
-```typescript
-interface GameSession { id: ID; status: SessionStatus }
-```
+From piece 14: game session (ID, status).
 
-#### From apps/web/src/lib/supabase/server.ts (piece 02)
-```typescript
-createServerClient(): SupabaseClient
-```
+### New Data Entities
 
-#### From apps/web/src/lib/supabase/client.ts (piece 02)
-```typescript
-createBrowserClient(): SupabaseClient
-```
+**Sound effect**: Identifies a single audio clip available for playback. Described by its Phaser audio key (used for preloading), asset file path, default volume (0 to 1), and pool size (how many simultaneous instances are allowed, typically 3 to 5 for commonly used effects).
 
-#### From apps/web/src/lib/logger/pino.ts (piece 01)
-```typescript
-import logger from '@/lib/logger/pino';
-```
+**Music track**: Identifies a background music piece. Described by its audio key, asset file path, optional biome association (universal tracks have no biome), and optional loop start and end points in seconds for seamless looping.
 
-#### From apps/web/src/components/app/common/ (piece 03)
-```typescript
-AppButton, AppCard, AppDialog, AppInput, AppToast
-PageLayout, GameLayout, AuthLayout
-```
+**Ambient loop**: Identifies a continuous background atmosphere sound. Described by its audio key, asset path, associated biome, and default volume (ambient typically runs at 0.3 to 0.5).
 
-#### From apps/web/src/components/vendor/magic-ui/ (piece 03)
-```typescript
-// IMMUTABLE Magic UI components used on landing page:
-// AnimatedBeam, BlurFade, BorderBeam, MagicCard, MarqueeDemo, etc.
-// Check components/vendor/magic-ui/ for available components — never modify, only compose
-```
+**Audio settings**: The user's preferences for all audio output. Contains master volume (0 to 1), music volume (0 to 1, relative to master), SFX volume (0 to 1, relative to master), ambient volume (0 to 1, relative to master), and a mute flag.
 
-#### From apps/web/src/config/env.ts (piece 01)
-```typescript
-import { env } from '@/config/env';
-```
+**Graphics settings**: Controls the visual fidelity and motion preferences. Contains flags for particle effects enabled, screen shake enabled, and reduced motion (which mirrors the system's prefers-reduced-motion preference and disables particles and shake). Also contains a target frame rate choice of 60 or 30 frames per second.
 
-### New Types to Create
+**Accessibility settings**: Controls assistive technology features. Contains a high contrast flag, colorblind mode (none, protanopia, deuteranopia, or tritanopia), text scale multiplier (1, 1.25, or 1.5), a keyboard navigation flag, and a flag for screen reader announcements.
 
-**`packages/shared/src/types/audio.ts`**:
+**Control settings**: The full key binding map for the game. Contains bindings for move up, move down, move left, move right, interact, abilities 1 through 5, open inventory, open map, open suspect board (fed only), sprint, and sneak. Each binding is a keyboard key string with defaults of WASD for movement, E for interact, 1-5 for abilities, I for inventory, M for map, Tab for suspect board, Shift for sprint, and Ctrl for sneak.
 
-```typescript
-export interface SoundEffect {
-  key: string;            // Phaser audio key for preloading
-  path: string;           // asset path (relative to Azure Blob Storage URL or /public)
-  volume: number;         // 0-1 default volume
-  poolSize: number;       // how many simultaneous instances (3-5 for common SFX)
-}
+**User settings**: The complete settings record for a user. Contains the user ID, audio settings, graphics settings, accessibility settings, control settings, and a last-updated timestamp.
 
-export interface MusicTrack {
-  key: string;
-  path: string;
-  biome?: Biome;          // biome-specific tracks; undefined = universal
-  loopStart?: number;     // loop point in seconds (for seamless looping)
-  loopEnd?: number;
-}
+**Tutorial step**: A single step in an interactive tutorial. Each step has a unique ID, an instruction string shown to the player, an optional UI element or game object to highlight, an optional EventBus event that marks the step as complete when it fires, an optional auto-advance timer in milliseconds (used when no event is being waited on), and an optional camera focus position.
 
-export interface AmbientLoop {
-  key: string;
-  path: string;
-  biome: Biome;
-  volume: number;         // ambient typically 0.3-0.5
-}
+### Audio System
 
-export interface AudioSettings {
-  masterVolume: number;   // 0-1
-  musicVolume: number;    // 0-1, relative to master
-  sfxVolume: number;      // 0-1, relative to master
-  ambientVolume: number;  // 0-1, relative to master
-  isMuted: boolean;
-}
-```
+The audio manager is a singleton wrapping Phaser's built-in audio system. It provides volume controls for each category (music, SFX, ambient), biome-aware music transitions with crossfading on biome change, SFX pooling allowing multiple simultaneous instances per sound key, auto-fade on scene transitions, and respects the mute flag and individual volumes. It also respects the reduced motion accessibility setting by disabling dynamic audio panning and effects when motion sensitivity is active.
 
-**`packages/shared/src/types/settings.ts`**:
+**Biome music assignments**: Each biome has a distinct musical mood and a corresponding track key used for preloading. City: tense urban jazz. Rural: sparse acoustic. Cruise ship: eerie lounge. Office building: tense corporate ambient. Amusement park: distorted carnival. Shopping mall: uncanny elevator music. Airport: suspenseful minimal. Abandoned asylum: dark ambient horror. Remote island: isolated nature. Ghost town: western tension. Concert venue: muffled crowd plus tension. Subway network: underground drone.
 
-```typescript
-import { AudioSettings } from './audio';
+**Role audio perspective**: When playing as killer, a subtle low-frequency drone plays underneath the biome music. When playing as fed, a procedural investigation layer (subtle clock ticking, paper rustle sounds) plays underneath the biome music.
 
-export interface GraphicsSettings {
-  particlesEnabled: boolean;      // true by default
-  screenShakeEnabled: boolean;    // true by default
-  reducedMotion: boolean;         // mirrors prefers-reduced-motion, disables particles+shake
-  targetFps: 60 | 30;            // 60 default; 30 for low-end devices
-}
+**SFX catalog** (categories and representative events):
+- Investigation: evidence discovered, evidence quality upgraded, arrest succeeded, arrest failed (combat), suspect board updated
+- Stealth: kill performed, body disposed, stealth broken
+- Counter-play: fake evidence planted, witness silenced, surveillance jammed, rough interrogation performed, entrapment triggered
+- Combat: combat hit, player damaged, ability used
+- UI: shop opened, item purchased, encounter triggered
+- Progression: trophy unlocked, skill unlocked
 
-export interface AccessibilitySettings {
-  highContrast: boolean;          // increased contrast ratios throughout UI
-  colorblindMode: 'NONE' | 'PROTANOPIA' | 'DEUTERANOPIA' | 'TRITANOPIA';
-  textScale: 1 | 1.25 | 1.5;    // relative text size multiplier
-  keyboardNavigation: boolean;    // ensure all UI elements reachable by keyboard
-  screenReaderAnnouncements: boolean; // aria-live announcements for game events
-}
+Counter-play ability SFX use darker, more morally ambiguous sounds to reinforce their risk/reward nature. Counter-play SFX play at 70% of master SFX volume by default — subtler than core ability SFX to feel appropriately clandestine. This offset is design-enforced and cannot be changed individually by the user.
 
-export interface ControlSettings {
-  moveUp: string;         // default 'w' / arrow up
-  moveDown: string;       // default 's' / arrow down
-  moveLeft: string;       // default 'a' / arrow left
-  moveRight: string;      // default 'd' / arrow right
-  interact: string;       // default 'e' / enter
-  ability1: string;       // default '1'
-  ability2: string;       // default '2'
-  ability3: string;       // default '3'
-  ability4: string;       // default '4'
-  ability5: string;       // default '5'
-  openInventory: string;  // default 'i'
-  openMap: string;        // default 'm'
-  openSuspectBoard: string; // default 'tab' (fed only)
-  sprint: string;         // default 'shift'
-  sneak: string;          // default 'ctrl'
-}
+### VFX System
 
-export interface UserSettings {
-  userId: string;
-  audio: AudioSettings;
-  graphics: GraphicsSettings;
-  accessibility: AccessibilitySettings;
-  controls: ControlSettings;
-  updatedAt: string;      // ISO 8601
-}
-```
+The VFX manager is a singleton using Phaser's built-in particle system with object pooling. All VFX respect the particles enabled and screen shake enabled graphics settings.
+
+**Screen effects**: Red flash on stealth detection, blue pulse on evidence discovery, vignette for persistent tension states. Screen shake on significant impacts.
+
+**Particle effects**: Blood splatter on kills (small, medium, large intensity), evidence discovery pulse (color-coded by evidence type), arrest animation, unlock celebration (rarity-appropriate), coin burst on earning session coins.
+
+**Evidence discovery colors** by type: footprint = grey dust, DNA = green sparkle, witness = orange glow, weapon trace = red shimmer, body = dark purple pulse, surveillance = blue scan ring. Fake evidence appears identical to its real equivalent — the deception is visually maintained.
+
+**Counter-play VFX**: Surveillance jamming shows a static interference grid expanding from killer position over the target zone. Entrapment setup trigger shows a brief red spotlight on the decoy NPC. Illegal surveillance (fed) shows a subtle green tint on camera icons in the zone. Rough interrogation shows screen desaturation during the interrogation scene.
+
+**Biome ambient particles**: Each biome has appropriate environmental particles. City: rain drops and exhaust particles. Abandoned asylum: dust motes and flickering shadow. Concert venue: stage light beams and confetti. Subway network: train dust and light flicker. Rural: fireflies at night and falling leaves.
+
+**Reduced motion behavior**: When reduced motion is enabled (via settings or the browser's prefers-reduced-motion media query), all particle effects are disabled, screen shake is disabled, screen flash is replaced with a brief border color change (1 frame), and transitions use a cut instead of a fade.
+
+### Animation Manager
+
+Centralizes all character animation definitions, extending piece 06's sprite manager. Adds smooth idle-to-walk-to-run transitions with easing, context-sensitive animations (disguise change, body disposal, forensic examination), combat polish (hit stagger, knockout fall, dodge roll), counter-play animations (intimidation lean-in, evidence plant crouch, subtle camera jam gesture that maintains stealth feel), and interaction feedback animations (handshake for interview, badge flash for witness compulsion).
+
+### Tutorial System
+
+The tutorial system is overlay-based — it activates during a real run rather than in a separate tutorial level. When a user selects a role for the first time, the tutorial automatically begins. Tutorial steps are scripted sequences that highlight UI elements, optionally move the camera to points of interest, and wait for the player to perform specific actions before advancing. Players can skip the entire tutorial at any time. The tutorial complete flag is stored per role in localStorage — each role's tutorial is independent.
+
+**Killer tutorial steps** (9 steps):
+1. Welcome message explaining the killer's objective: eliminate targets and dispose of evidence. Auto-advances after 5 seconds.
+2. Movement tutorial: use WASD to move, Shift to sprint, Ctrl to sneak. Waits for the player to move.
+3. Target identification: the orange-marked NPC is the first target. Waits for the player to approach.
+4. Kill interaction: press E to interact and select a kill method. Waits for the target eliminated event.
+5. Evidence awareness: evidence has been generated and the fed will find it. Find the disposal site (marked in purple). Waits for player to approach disposal.
+6. Disposal: dispose of the body to reduce evidence. Waits for body disposed event.
+7. Shop introduction: session coins earned, shop is marked on minimap between objectives. Auto-advances after 5 seconds.
+8. Counter-play preview: explains deception abilities (fake evidence, witness silencing). Highlights the locked Deception tree icon. Auto-advances after 8 seconds.
+9. Tutorial complete message: good luck, the fed is searching. Sets tutorial complete flag.
+
+**Fed tutorial steps** (9 steps):
+1. Welcome message explaining the fed's objective: gather evidence, identify the killer, make an arrest. Auto-advances after 5 seconds.
+2. Movement tutorial: use WASD to move, E to interact with NPCs and evidence. Waits for the player to move.
+3. Scanner ability: press Q to activate the scanner — blue markers show nearby evidence. Waits for the evidence discovered event.
+4. Evidence examination: examine evidence by pressing E on it. Higher quality evidence is more valuable. Waits for forensic examination to be performed.
+5. Witness interviews: NPCs marked with an exclamation point have witnessed something. Waits for the witness interviewed event.
+6. Suspect board: open the Suspect Board with Tab — suspects are filtered as evidence is gathered. Waits for the suspect board to open.
+7. Arrest readiness: when case strength reaches 80%, a clean arrest is possible. Target a suspect and press E. Auto-advances after 8 seconds.
+8. Counter-play preview: explains interrogation abilities (pressure witnesses, set up entrapment). Highlights the locked Interrogation tree icon. Auto-advances after 8 seconds.
+9. Tutorial complete message: find the killer — they're already acting. Sets tutorial complete flag.
+
+**Counter-play introduction**: After a player's first encounter with a counter-play ability (regardless of whether the tutorial has been completed), a contextual tooltip appears. For the killer: when an NPC they intimidated is flagged as silenced in the fed's interface, a tooltip explains that silenced witnesses cannot be easily interviewed and the fed must use more aggressive tactics. For the fed: when encountering a silenced witness, a tooltip explains the witness is too frightened to talk and unconventional methods may be needed but come with risk.
+
+**Tutorial overlay**: Renders at the bottom-center of the screen as an instruction card with step indicator dots (step X of Y). A skip button appears at the top right. Highlighted game elements receive a pulsing CSS border overlay. An arrow points toward the highlighted element. The instruction card has an accessible live region so screen readers announce each step automatically. If the player skips, the tutorial complete flag is still set — the tutorial never re-shows. A "Replay Tutorial" option is available in Settings under Gameplay.
+
+### Settings System
+
+Settings cover four categories: audio, graphics, accessibility, and controls.
+
+**Persistence strategy**: Settings are saved to localStorage immediately on every change (no delay). If the user is logged in, changes are also debounced to the server (saving 2 seconds after the last change). On app load, settings are read from localStorage immediately for fast application, then fetched from the server and merged (server wins on conflict). If the server save fails, localStorage already has the latest values — settings are not lost, and a toast notification reads "Settings saved locally — cloud sync will retry." Retry happens on the next settings change. Offline use is fully supported via localStorage without any error shown.
+
+**Accessibility auto-initialization**: The prefers-reduced-motion browser media query initializes the reduced motion setting to true. The prefers-contrast: high media query initializes the high contrast setting to true. These are initial values only — the user's explicit saved settings override media queries after the first save.
+
+**Settings page sections**:
+1. Audio: master volume slider, music/SFX/ambient sliders, mute toggle, preview button that plays a test sound
+2. Graphics: particle effects toggle, screen shake toggle, target FPS radio (60 or 30), reduced motion toggle
+3. Accessibility: high contrast toggle, colorblind mode selector (none/protanopia/deuteranopia/tritanopia), text scale radio (1/1.25/1.5), keyboard navigation toggle, screen reader announcements toggle
+4. Controls: key binding grid — clicking a cell then pressing a key remaps that action. Reset to defaults button per section. Two actions cannot share the same key — the settings page shows a conflict warning and blocks save until resolved. Escape and Print Screen cannot be remapped (reserved system keys).
+
+All controls meet WCAG AA: labels on every input, visible focus on all elements, fully keyboard navigable without a mouse.
+
+**Live settings application**: Settings changes made while a run is in progress apply immediately via EventBus events. Volume, graphics, and accessibility changes are live. Control remapping during an active run takes effect after the run ends to prevent mid-run confusion.
+
+### Accessibility Features
+
+**Screen reader announcements**: A singleton component in the root layout provides accessible live regions (both polite and assertive). When screen reader announcements are enabled in settings, key game events are announced: evidence found (type and updated case strength percentage), suspect board updated (number of suspects remaining), arrest ready (case strength percentage), target eliminated (killer perspective), detection alert, counter-play activated (ability name), and run complete (win or loss).
+
+**Focus management**: All dialogs (shop, encounter, suspect board) trap focus within themselves while open. Tab cycling stays within the open modal. Focus returns to the element that triggered the dialog when it closes.
+
+**High contrast mode**: Adds a high contrast class to the root HTML element. All text uses maximum contrast (pure black or white). UI backgrounds use flat colors with no gradients. Evidence markers on the minimap are larger and use distinct shapes in addition to colors. HUD meters have thick borders and text labels alongside color indicators.
+
+**Colorblind mode**: Adds a colorblind mode class to the root HTML element. CSS filters and alternative color schemes are applied. Evidence type icons use both color and shape (circle, triangle, square) — information is never conveyed by color alone. Alert levels use patterns or hatching in addition to red/yellow/green. All color-coded information has a secondary indicator (icon, label, or pattern).
+
+### Performance Optimization
+
+**Object pooling**: A generic object pool manages pre-allocated instances of frequently created and destroyed objects. The pool supports acquiring an available instance, releasing an instance back to the pool, and reporting active and total pool counts. Pools are implemented for: particle emitters (20 per preset), projectiles for ranged attacks (10), floating damage text objects (15), evidence highlight markers on the map (50), and NPC entity objects (40, with inactive NPCs returned to pool and active NPCs borrowed).
+
+**Viewport culling**: A viewport culler checks whether world-space coordinates fall within the camera's visible area. NPCs more than 800 pixels from the camera center have physics updates disabled and animations paused — only their position is updated at 2Hz. Evidence markers are culled by zone rather than per-object distance. Particles beyond 600 pixels are culled. Ambient sounds more than 1000 pixels from the player are muted using Phaser's spatial audio system.
+
+**Performance targets**: 60fps on mid-range devices (laptop GPU, 4 CPU cores, 8GB RAM). 30fps on low-end devices (integrated graphics, 2 CPU cores) — player can select the 30fps target in graphics settings. NPC AI updates at 10Hz (every 3 physics frames at 30Hz), not every frame. Evidence proximity queries use a spatial hash grid for fast lookups, re-indexed when the NPC pool is updated.
+
+### Loading Scene
+
+The loading scene replaces the existing preload scene with a polished loading UI featuring a progress bar with an animated gradient, randomly selected loading tips (20 or more per role), a blurred atmospheric background from the current biome, and an estimated time remaining based on asset tier sizes. It transitions to the map scene with a fade-in after all critical and standard tier assets are loaded.
+
+**Loading tips** (role-specific, shown during run start):
+
+Killer tips: "Disposing of bodies in water is thorough — but leaves traces in the riverbank soil." / "A jammed camera covers your tracks, but a sharp-eyed agent knows which zones go dark." / "Fake evidence convinces the naive. Evidence chain analysis exposes the creative."
+
+Fed tips: "Silenced witnesses can still be coerced — if you're willing to get your hands dirty." / "Off-the-books forensics are faster, but an attorney can have them thrown out." / "Entrapment only works if the killer doesn't notice the decoy is too convenient."
+
+### Landing Page
+
+A polished marketing landing page rendered server-side for SEO. Sections:
+
+**Hero**: Game title with animated gradient text. Tagline: "One kills. One investigates. Only one gets away." Call-to-action buttons for "Play Now" (goes to role selection) and "How to Play" (goes to tutorial). Hero visual shows a split-screen of killer and fed perspectives.
+
+**Asymmetric Gameplay**: Two side-by-side cards with hover effects. Killer card uses a dark theme with stealth visuals and a list of killer abilities. Fed card uses a blue theme with investigation visuals and a list of fed abilities. A note explains that both roles unlock counter-play abilities to undermine each other.
+
+**Biomes Section**: Horizontally scrolling marquee of biome screenshots with caption "12 procedurally generated biomes — each run is unique."
+
+**Progression**: An animated beam diagram showing the progression loop: Run → Materials → Skill Trees → Counter-Play Abilities → Next Run.
+
+**Call to Action**: "Ready to play?" with an animated button and an optional player count display if analytics are available.
+
+All Magic UI animations respect prefers-reduced-motion (via component props or CSS override). All images have alt text. Color contrast meets WCAG AA (4.5:1 minimum for normal text, 3:1 for large text).
+
+### Database Table
+
+**User settings**: Stores per-user preferences in the database. One row per user. Fields: user ID (primary key, references auth users), audio settings (flexible JSON), graphics settings (flexible JSON), accessibility settings (flexible JSON), control settings (flexible JSON), and last updated timestamp. Settings subcategories are stored as flexible JSON because the schema evolves frequently — adding a new control binding or accessibility option does not require a database migration. Row-level security ensures users can only read and write their own settings row.
+
+### Server Actions
+
+**Save settings**: A server action that validates and persists user settings. Validates that audio volumes are each within the 0 to 1 range, that target FPS is either 60 or 30, that colorblind mode is a valid value, that each key binding is a valid keyboard key string (no empty strings, no control sequences), and that the user ID in the request matches the authenticated session user. Returns the saved settings on success.
+
+### EventBus to Settings Bridge
+
+Settings changes from React components must reach Phaser systems. Audio settings changes trigger the audio manager to apply the new settings. Graphics settings changes trigger the VFX manager to apply the new settings. Control settings changes trigger the Phaser input manager to rebind keys. The settings store emits these events after writing to localStorage, and Phaser systems listen for them on initialization.
+
+### Edge Cases
+
+- **First launch (no tutorial shown)**: Check localStorage for tutorial-complete flags per role. If missing, the tutorial auto-starts on the first run with that role. Flags are set after tutorial completes or is skipped. Each role's flag is independent.
+- **Audio not permitted (browser policy)**: Web Audio API requires a user interaction before sound can play. The audio manager checks the AudioContext state on initialization. If suspended, audio is deferred until the first click or keypress (standard web approach). No error is shown — audio silently becomes available after the first interaction.
+- **Reduced motion + VFX conflict**: If reduced motion is enabled, all particle effects are replaced with instant color flashes (1 frame). Screen shake is completely disabled. Loading transitions use cut instead of fade.
+- **Colorblind mode + evidence markers**: Evidence type markers on the map use both color and SVG icon shape. The colorblind filter is applied via a CSS filter on the game canvas — it affects the entire Phaser canvas including evidence markers. SVG icons ensure readability even with the filter applied.
+- **Control remapping conflicts**: If two actions share the same key, the settings page shows a conflict warning and blocks save until resolved. Escape and Print Screen cannot be remapped (reserved system keys).
+- **Settings page during active run**: Volume, graphics, and accessibility changes apply immediately via EventBus. Control remapping during a run takes effect after the run ends.
+- **Server settings sync failure**: localStorage already saved — settings not lost. Toast notification reads "Settings saved locally — cloud sync will retry." Retry on next settings change.
+- **Tutorial skip**: Tutorial complete flags are set even on skip — the tutorial never re-shows. A "Replay Tutorial" option is available in Settings under Gameplay.
+- **Counter-play SFX volume**: Counter-play SFX play at 70% of master SFX volume — a design-enforced offset the user cannot override per-ability.
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Polish systems wrap existing systems — they don't replace them. AudioManager hooks into existing EventBus events. VFXManager responds to the same events. Tutorial steps wait for existing EventBus events (no new events needed in most cases). Object pools wrap existing entity and particle creation. This keeps the piece additive and reduces regression risk.
+
+Audio assets are placeholders at implementation time — the system is implemented with placeholder audio keys, and real audio files are dropped in without code changes.
+
+### File Structure
+
+- `packages/shared/src/types/audio.ts` — `SoundEffect`, `MusicTrack`, `AmbientLoop`, `AudioSettings` interfaces
+- `packages/shared/src/types/settings.ts` — `GraphicsSettings`, `AccessibilitySettings`, `ControlSettings`, `UserSettings` interfaces (imports `AudioSettings` from audio.ts)
+- `packages/shared/src/constants/audio.ts` — all sound keys, default volumes, fade durations, biome-to-track-key map
+- `packages/game-engine/src/audio/audio-manager.ts` — singleton AudioManager class
+- `packages/game-engine/src/vfx/vfx-manager.ts` — singleton VFXManager class
+- `packages/game-engine/src/vfx/presets/combat-vfx.ts` — hit effects, death animations, ability VFX presets
+- `packages/game-engine/src/vfx/presets/evidence-vfx.ts` — discovery sparkle, scan pulse, arrest animation presets
+- `packages/game-engine/src/vfx/presets/environment-vfx.ts` — ambient particles, weather, lighting presets per biome
+- `packages/game-engine/src/vfx/presets/ui-vfx.ts` — coin burst, unlock celebration, level-up glow presets
+- `packages/game-engine/src/animations/animation-manager.ts` — AnimationManager class extending piece 06 sprite manager
+- `packages/game-engine/src/tutorial/tutorial-manager.ts` — TutorialManager class
+- `packages/game-engine/src/tutorial/tutorials/killer-tutorial.ts` — `TutorialStep[]` for killer (9 steps)
+- `packages/game-engine/src/tutorial/tutorials/fed-tutorial.ts` — `TutorialStep[]` for fed (9 steps)
+- `packages/game-engine/src/scenes/loading-scene.ts` — polished loading scene extending PreloadScene
+- `packages/game-engine/src/utils/object-pool.ts` — generic `ObjectPool<T>` class with 5 concrete pool instantiations
+- `packages/game-engine/src/utils/culling.ts` — `ViewportCuller` class
+- `apps/web/src/app/page.tsx` — Server Component landing page (SSR for SEO)
+- `apps/web/src/app/settings/page.tsx` — Client Component settings page (4 sections)
+- `apps/web/src/components/app/game/hud/TutorialOverlay.tsx` — Client Component reading tutorial state from Phaser via EventBus → Zustand
+- `apps/web/src/components/app/common/accessibility/ScreenReaderAnnouncer.tsx` — singleton in root layout, aria-live regions
+- `apps/web/src/components/app/common/accessibility/FocusManager.tsx` — focus trapping for dialogs
+- `apps/web/src/stores/settings.ts` — Zustand settings store
+- `apps/web/src/dal/settings/user-settings.ts` — `getSettings`, `updateSettings`, `upsertSettings`
+- `apps/web/src/app/actions/settings/save-settings.ts` — Server Action with Zod validation
+- `supabase/migrations/XXX_user_settings.sql` — `user_settings` table with RLS
 
 ### Database Schema
-
-**`supabase/migrations/XXX_user_settings.sql`**:
 
 ```sql
 CREATE TABLE user_settings (
@@ -277,21 +314,92 @@ CREATE POLICY "user_settings_own"
   USING (auth.uid() = user_id);
 ```
 
-JSONB usage rationale: Settings subcategories (audio, graphics, accessibility, controls) are JSONB because the schema evolves frequently as new settings are added — a new control binding or a new accessibility option would not require a migration, only a code-side default update. Trade-off: JSONB cannot be queried by individual setting without path operators. This is acceptable since settings are always loaded and saved as complete category objects.
+JSONB rationale: Settings subcategories are JSONB because the schema evolves frequently. Adding a new control binding or accessibility option requires only a code-side default update — no migration. Trade-off: JSONB cannot be queried by individual setting without path operators, which is acceptable since settings are always loaded and saved as complete category objects.
 
-### Audio System
-
-**`packages/game-engine/src/audio/audio-manager.ts`**
-
-Singleton. Wraps Phaser's built-in audio manager with:
-- Volume controls for each category (music, SFX, ambient)
-- Biome-aware music transitions (crossfade on biome change)
-- SFX pooling (N simultaneous instances per sound key)
-- Auto-fade on scene transition
-- Respects `AudioSettings.isMuted` and individual volumes
-- Respects `AccessibilitySettings.reducedMotion` (no dynamic audio panning/effects if motion sensitive)
+### TypeScript Types
 
 ```typescript
+// packages/shared/src/types/audio.ts
+export interface SoundEffect {
+  key: string;       // Phaser audio key for preloading
+  path: string;      // asset path (relative to Azure Blob Storage URL or /public)
+  volume: number;    // 0-1 default volume
+  poolSize: number;  // how many simultaneous instances (3-5 for common SFX)
+}
+
+export interface MusicTrack {
+  key: string;
+  path: string;
+  biome?: Biome;     // biome-specific tracks; undefined = universal
+  loopStart?: number; // loop point in seconds for seamless looping
+  loopEnd?: number;
+}
+
+export interface AmbientLoop {
+  key: string;
+  path: string;
+  biome: Biome;
+  volume: number;    // ambient typically 0.3-0.5
+}
+
+export interface AudioSettings {
+  masterVolume: number;  // 0-1
+  musicVolume: number;   // 0-1, relative to master
+  sfxVolume: number;     // 0-1, relative to master
+  ambientVolume: number; // 0-1, relative to master
+  isMuted: boolean;
+}
+
+// packages/shared/src/types/settings.ts
+import { AudioSettings } from './audio';
+
+export interface GraphicsSettings {
+  particlesEnabled: boolean;   // true by default
+  screenShakeEnabled: boolean; // true by default
+  reducedMotion: boolean;      // mirrors prefers-reduced-motion; disables particles+shake
+  targetFps: 60 | 30;         // 60 default; 30 for low-end devices
+}
+
+export interface AccessibilitySettings {
+  highContrast: boolean;
+  colorblindMode: 'NONE' | 'PROTANOPIA' | 'DEUTERANOPIA' | 'TRITANOPIA';
+  textScale: 1 | 1.25 | 1.5; // relative text size multiplier
+  keyboardNavigation: boolean;
+  screenReaderAnnouncements: boolean;
+}
+
+export interface ControlSettings {
+  moveUp: string;          // default 'w'
+  moveDown: string;        // default 's'
+  moveLeft: string;        // default 'a'
+  moveRight: string;       // default 'd'
+  interact: string;        // default 'e'
+  ability1: string;        // default '1'
+  ability2: string;        // default '2'
+  ability3: string;        // default '3'
+  ability4: string;        // default '4'
+  ability5: string;        // default '5'
+  openInventory: string;   // default 'i'
+  openMap: string;         // default 'm'
+  openSuspectBoard: string; // default 'tab' (fed only)
+  sprint: string;          // default 'shift'
+  sneak: string;           // default 'ctrl'
+}
+
+export interface UserSettings {
+  userId: string;
+  audio: AudioSettings;
+  graphics: GraphicsSettings;
+  accessibility: AccessibilitySettings;
+  controls: ControlSettings;
+  updatedAt: string;       // ISO 8601
+}
+```
+
+### AudioManager Class
+
+```typescript
+// packages/game-engine/src/audio/audio-manager.ts
 class AudioManager {
   private scene: Phaser.Scene;
 
@@ -308,10 +416,10 @@ class AudioManager {
 }
 ```
 
-**Biome music assignments** (tracks sourced from royalty-free library — placeholder keys at implementation time):
+Biome-to-track-key map (defined in `constants/audio.ts`):
 
-| Biome | Music Mood | Track Key |
-|-------|-----------|-----------|
+| Biome | Mood | Track Key |
+|-------|------|-----------|
 | city | Tense urban jazz | `music_city` |
 | rural | Sparse acoustic | `music_rural` |
 | cruise_ship | Eerie lounge | `music_cruise` |
@@ -325,45 +433,10 @@ class AudioManager {
 | concert_venue | Muffled crowd + tension | `music_concert` |
 | subway_network | Underground drone | `music_subway` |
 
-**Role audio perspective** (ambient layers):
-- When playing as killer: slight low-frequency drone underneath biome music
-- When playing as fed: procedural "investigation" layer (subtle clock ticking, paper rustle) underneath biome music
-
-**SFX catalog** (partial — full set defined in `constants/audio.ts`):
-
-| Event | SFX Key | Category |
-|-------|---------|---------|
-| Evidence discovered | `sfx_evidence_found` | Investigation |
-| Evidence quality upgraded | `sfx_evidence_enhanced` | Investigation |
-| Arrest succeeded | `sfx_arrest_success` | Investigation |
-| Arrest failed (combat) | `sfx_arrest_failed` | Investigation |
-| Suspect board updated | `sfx_suspect_update` | Investigation |
-| Kill performed | `sfx_kill` | Stealth |
-| Body disposed | `sfx_disposal` | Stealth |
-| Stealth broken | `sfx_detection` | Stealth |
-| Fake evidence planted | `sfx_plant_evidence` | Counter-play |
-| Witness silenced | `sfx_intimidation` | Counter-play |
-| Surveillance jammed | `sfx_jamming` | Counter-play |
-| Rough interrogation | `sfx_interrogation` | Counter-play |
-| Entrapment triggered | `sfx_entrapment` | Counter-play |
-| Combat hit | `sfx_hit_melee` | Combat |
-| Player damaged | `sfx_player_hurt` | Combat |
-| Ability used | `sfx_ability_generic` | Abilities |
-| Shop opened | `sfx_shop_open` | UI |
-| Item purchased | `sfx_purchase` | UI |
-| Encounter triggered | `sfx_encounter` | UI |
-| Trophy unlocked | `sfx_trophy_unlock` | Progression |
-| Skill unlocked | `sfx_skill_unlock` | Progression |
-
-Counter-play ability SFX use darker/more morally ambiguous sounds to reinforce their risk/reward nature.
-
-### VFX System
-
-**`packages/game-engine/src/vfx/vfx-manager.ts`**
-
-Singleton. Uses Phaser's built-in particle system with object pooling (piece object-pool.ts). All VFX respect `GraphicsSettings.particlesEnabled` and `GraphicsSettings.screenShakeEnabled`.
+### VFXManager Class
 
 ```typescript
+// packages/game-engine/src/vfx/vfx-manager.ts
 class VFXManager {
   initialize(scene: Phaser.Scene): void;
   applySettings(settings: GraphicsSettings): void;
@@ -376,66 +449,21 @@ class VFXManager {
   // Particle effects
   bloodSplatter(x: number, y: number, intensity: 'SMALL' | 'MEDIUM' | 'LARGE'): void;
   evidenceDiscoveryPulse(x: number, y: number, evidenceType: EvidenceType): void;
-  stealthBreakFlash(x: number, y: number): void;           // red pulse when detected
+  stealthBreakFlash(x: number, y: number): void;
   arrestAnimation(targetX: number, targetY: number): void;
-  unlockCelebration(x: number, y: number, rarity: string): void;  // trophy/skill unlock
+  unlockCelebration(x: number, y: number, rarity: string): void;
   coinBurst(x: number, y: number, amount: number): void;
 
   // Environment
-  biomeAmbientParticles(biome: Biome): void;   // rain in city, dust in ghost_town, etc.
+  biomeAmbientParticles(biome: Biome): void;
   setLighting(ambientColor: number, intensity: number): void;
 }
 ```
 
-**VFX presets** by biome (subset):
-
-| Biome | Ambient Particles | Lighting |
-|-------|------------------|---------|
-| city | Rain drops, exhaust particles | Blue-grey, dim |
-| abandoned_asylum | Dust motes, flickering shadow | Red-tinted, low |
-| concert_venue | Stage light beams, confetti | Multi-color, bright |
-| subway_network | Train dust, light flicker | Yellow-white, harsh |
-| rural | Fireflies at night, falling leaves | Warm, natural |
-
-Evidence discovery by type uses color-coded particle bursts:
-- FOOTPRINT: grey dust
-- DNA: green sparkle
-- WITNESS: orange glow
-- WEAPON_TRACE: red shimmer
-- BODY: dark purple pulse
-- SURVEILLANCE: blue scan ring
-- FAKE_EVIDENCE: appears identical to real evidence type (deception maintained)
-
-Counter-play ability VFX:
-- `SURVEILLANCE_JAMMING`: static interference grid expanding from killer position over zone
-- `ENTRAPMENT_SETUP` (when triggered): brief red spotlight on decoy NPC
-- `ILLEGAL_SURVEILLANCE` (fed): subtle green tint on camera icons in zone
-- `ROUGH_INTERROGATION`: screen desaturation during interrogation scene
-
-If `GraphicsSettings.reducedMotion = true` OR `prefers-reduced-motion: reduce`:
-- All particle effects disabled
-- Screen shake disabled
-- Screen flash replaced with brief border color change
-- Transitions use cut instead of fade
-
-### Animation Manager
-
-**`packages/game-engine/src/animations/animation-manager.ts`**
-
-Centralizes all character animation definitions (extending piece 06's sprite-manager). Adds:
-- Smooth idle → walk → run transitions (easing)
-- Context-sensitive animations: disguise change animation, body disposal animation, forensic examination animation
-- Combat polish: hit stagger, knockout fall, dodge roll
-- Counter-play animations: intimidation lean-in, evidence plant crouch, camera jam gesture (subtle — maintains stealth)
-- Interaction feedback animations: handshake for interview, badge flash for witness compulsion
-
-### Tutorial System
-
-**`packages/game-engine/src/tutorial/tutorial-manager.ts`**
-
-Overlay-based tutorial (no separate tutorial level). First time a user selects a role, the tutorial activates. Tutorial steps are scripted sequences that highlight UI elements, move camera to points of interest, and wait for the player to perform specific actions before advancing.
+### TutorialManager Class
 
 ```typescript
+// packages/game-engine/src/tutorial/tutorial-manager.ts
 interface TutorialStep {
   id: string;
   instruction: string;           // displayed in TutorialOverlay.tsx
@@ -447,45 +475,46 @@ interface TutorialStep {
 
 class TutorialManager {
   start(role: PlayerRole): void;
-  advance(): void;                    // called on step completion or skip
-  skip(): void;                       // skip entire tutorial
+  advance(): void;               // called on step completion or skip
+  skip(): void;                  // skip entire tutorial
   getCurrentStep(): TutorialStep | null;
   isActive(): boolean;
   onComplete(callback: () => void): void;
 }
 ```
 
-**Killer tutorial steps** (`killer-tutorial.ts`):
+**Killer tutorial steps** (`killer-tutorial.ts` — `TutorialStep[]` with 9 entries):
 
-1. "Welcome, Killer. Your objective is to eliminate your targets and dispose of the evidence." (auto-advance 5s)
-2. "Use WASD to move. Hold Shift to sprint. Hold Ctrl to sneak." (wait: player moves)
-3. "The orange-marked NPC is your first target. Approach them cautiously." (wait: player near target)
-4. "Press E to interact. Select a kill method." (wait: `killer:target-eliminated`)
-5. "Evidence has been generated. The fed will find it. Find a disposal site (marked in purple)." (wait: player near disposal)
-6. "Dispose of the body to reduce evidence." (wait: `killer:body-disposed`)
-7. "You have earned session coins. A shop is marked on your minimap — visit it between objectives." (auto-advance 5s)
-8. "Advanced: As you progress, you'll unlock Deception abilities to plant fake evidence and silence witnesses." (TutorialOverlay highlights locked Deception tree icon, auto-advance 8s)
-9. "Tutorial complete. Good luck — the fed is searching for you." (skip tutorial flag set)
+| # | Instruction | waitForEvent / autoAdvanceMs |
+|---|-------------|------------------------------|
+| 1 | "Welcome, Killer. Eliminate your targets and dispose of the evidence." | autoAdvanceMs: 5000 |
+| 2 | "Use WASD to move. Hold Shift to sprint. Hold Ctrl to sneak." | wait: player moves |
+| 3 | "The orange-marked NPC is your first target. Approach them cautiously." | wait: player near target |
+| 4 | "Press E to interact. Select a kill method." | wait: `killer:target-eliminated` |
+| 5 | "Evidence has been generated. The fed will find it. Find a disposal site (marked in purple)." | wait: player near disposal |
+| 6 | "Dispose of the body to reduce evidence." | wait: `killer:body-disposed` |
+| 7 | "You have earned session coins. A shop is marked on your minimap — visit it between objectives." | autoAdvanceMs: 5000 |
+| 8 | "Advanced: unlock Deception abilities to plant fake evidence and silence witnesses." (highlights Deception tree icon) | autoAdvanceMs: 8000 |
+| 9 | "Tutorial complete. Good luck — the fed is searching for you." | sets tutorial complete flag |
 
-**Fed tutorial steps** (`fed-tutorial.ts`):
+**Fed tutorial steps** (`fed-tutorial.ts` — `TutorialStep[]` with 9 entries):
 
-1. "Welcome, Agent. Your objective is to gather evidence, identify the killer among the NPCs, and make an arrest." (auto-advance 5s)
-2. "Use WASD to move. Press E to interact with NPCs and evidence." (wait: player moves)
-3. "Press Q to activate your Scanner ability. Blue markers show nearby evidence." (wait: `fed:evidence-discovered`)
-4. "Examine the evidence by pressing E on it. Higher quality evidence is more valuable." (wait: forensic examination performed)
-5. "NPCs marked with ! have witnessed something. Interview them for leads." (wait: `fed:witness-interviewed`)
-6. "Open your Suspect Board (Tab). Suspects are filtered as you gather evidence." (wait: SuspectBoard opens)
-7. "When your Case Strength meter reaches 80%, you can make a clean arrest. Target a suspect and press E." (auto-advance 8s)
-8. "Advanced: As you progress, you'll unlock Interrogation abilities to pressure witnesses and set up entrapment." (highlights locked Interrogation tree icon, auto-advance 8s)
-9. "Tutorial complete. Find the killer — they're already acting." (skip tutorial flag set)
+| # | Instruction | waitForEvent / autoAdvanceMs |
+|---|-------------|------------------------------|
+| 1 | "Welcome, Agent. Gather evidence, identify the killer, and make an arrest." | autoAdvanceMs: 5000 |
+| 2 | "Use WASD to move. Press E to interact with NPCs and evidence." | wait: player moves |
+| 3 | "Press Q to activate your Scanner ability. Blue markers show nearby evidence." | wait: `fed:evidence-discovered` |
+| 4 | "Examine the evidence by pressing E on it. Higher quality evidence is more valuable." | wait: forensic examination performed |
+| 5 | "NPCs marked with ! have witnessed something. Interview them for leads." | wait: `fed:witness-interviewed` |
+| 6 | "Open your Suspect Board (Tab). Suspects are filtered as you gather evidence." | wait: SuspectBoard opens |
+| 7 | "When your Case Strength meter reaches 80%, you can make a clean arrest. Target a suspect and press E." | autoAdvanceMs: 8000 |
+| 8 | "Advanced: unlock Interrogation abilities to pressure witnesses and set up entrapment." (highlights Interrogation tree icon) | autoAdvanceMs: 8000 |
+| 9 | "Tutorial complete. Find the killer — they're already acting." | sets tutorial complete flag |
 
-**Counter-play introduction** (shown after first counter-play encounter, regardless of tutorial completion):
-- Killer receives a brief tooltip when an NPC they intimidated is flagged as "silenced" in the fed's interface: "Silenced witnesses cannot be easily interviewed. The fed must use more aggressive tactics."
-- Fed receives a brief tooltip when encountering a silenced witness: "This witness is too frightened to talk. You may need unconventional methods — but they come with risk."
-
-**`apps/web/src/components/app/game/hud/TutorialOverlay.tsx`**:
+### TutorialOverlay Component
 
 ```typescript
+// apps/web/src/components/app/game/hud/TutorialOverlay.tsx
 // "use client" — reads tutorial state from Phaser via EventBus → Zustand
 interface TutorialOverlayProps {
   step: TutorialStep | null;
@@ -495,15 +524,12 @@ interface TutorialOverlayProps {
 }
 ```
 
-Layout: bottom-center instruction card with step indicator dots (X/Y). Skip button top-right. Highlighted elements get a pulsing border overlay (CSS, not Phaser). Arrow pointing toward highlighted element.
+Layout: bottom-center instruction card with step indicator dots. Skip button at top-right. Highlighted elements get a pulsing border overlay (CSS, not Phaser). Arrow pointing toward highlighted element. Instruction card uses `role="status"` and `aria-live="polite"` for screen reader step announcements.
 
-WCAG: instruction card has `role="status"` and `aria-live="polite"` — screen reader announces each step automatically.
-
-### Settings System
-
-**`apps/web/src/stores/settings.ts`**:
+### Settings Store
 
 ```typescript
+// apps/web/src/stores/settings.ts
 interface SettingsStore {
   settings: UserSettings;
   isLoaded: boolean;
@@ -511,72 +537,56 @@ interface SettingsStore {
   // Initialize from localStorage, then merge server settings if logged in
   initialize(serverSettings?: UserSettings): void;
 
-  // Update individual categories
   updateAudio: (audio: Partial<AudioSettings>) => void;
   updateGraphics: (graphics: Partial<GraphicsSettings>) => void;
   updateAccessibility: (accessibility: Partial<AccessibilitySettings>) => void;
   updateControls: (controls: Partial<ControlSettings>) => void;
 
-  // Persist
   saveToLocalStorage: () => void;
-  saveToServer: () => Promise<void>;   // calls save-settings Server Action
+  saveToServer: () => Promise<void>;  // calls save-settings Server Action
 }
 ```
 
-**Persistence strategy**:
-- Immediate: save to `localStorage` on every settings change (no delay)
-- Deferred: debounce server save by 2 seconds after last change (only if user is logged in)
-- On app load: read from localStorage for immediate application, then fetch from server and merge (server wins on conflict)
-- Offline: localStorage is always available; server sync fails silently (no error shown)
+Persistence: `saveToLocalStorage()` on every change (immediate). `saveToServer()` debounced 2 seconds after last change (logged-in only). On app load: read localStorage → apply immediately → fetch server → merge (server wins). Server failure: silent with toast notification.
 
-**Accessibility settings** automatically mirror browser media queries:
-- `prefers-reduced-motion` → initialize `reducedMotion: true` (user can override to false)
-- `prefers-contrast: high` → initialize `highContrast: true`
-- These are initial values only; user's explicit settings override media queries after first save
-
-**`apps/web/src/app/settings/page.tsx`** — Client Component (settings are user-specific, SSR not needed)
-
-Sections:
-1. **Audio**: master volume slider, music/SFX/ambient sliders, mute toggle, preview button (plays test sound)
-2. **Graphics**: particle effects toggle, screen shake toggle, target FPS radio (60/30), reduced motion toggle
-3. **Accessibility**: high contrast toggle, colorblind mode select (NONE/PROTANOPIA/DEUTERANOPIA/TRITANOPIA), text scale radio (1/1.25/1.5), keyboard nav toggle, screen reader announcements toggle
-4. **Controls**: key binding grid — click cell → press key to remap. Reset to defaults button per section.
-
-All controls WCAG AA: labels on every input, focus visible on all elements, keyboard navigable without mouse.
-
-### Accessibility Features
-
-**`apps/web/src/components/app/common/accessibility/`**
-
-**`ScreenReaderAnnouncer.tsx`**: Singleton component rendered in root layout. Provides `aria-live="polite"` and `aria-live="assertive"` regions. Exposes a global announce function called from EventBus handlers.
-
-Key in-game announcements (when `AccessibilitySettings.screenReaderAnnouncements = true`):
-- Evidence discovered: "Evidence found: [type] — Case strength now [X]%"
-- Suspect board updated: "Suspect narrowed — [N] suspects remain"
-- Arrest condition met: "Arrest ready — Case strength [X]%"
-- Kill performed: "Target eliminated" (killer perspective)
-- Detection: "You have been spotted"
-- Counter-play triggered: "Counter-play activated: [ability name]"
-- Game over: "Run complete — [WIN/LOSE]"
-
-**`FocusManager.tsx`**: Manages focus trapping in dialogs (shop, encounter, SuspectBoard). Uses `focus-trap-react` or custom implementation. Ensures Tab cycle stays within open modal. Returns focus to trigger element on close.
-
-**High contrast mode**: Adds `.high-contrast` class to root `<html>`. CSS custom properties override:
-- All text: 100% contrast (pure black/white)
-- UI backgrounds: no gradients, flat colors only
-- Evidence markers on minimap: larger, with distinct shapes not just colors
-- HUD meters: thick borders, text labels alongside color indicators
-
-**Colorblind mode**: Adds `.colorblind-[mode]` class. CSS filter overrides + alternative color schemes:
-- Evidence type icons use both color AND shape (circle/triangle/square) — not color alone
-- Alert levels use patterns/hatching in addition to red/yellow/green
-- All information that's color-coded has a secondary indicator (icon, label, pattern)
-
-### Performance Optimization
-
-**`packages/game-engine/src/utils/object-pool.ts`**
+### DAL and Server Action Signatures
 
 ```typescript
+// apps/web/src/dal/settings/user-settings.ts
+export interface UserSettingsDTO {
+  userId: string;
+  audio: AudioSettings;
+  graphics: GraphicsSettings;
+  accessibility: AccessibilitySettings;
+  controls: ControlSettings;
+  updatedAt: string;
+}
+
+export async function getSettings(userId: string): Promise<Result<UserSettingsDTO | null, DatabaseError>>;
+export async function updateSettings(
+  userId: string,
+  settings: Partial<Omit<UserSettingsDTO, 'userId' | 'updatedAt'>>
+): Promise<Result<UserSettingsDTO, DatabaseError>>;
+export async function upsertSettings(
+  userId: string,
+  settings: UserSettingsDTO
+): Promise<Result<UserSettingsDTO, DatabaseError>>;
+```
+
+```typescript
+// apps/web/src/app/actions/settings/save-settings.ts
+// Server Action with Zod validation:
+// - audio volumes: 0-1 range for each field
+// - graphics.targetFps: must be 60 or 30
+// - accessibility.colorblindMode: must be valid enum value
+// - controls: each key must be a valid keyboard key string (no empty, no control sequences)
+// - userId must match session user (cannot save settings for another user)
+```
+
+### ObjectPool Class
+
+```typescript
+// packages/game-engine/src/utils/object-pool.ts
 class ObjectPool<T> {
   constructor(
     createFn: () => T,
@@ -589,18 +599,19 @@ class ObjectPool<T> {
   getActiveCount(): number;
   getPoolSize(): number;
 }
+
+// Concrete pools:
+// ParticlePool      — Phaser particle emitters (pool size: 20 per preset)
+// ProjectilePool    — physics bodies for ranged attacks (pool size: 10)
+// DamageNumberPool  — floating damage text objects (pool size: 15)
+// EvidenceMarkerPool — evidence highlight objects on map (pool size: 50)
+// NPCPool           — NPC entity objects (pool size: 40)
 ```
 
-Pools implemented:
-- `ParticlePool` — Phaser particle emitters (pool size: 20 per preset)
-- `ProjectilePool` — physics bodies for ranged attacks (pool size: 10)
-- `DamageNumberPool` — floating damage text objects (pool size: 15)
-- `EvidenceMarkerPool` — evidence highlight objects on map (pool size: 50)
-- `NPCPool` — NPC entity objects (inactive NPCs returned, active NPCs borrowed) (pool size: 40)
-
-**`packages/game-engine/src/utils/culling.ts`**
+### ViewportCuller Class
 
 ```typescript
+// packages/game-engine/src/utils/culling.ts
 class ViewportCuller {
   setViewport(camera: Phaser.Cameras.Scene2D.Camera): void;
   isInViewport(x: number, y: number, margin?: number): boolean;
@@ -608,139 +619,48 @@ class ViewportCuller {
 }
 ```
 
-Culling strategy:
-- NPCs > 800px from camera center: disable physics updates, pause animations (only position ticks at 2Hz)
-- Evidence markers: only render if in visible zone (zone-based culling, not per-object distance)
-- Particles: automatically cleaned by Phaser particle system; additional VFX beyond 600px culled
-- Off-screen audio: ambient sounds > 1000px from player: muted (Phaser spatial audio)
+Culling thresholds: NPCs > 800px from camera center → disable physics, pause animations (position ticks at 2Hz). Evidence markers → zone-based culling (not per-object distance). VFX beyond 600px → culled. Ambient audio > 1000px → muted via Phaser spatial audio.
 
-**Performance targets**:
-- 60fps on mid-range devices (laptop GPU, 4 CPU cores, 8GB RAM)
-- 30fps on low-end devices (integrated graphics, 2 CPU cores) — player can set 30fps target in settings
-- NPC AI: update at 10Hz (every 3 physics frames at 30Hz), not every frame
-- Evidence spatial index: uses spatial hash grid for O(1) proximity queries (re-indexed on NPC pool update)
-
-### Loading Scene
-
-**`packages/game-engine/src/scenes/loading-scene.ts`**
-
-Replaces/enhances the existing PreloadScene (piece 04) with polished loading UI:
-- Progress bar with animated gradient
-- Loading tips (randomly selected from pool of 20+ tips per role)
-- Background: blurred atmospheric screenshot of current biome
-- Estimated time remaining (based on asset tier sizes)
-- Transitions to MapScene with a fade-in after all critical + standard tier assets loaded
-
-Loading tips examples (role-specific, shown during run start):
-
-Killer tips:
-- "Disposing of bodies in water is thorough — but leaves traces in the riverbank soil."
-- "A jammed camera covers your tracks, but a sharp-eyed agent knows which zones go dark."
-- "Fake evidence convinces the naive. Evidence chain analysis exposes the creative."
-
-Fed tips:
-- "Silenced witnesses can still be coerced — if you're willing to get your hands dirty."
-- "Off-the-books forensics are faster, but an attorney can have them thrown out."
-- "Entrapment only works if the killer doesn't notice the decoy is too convenient."
-
-### Landing Page
-
-**`apps/web/src/app/page.tsx`** — Server Component (SSR for SEO)
-
-Polished marketing landing page using Magic UI animated components:
+### Landing Page Structure
 
 ```
+apps/web/src/app/page.tsx — Server Component (SSR for SEO)
+
 [Hero]
-  - Game title with animated gradient text (Magic UI AnimatedGradientText)
+  - AnimatedGradientText: game title
   - Tagline: "One kills. One investigates. Only one gets away."
   - CTA: "Play Now" (→ /game/select-role) + "How to Play" (→ /tutorial)
-  - Hero visual: split-screen showing killer vs fed perspectives (static screenshot or short video)
+  - Hero visual: split-screen killer vs fed perspectives
 
 [Asymmetric Gameplay]
-  - Two cards side-by-side (Magic UI MagicCard with hover effect)
-  - Killer card: dark theme, stealth visual, list of killer abilities
-  - Fed card: blue theme, investigation visual, list of fed abilities
-  - Small note: "Both roles unlock counter-play abilities to undermine each other"
+  - Two MagicCard components side-by-side with hover effect
+  - Killer card: dark theme, stealth visual, killer ability list
+  - Fed card: blue theme, investigation visual, fed ability list
+  - Note: "Both roles unlock counter-play abilities to undermine each other"
 
 [Biomes Section]
-  - Horizontal scrolling Marquee of biome screenshots (Magic UI Marquee)
-  - "12 procedurally generated biomes — each run is unique"
+  - Marquee of biome screenshots
+  - Caption: "12 procedurally generated biomes — each run is unique"
 
 [Progression]
-  - Animated beam showing the progression loop (Magic UI AnimatedBeam)
-  - Run → Materials → Skill Trees → Counter-Play Abilities → Next Run
+  - AnimatedBeam: Run → Materials → Skill Trees → Counter-Play Abilities → Next Run
 
 [CTA]
-  - "Ready to play?" with animated button (Magic UI ShimmerButton or similar)
-  - Join count or player count (if analytics available)
+  - ShimmerButton: "Ready to play?"
+  - Optional player count display
 ```
 
-WCAG AA landing page: all Magic UI animations respect `prefers-reduced-motion` (components accept `reducedMotion` prop or CSS override). All images have alt text. Color contrast ≥ 4.5:1 for normal text, ≥ 3:1 for large text.
+All Magic UI animations accept a `reducedMotion` prop or respond to CSS prefers-reduced-motion. All images have alt text. Color contrast: ≥ 4.5:1 for normal text, ≥ 3:1 for large text.
 
-### DAL and Server Actions
+### EventBus to Settings Bridge
 
-**`apps/web/src/dal/settings/user-settings.ts`**:
+| EventBus Event | Phaser System Action |
+|---|---|
+| `settings:audio-updated` | `AudioManager.applySettings(newAudioSettings)` |
+| `settings:graphics-updated` | `VFXManager.applySettings(newGraphicsSettings)` |
+| `settings:controls-updated` | Phaser `InputManager` rebinds keys |
 
-```typescript
-export interface UserSettingsDTO {
-  userId: string;
-  audio: AudioSettings;
-  graphics: GraphicsSettings;
-  accessibility: AccessibilitySettings;
-  controls: ControlSettings;
-  updatedAt: string;
-}
-
-export async function getSettings(userId: string): Promise<Result<UserSettingsDTO | null, DatabaseError>>;
-export async function updateSettings(userId: string, settings: Partial<Omit<UserSettingsDTO, 'userId' | 'updatedAt'>>): Promise<Result<UserSettingsDTO, DatabaseError>>;
-export async function upsertSettings(userId: string, settings: UserSettingsDTO): Promise<Result<UserSettingsDTO, DatabaseError>>;
-```
-
-**`apps/web/src/app/actions/settings/save-settings.ts`**:
-
-Server Action with Zod validation. Validates:
-- Audio volumes: 0-1 range for each
-- Graphics: `targetFps` must be 60 or 30
-- Accessibility: `colorblindMode` must be valid enum value
-- Controls: each key binding must be a valid keyboard key string (no empty, no control sequences)
-- `userId` matches session user (cannot save settings for another user)
-
-### EventBus → Settings Bridge
-
-Settings changes from React must reach Phaser systems (AudioManager, VFXManager):
-
-On `settings:audio-updated` EventBus event → `AudioManager.applySettings(newAudioSettings)`
-On `settings:graphics-updated` EventBus event → `VFXManager.applySettings(newGraphicsSettings)`
-On `settings:controls-updated` EventBus event → Phaser `InputManager` rebinds keys
-
-Settings store emits these events after `saveToLocalStorage()` completes. Phaser systems listen on initialization.
-
-### Edge Cases
-
-- **First launch (no tutorial shown)**: Check `localStorage['tutorialComplete-KILLER']` and `tutorialComplete-FED`. If missing, tutorial auto-starts on first run with that role. Flag set after tutorial completes or is skipped. Independent per role.
-- **Audio not permitted (browser policy)**: Web Audio API requires user interaction before sound can play. `AudioManager.initialize()` checks `AudioContext.state`. If `suspended`, defers audio start until first click/keypress (standard approach). No error shown — audio silently becomes available after first interaction.
-- **Reduced motion + VFX conflict**: If `reducedMotion = true`, all particle effects are replaced with instant color flashes (1 frame) and all animations use `prefers-reduced-motion` CSS. Screen shake is completely disabled. Loading transitions use cut instead of fade.
-- **Colorblind mode + evidence markers**: Evidence type markers on map use both color AND SVG icon shape. Colorblind filter applied via CSS `filter: url(#colorblind-[mode])` on game canvas — affects entire Phaser canvas (including evidence markers). SVG icons ensure readability even with filter.
-- **Control remapping conflicts**: If two actions share the same key, settings page shows conflict warning and blocks save until resolved. Escape and Print Screen cannot be remapped (reserved system keys).
-- **Settings page during active run**: Settings changes while in-game apply immediately via EventBus events. Volume, graphics, and accessibility changes are live. Control remapping during an active run takes effect after run ends (to prevent mid-run confusion).
-- **Server settings sync failure**: If server save fails (network error), `saveToLocalStorage()` already completed — settings are not lost. A toast notification: "Settings saved locally — cloud sync will retry." Retry on next settings change.
-- **Tutorial skip**: If player skips tutorial, the tutorial complete flags are still set — tutorial never re-shows. A "Replay Tutorial" option is available in Settings → Gameplay.
-- **Counter-play SFX volume**: Counter-play ability SFX (intimidation, jamming, rough interrogation) play at 70% of master SFX volume by default — subtler than core ability SFX to feel appropriately clandestine. User cannot set this per-ability; it's a design-enforced offset on top of `sfxVolume`.
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Polish systems wrap existing systems — they don't replace them. AudioManager hooks into existing EventBus events. VFXManager responds to the same events. Tutorial steps wait for existing EventBus events (no new events needed in most cases). Object pools wrap existing entity and particle creation. This keeps the piece additive and reduces regression risk.
-
-Audio assets are placeholders at implementation time — the system is implemented with placeholder audio keys, and real audio files are dropped in without code changes.
+Settings store emits these events after `saveToLocalStorage()` completes. Phaser systems register listeners during initialization.
 
 ### Key Implementation Decisions
 
@@ -749,8 +669,8 @@ Audio assets are placeholders at implementation time — the system is implement
 - Settings persistence: localStorage for immediate availability, server for cross-device sync
 - Object pooling: implement for particles and NPCs first (highest impact); projectiles second
 - Viewport culling: zone-based culling is simpler and sufficient (don't need per-object distance culling for most entities)
-- Landing page: server component for SEO, no client-side data fetching needed for marketing content
-- Counter-play SFX: distinct enough to be recognizable but subtle enough to feel covert
+- Landing page: Server Component for SEO, no client-side data fetching needed for marketing content
+- Counter-play SFX: design-enforced 70% volume offset applied in AudioManager.playSFX() for counter-play keys; not exposed to user settings
 
 ### Testing Strategy
 

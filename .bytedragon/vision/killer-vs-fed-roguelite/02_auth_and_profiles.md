@@ -37,20 +37,109 @@ last_aligned: never
 
 ----
 
-Integrate Supabase Auth into the Next.js 16 application to provide user authentication with email/password login and signup. Create the user profile system with a PostgreSQL table, Row Level Security policies, a Data Access Layer for server-side profile operations, and a Server Action for profile mutations. This establishes the identity system that all player-facing features (role selection, persistent progression, session history) will depend on.
+Integrate Supabase Auth into the Next.js 16 application to provide user authentication with email/password login and signup. Create the user profile system with a database table protected by Row Level Security policies, a Data Access Layer for server-side profile operations, and a Server Action for profile mutations. This establishes the identity system that all player-facing features (role selection, persistent progression, session history) will depend on.
 
 ### Overview
 
-Authentication uses `@supabase/ssr` (NOT the deprecated `@supabase/auth-helpers-nextjs`) with cookie-based sessions for Next.js 16 compatibility. Two Supabase client singletons are required:
+Authentication uses cookie-based sessions managed by the Supabase SSR library — not the deprecated auth helpers package. Two Supabase client factories are required: one for use inside client components, and one for use in Server Components, Server Actions, and Route Handlers (which must read cookies fresh on each request). Both factories read credentials from the centralized environment config module — no direct environment variable access.
 
-- **Browser client** (`apps/web/src/lib/supabase/client.ts`): Used inside `"use client"` components. Created with `createBrowserClient` from `@supabase/ssr`.
-- **Server client** (`apps/web/src/lib/supabase/server.ts`): Used in Server Components, Server Actions, and Route Handlers. Created with `createServerClient` from `@supabase/ssr` using Next.js `cookies()`.
+### User Profile Data Model
 
-Both clients import Supabase URL and anon key from `apps/web/src/config/auth/supabase.ts`, which reads from the centralized env config at `apps/web/src/config/env.ts`. No direct `process.env` access elsewhere.
+A User Profile represents a player's public identity within the game. Each profile belongs to exactly one authenticated user.
 
-### Database Schema
+Key fields:
+- **id**: UUID, primary key, linked to the authenticated user identity (cascades on user deletion)
+- **display name**: The player's chosen name shown to others, 2–32 characters, alphanumeric with spaces, hyphens, and underscores. Not unique — players are identified by UUID, not display name.
+- **avatar URL**: An optional URL to a profile image. Nullable. No file upload in this piece — external URLs only.
+- **created at / updated at**: Timestamps
 
-**Migration file**: `supabase/migrations/001_user_profiles.sql`
+When a new user signs up, a profile row is automatically created with a default display name of "Player" (or whatever name the user provided during signup). This is enforced at the database level via an insert trigger.
+
+### Data Access Rules
+
+Row Level Security is enforced on the user profiles table:
+- Any authenticated user may read any profile (required for matchmaking and leaderboards)
+- A user may only update their own profile (enforced by checking the authenticated user's ID against the row ID)
+
+### Validation Rules
+
+Display name validation:
+- Minimum 2 characters
+- Maximum 32 characters
+- Allowed characters: letters, numbers, spaces, hyphens, underscores
+
+Avatar URL: must be a valid URL if provided, nullable, optional.
+
+### Auth Pages
+
+**Login page** (`/login`):
+- Email and password fields
+- A "Forgot password" link that triggers Supabase's password reset flow
+- A link to the signup page
+- On success: redirect to `/game/select-role`
+- On failure: display a user-friendly error message (invalid credentials, account not found, etc.)
+
+**Signup page** (`/signup`):
+- Email, password, confirm password, and display name fields
+- Validates display name format before submission
+- Passes the display name through signup metadata so the auto-create trigger can use it
+- On success: redirect to email verification notice (if verification is required) or directly to the game
+
+**Auth callback route** (`/auth/callback`):
+- Handles the OAuth code exchange for magic link and social login flows
+- On success: redirect to `/game/select-role`
+- On failure: redirect to `/login` with an error parameter
+
+**Route group**: all auth pages live under an `(auth)` route group and use the `AuthLayout` component from the design system piece. If the design system is not yet available, a minimal centered layout suffices.
+
+### Session Refresh and Route Protection
+
+The Next.js proxy (middleware) is extended to refresh the Supabase session cookie on every request. On each request:
+1. A Supabase server client is created
+2. `getUser()` is called — this refreshes an expired session automatically
+3. If the user is unauthenticated and the route is protected, redirect to `/login`
+
+Protected routes (require authentication): `/game/*`, `/profile/*`
+
+Public routes: `/` (landing), `/(auth)/*` (login, signup, callback), `/api/*` (each handler enforces its own auth)
+
+### Auth Provider Component
+
+A React context provider wraps the entire app layout, providing auth state to all client components without prop drilling. The provider:
+- Creates a Supabase browser client
+- Subscribes to auth state change events
+- Exposes `user`, `session`, `isLoading`, and a `signOut()` function via context
+- Does NOT expose the raw Supabase client — only typed convenience methods
+
+### Auth State Flow to the Game Engine
+
+Auth state must flow into the Phaser game world without Phaser importing any React code. The bridge:
+- The Auth Provider observes auth state changes and writes `userId` and `displayName` into the player Zustand store (produced by the game engine bootstrap piece)
+- Phaser scenes read these values from the store or via the EventBus before starting a run
+- If the user is not authenticated when they reach `/game`, the proxy redirects them to `/login` before the page ever mounts
+
+### Edge Cases
+
+- **Profile missing**: The database trigger creates a profile automatically on signup, but if the trigger fails, the DAL must return a not-found error rather than crashing.
+- **Display name conflict**: No uniqueness constraint — display names are cosmetic only. Players are always identified by UUID internally.
+- **Session expiry during gameplay**: The proxy refreshes sessions on page loads. For long in-game sessions, the Supabase SSR library handles background token refresh automatically.
+- **Avatar URL**: Optional, nullable, no file upload in this piece. File upload to blob storage is a future enhancement.
+- **Email verification**: Supabase may require email verification before login depending on project settings. The app must handle the `email_not_confirmed` error gracefully with a friendly, actionable message.
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Use `@supabase/ssr` exclusively — this is the current package for Next.js App Router. The deprecated `@supabase/auth-helpers-nextjs` must NOT be used. Check the installed version with `npm ls @supabase/ssr` to confirm.
+
+### Database Schema — `supabase/migrations/001_user_profiles.sql`
 
 ```sql
 -- user_profiles: one row per authenticated user, linked to auth.users
@@ -76,16 +165,14 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- RLS: enable row-level security
+-- RLS
 alter table public.user_profiles enable row level security;
 
--- Policy: any authenticated user can read any profile (for matchmaking, leaderboards)
 create policy "profiles_select_all"
   on public.user_profiles for select
   to authenticated
   using (true);
 
--- Policy: users can only update their own profile
 create policy "profiles_update_own"
   on public.user_profiles for update
   to authenticated
@@ -93,9 +180,7 @@ create policy "profiles_update_own"
   with check (auth.uid() = id);
 ```
 
-### Shared Types
-
-**`packages/shared/src/types/auth.ts`**:
+### Shared Types — `packages/shared/src/types/auth.ts`
 
 ```typescript
 import type { ID, Timestamp } from './common'
@@ -124,13 +209,7 @@ export interface UserProfileRow {
 }
 ```
 
-Where `ID` and `Timestamp` are imported from `packages/shared/src/types/common.ts`:
-- `type ID = string` (UUID format)
-- `type Timestamp = string` (ISO 8601)
-
-### Shared Schemas
-
-**`packages/shared/src/schemas/auth.ts`**:
+### Shared Schemas — `packages/shared/src/schemas/auth.ts`
 
 ```typescript
 import { z } from 'zod'
@@ -153,21 +232,16 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
 
 ### Generated Database Types
 
-Run `npx supabase gen types typescript --local > packages/shared/src/types/database.ts` as part of the development workflow. This file is generated (committed to repo, regenerated after migrations). It provides type-safe access to all Supabase table schemas including `user_profiles`.
-
-Add an npm script to `apps/web/package.json`:
+Add to `apps/web/package.json` scripts:
 ```json
-"scripts": {
-  "db:types": "supabase gen types typescript --local > ../../packages/shared/src/types/database.ts"
-}
+"db:types": "supabase gen types typescript --local > ../../packages/shared/src/types/database.ts"
 ```
 
-### Auth Configuration
+Run `npm run db:types` after each migration. The generated file is committed to the repo and regenerated when the schema changes.
 
-**`apps/web/src/config/auth/supabase.ts`**:
+### Auth Config — `apps/web/src/config/auth/supabase.ts`
 
 ```typescript
-// Reads from centralized env config — no direct process.env access
 import { env } from '../env'
 
 export const supabaseAuthConfig = {
@@ -176,11 +250,9 @@ export const supabaseAuthConfig = {
 } as const
 ```
 
-The centralized env config at `apps/web/src/config/env.ts` (the Zod-validated environment config from the project scaffold) must include these variables validated with Zod.
+### Supabase Client Factories
 
-### Supabase Client Singletons
-
-**`apps/web/src/lib/supabase/client.ts`** (browser, "use client" only):
+**`apps/web/src/lib/supabase/client.ts`** (browser only):
 ```typescript
 'use client'
 import { createBrowserClient } from '@supabase/ssr'
@@ -222,11 +294,9 @@ export async function createSupabaseServerClient() {
 }
 ```
 
-Note: These are factory functions (not singletons in the traditional sense) because Next.js Server Components require fresh cookie access per request. The singleton pattern applies to browser clients.
+Note: These are factory functions (not singletons) because Next.js Server Components require fresh cookie access per request.
 
-### Data Access Layer
-
-**`apps/web/src/dal/auth/profiles.ts`**:
+### DAL — `apps/web/src/dal/auth/profiles.ts`
 
 ```typescript
 import 'server-only'
@@ -238,7 +308,7 @@ import type { UserProfile } from '@repo/shared/types/auth'
 import type { UpdateProfileInput } from '@repo/shared/schemas/auth'
 import type { DatabaseError, NotFoundError } from '@repo/shared/utils/result'
 
-function rowToDto(row: { id: string; display_name: string; avatar_url: string | null; created_at: string; updated_at: string }): UserProfile {
+function rowToDto(row: UserProfileRow): UserProfile {
   return {
     id: row.id,
     displayName: row.display_name,
@@ -263,7 +333,6 @@ export async function getProfile(userId: string): Promise<Result<UserProfile, No
     logger.error({ userId, error }, 'Failed to fetch user profile')
     return err({ type: 'DATABASE_ERROR', message: error.message })
   }
-
   return ok(rowToDto(data))
 }
 
@@ -287,16 +356,11 @@ export async function updateProfile(
     logger.error({ userId, error }, 'Failed to update user profile')
     return err({ type: 'DATABASE_ERROR', message: error.message })
   }
-
   return ok(rowToDto(data))
 }
 ```
 
-The error types `DatabaseError` and `NotFoundError` are defined in `packages/shared/src/utils/result.ts` (the neverthrow Result utilities from the project scaffold).
-
-### Server Actions
-
-**`apps/web/src/app/actions/auth/update-profile.ts`**:
+### Server Action — `apps/web/src/app/actions/auth/update-profile.ts`
 
 ```typescript
 'use server'
@@ -312,104 +376,25 @@ export const updateProfileAction = actionClient
   .action(async ({ parsedInput }) => {
     const supabase = await createSupabaseServerClient()
     const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      throw new Error('Unauthorized')
-    }
+    if (!user) throw new Error('Unauthorized')
 
     const result = await updateProfile(user.id, parsedInput)
-    if (result.isErr()) {
-      throw new Error(result.error.message)
-    }
-
+    if (result.isErr()) throw new Error(result.error.message)
     return result.value
   })
 ```
 
-### Auth Pages
-
-**Route group**: `apps/web/src/app/(auth)/` — uses `AuthLayout` from `apps/web/src/components/app/common/` (installed by the design system feature). If design system is not yet available, use a minimal layout.
-
-**`apps/web/src/app/(auth)/login/page.tsx`**:
-- Email/password login form
-- "Forgot password" link (Supabase password reset flow)
-- Link to signup page
-- Redirects to `/game/select-role` on success
-- Displays error message on auth failure
-
-**`apps/web/src/app/(auth)/signup/page.tsx`**:
-- Email, password, confirm password, and display name fields
-- Validates display name against `displayNameSchema` before submission
-- Calls Supabase `signUp` with `display_name` in `options.data` (for trigger to use)
-- Redirects to email verification notice or directly to game on success
-
-**`apps/web/src/app/(auth)/callback/route.ts`** (Route Handler):
-- Handles OAuth callback code exchange
-- `GET /auth/callback?code=xxx` → exchanges code for session → redirects to `/game/select-role`
-- Error cases redirect to `/login?error=auth_callback_failed`
-
-### Proxy Session Refresh
-
-**`apps/web/src/proxy.ts`** (Next.js 16 middleware, renamed from middleware.ts):
-
-The proxy must refresh the Supabase session on every request so cookies stay fresh. It also enforces protected routes.
-
-Protected routes (require authentication):
-- `/game/*` — all game routes
-- `/profile/*` — profile management
-
-Public routes (accessible without auth):
-- `/` — landing page
-- `/(auth)/*` — login, signup, callback
-- `/api/*` — API routes (individual handlers enforce auth)
-
-Session refresh logic: On every request, create a Supabase server client and call `supabase.auth.getUser()`. If the session is expired, Supabase refreshes it automatically via the `@supabase/ssr` cookie handling. If the user is unauthenticated and the route is protected, redirect to `/login`.
-
-### Auth Provider Component
-
-**`apps/web/src/components/app/auth/auth-provider.tsx`**:
+### Auth Provider — `apps/web/src/components/app/auth/auth-provider.tsx`
 
 ```typescript
 'use client'
+// Creates Supabase browser client
+// Subscribes to onAuthStateChange
+// Exposes: user, session, isLoading, signOut() via React context
+// Does NOT expose raw Supabase client
 ```
 
-A React context provider that:
-- Creates a Supabase browser client
-- Subscribes to `onAuthStateChange` events
-- Exposes `user`, `session`, `isLoading`, and `signOut()` via context
-- Does NOT expose raw Supabase client — provide typed convenience methods only
-
-Usage: Wrap `apps/web/src/app/layout.tsx` with this provider so all client components can access auth state without prop drilling.
-
-### Auth State in the React-Phaser Boundary
-
-Auth state flows into the game via Zustand. The `player` Zustand store (at `apps/web/src/stores/player.ts`, produced by the game engine bootstrap feature) will include a `userId` and `displayName` field. The `AuthProvider` component writes to this store when auth state changes. Phaser reads these values through the EventBus or directly from the store reference — it does NOT import React or the AuthProvider.
-
-Specifically:
-- `AuthProvider` subscribes to auth changes → updates Zustand `player` store
-- Phaser boot scene reads `player` store values (userId, displayName) before starting a run
-- If user is not authenticated when entering `/game`, the proxy redirects to `/login`
-
-### Edge Cases
-
-- **Profile missing**: The `on_auth_user_created` trigger creates a profile automatically. However, DAL must handle the case where the trigger failed (return `NotFoundError`, not panic).
-- **Display name conflict**: No uniqueness constraint on `display_name` — players are identified by UUID, display names are cosmetic only.
-- **Session expiry during gameplay**: The proxy refreshes sessions on page loads. For long in-game sessions, the Supabase client auto-refreshes via background token refresh built into `@supabase/ssr`.
-- **Avatar URL**: Optional, nullable. No file upload in this piece — accept external URL only. File upload to Azure Blob Storage is a later enhancement.
-- **Email verification**: Supabase can require email verification before login. Behavior depends on Supabase project settings — the app should handle the `email_not_confirmed` error gracefully and show a friendly message.
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Use `@supabase/ssr` exclusively — this is the current package for Next.js App Router. The deprecated `@supabase/auth-helpers-nextjs` must NOT be used. Check the installed version with `npm ls @supabase/ssr` to confirm.
+Wrap `apps/web/src/app/layout.tsx` with this provider.
 
 ### Key Library Versions
 

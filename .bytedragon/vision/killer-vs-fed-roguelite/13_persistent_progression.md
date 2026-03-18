@@ -95,362 +95,51 @@ Build the complete meta-progression systems that persist between runs. This piec
 
 Counter-play abilities (introduced in pieces 10-11) are gated behind this progression system. They are not available in default loadouts. New players start with base abilities only; counter-play is a mid-to-late-game reward requiring meaningful material investment.
 
-### Dependency Details (Inline — Do Not Reference Other Documents)
+### Dependency Overview
 
-#### From packages/shared/src/types/common.ts
-```typescript
-type ID = string;          // UUID format
-type Timestamp = string;   // ISO 8601
-```
+This piece builds on top of the following systems established in earlier pieces:
 
-#### From packages/shared/src/utils/result.ts (neverthrow)
-```typescript
-import { Result, ok, err } from 'neverthrow';
-type AppError = { code: string; message: string; context?: Record<string, unknown> };
-type ValidationError = AppError & { code: 'VALIDATION_ERROR'; fields: Record<string, string> };
-type NotFoundError = AppError & { code: 'NOT_FOUND' };
-type UnauthorizedError = AppError & { code: 'UNAUTHORIZED' };
-type DatabaseError = AppError & { code: 'DATABASE_ERROR' };
-```
+- **Common identifiers (piece 01)**: All entities use a string-based UUID identifier type and ISO 8601 timestamps. Error types distinguish validation, not-found, unauthorized, and database errors.
+- **Supabase clients (piece 02)**: Server-side and browser-side Supabase clients are available for database access. Server-side only in DAL and Server Actions.
+- **Design system (piece 03)**: Standard UI components (buttons, cards, dialogs, inputs, toasts, page layout) are available for building progression screens.
+- **Logging (piece 01)**: Structured logger available across all modules.
+- **Player and role framework (piece 07)**: Player role is either KILLER or FED. Abilities have an ID, name, cooldown, and unlock status. Run configuration includes the selected loadout — this piece defines what that loadout contains and how it applies to a run.
+- **Run initialization hook (piece 07)**: The run manager exposes a hook called when a run starts. This piece's progression effects engine plugs in here to apply stat modifiers and ability unlocks before gameplay begins.
+- **Status effects (piece 08)**: Status effects are buff/debuff entities with a duration. This piece's trophy passives and boss item handlers can apply status effects at run start or during gameplay.
+- **Killer abilities (piece 10)**: The Killer has 12 named abilities — standard abilities (lockpick, disguise change, evidence cleanup, silent movement, distraction throw, smoke bomb, quick disposal) and counter-play abilities (fake evidence plant, decoy trail, witness intimidation, surveillance jamming, false alibi construction). The Deception skill tree in this piece unlocks these counter-play abilities.
+- **Fed abilities (piece 11)**: The Fed has 12 named abilities — standard abilities (enhanced scan, witness compulsion, forensic analysis, surveillance access, area lockdown, evidence preservation, profile analysis) and counter-play abilities (illegal surveillance, rough interrogation, planted informant, entrapment setup, off-books forensics). The Interrogation and Tactics skill trees in this piece unlock these counter-play abilities.
+- **Persistent currency (piece 12)**: Materials are stored as a mapping of material type name to quantity. The six material types are: evidence dust (fed wins), blood marks (killer wins), ghost tokens (universal premium from high scores), case files (fed investigation bonuses), shadow coins (killer evasion bonuses), and salvage parts (from dismantling equipment).
+- **Run history (piece 12)**: The unlock resolver queries run history to evaluate trophy and equipment unlock conditions. Each run history record contains: user, role, biome, score, duration, targets eliminated, evidence collected, outcome (win/lose/abandoned), and materials earned.
 
-#### From packages/shared/src/types/player.ts (piece 07)
-```typescript
-type PlayerRole = 'KILLER' | 'FED'
-interface PlayerAbility { id: ID; name: string; cooldownMs: number; cost: number; isUnlocked: boolean }
-```
+### Database Tables
 
-#### From packages/shared/src/types/run.ts (piece 07)
-```typescript
-interface RunConfig { seed: string; biome: Biome; role: PlayerRole; loadout: Loadout }
-```
+**Run history** (defined in piece 12, referenced here for unlock condition evaluation): Each record stores the user, role played, biome, final score, duration in seconds, targets eliminated, evidence collected, outcome (win/lose/abandoned), materials earned, and timestamp.
 
-#### From packages/game-engine/src/run/run-manager.ts (piece 07)
-```typescript
-// Run initialization hook — progression effects applied here:
-onRunStart(config: RunConfig): void
-```
+**Skill trees**: Global table, one row per tree (6 total: 3 per role). Each tree has a name, description, role, branch type (core or counter-play), cost multiplier (0.8x for core, 1.3x for counter-play), icon, and display order. Readable by all authenticated users.
 
-#### From packages/shared/src/types/combat.ts (piece 08)
-```typescript
-interface StatusEffect { id: ID; name: string; type: 'BUFF' | 'DEBUFF'; remainingMs: number }
-```
+**Skills**: Global table, 60 rows total (10 per tree). Each skill belongs to a tree and has: name, description, tier (1-5), maximum rank (1-5), material costs per rank as a list of lists, prerequisite list (each prerequisite specifies which skill and minimum rank required), rank effects as a list of total-effect-at-that-rank objects, icon, and grid position for visual layout. Variable-schema fields (costs, prerequisites, rank effects) stored as flexible JSON with Zod validation on every read. Readable by all authenticated users.
 
-#### From packages/game-engine/src/combat/status-effects.ts (piece 08)
-```typescript
-applyStatusEffect(entityId: ID, effect: StatusEffect): void
-```
+**User skills**: Per-user table tracking which skill each user has unlocked and at what rank. Keyed by (user, skill). Records the rank achieved and timestamp of unlock.
 
-#### From packages/shared/src/types/killer.ts (piece 10)
-```typescript
-type KillerAbilityId =
-  | 'LOCKPICK'
-  | 'DISGUISE_CHANGE'
-  | 'EVIDENCE_CLEANUP'
-  | 'SILENT_MOVEMENT'
-  | 'DISTRACTION_THROW'
-  | 'SMOKE_BOMB'
-  | 'QUICK_DISPOSAL'
-  | 'FAKE_EVIDENCE_PLANT'
-  | 'DECOY_TRAIL'
-  | 'WITNESS_INTIMIDATION'
-  | 'SURVEILLANCE_JAMMING'
-  | 'FALSE_ALIBI_CONSTRUCTION'
-```
+**Trophies**: Global table, 42 rows total (18 killer, 18 fed, 6 shared). Each trophy has: name, description, role, passive effect (flexible JSON, same effect schema as skills), unlock condition (flexible JSON specifying win counts, score thresholds, biome completions, etc.), icon, and rarity (common/uncommon/rare/legendary). Readable by all authenticated users.
 
-#### From packages/shared/src/types/fed.ts (piece 11)
-```typescript
-type FedAbilityId =
-  | 'ENHANCED_SCAN'
-  | 'WITNESS_COMPULSION'
-  | 'FORENSIC_ANALYSIS'
-  | 'SURVEILLANCE_ACCESS'
-  | 'AREA_LOCKDOWN'
-  | 'EVIDENCE_PRESERVATION'
-  | 'PROFILE_ANALYSIS'
-  | 'ILLEGAL_SURVEILLANCE'
-  | 'ROUGH_INTERROGATION'
-  | 'PLANTED_INFORMANT'
-  | 'ENTRAPMENT_SETUP'
-  | 'OFFBOOKS_FORENSICS'
-```
+**User trophies**: Per-user table tracking unlocked and equipped state for each trophy. A user can equip at most 1 trophy per role per loadout. Records unlock timestamp.
 
-#### From packages/shared/src/types/economy.ts (piece 12)
-```typescript
-interface PersistentCurrency { materials: Record<string, number> }
-```
+**Equipment**: Global table of all equipment items across all rarities including MYTHIC. Each item has: name, description, role (killer/fed/shared), equipment slot (weapon/armor/tool/accessory), stats (flexible JSON including starting items), unlock condition, icon, rarity, number of upgrade slots (1 for common/uncommon, 2 for rare/legendary, 3 for mythic), and for MYTHIC items an obtain condition (boss kill, single-run score, etc.). Readable by all authenticated users.
 
-#### From apps/web/src/dal/runs/history.ts (piece 12)
-```typescript
-// Unlock resolver queries run history to check conditions:
-interface RunHistoryDTO {
-  id: string; userId: string; role: 'KILLER' | 'FED'; biome: string;
-  score: number; durationSeconds: number; targetsEliminated: number | null;
-  evidenceCollected: number | null; outcome: 'WIN' | 'LOSE' | 'ABANDONED';
-  materialsEarned: Record<string, number>; createdAt: string;
-}
-getRunHistory(userId: string, limit?: number, offset?: number): Promise<Result<RunHistoryDTO[], DatabaseError>>;
-```
+**User equipment**: Per-user table tracking which equipment each user has unlocked and whether they have attuned it. MYTHIC items require attunement (one-time ghost token payment) before they can be equipped. Records unlock timestamp.
 
-#### From packages/shared/src/constants/economy.ts (piece 12)
-```typescript
-const MATERIAL_TYPES = {
-  EVIDENCE_DUST: 'evidence_dust',   // fed wins
-  BLOOD_MARKS: 'blood_marks',       // killer wins
-  GHOST_TOKENS: 'ghost_tokens',     // any high score — universal premium gate
-  CASE_FILES: 'case_files',         // fed investigation bonuses
-  SHADOW_COINS: 'shadow_coins',     // killer evasion bonuses
-  SALVAGE_PARTS: 'salvage_parts',   // from dismantling equipment
-} as const;
-```
+**User loadouts**: Per-user table of saved loadout configurations. Each loadout belongs to a role (killer or fed), has a name, optionally a single equipped trophy, a list of up to 4 equipment IDs (one per slot type), and a default flag. Users can have multiple saved loadouts per role.
 
-#### From apps/web/src/lib/supabase/server.ts (piece 02)
-```typescript
-createServerClient(): SupabaseClient
-```
+**User materials**: Per-user balance table. One row per user per material type. Balances cannot go below zero — the server enforces this atomically.
 
-#### From apps/web/src/lib/supabase/client.ts (piece 02)
-```typescript
-createBrowserClient(): SupabaseClient
-```
+**Crafting recipes**: Global table of 20 crafting recipe definitions (10 killer workshop, 10 fed armory). Each recipe has: name, description, role, category (blade mod, blunt mod, armor mod, tool mod, forensic mod, sidearm mod, tactical mod, etc.), effects (flexible JSON), material costs, unlock condition (default/skill-rank/trophy-owned), compatible equipment slots, compatible equipment categories, tier (1-3), and icon. Readable by all authenticated users.
 
-#### From apps/web/src/lib/logger/pino.ts (piece 01)
-```typescript
-import logger from '@/lib/logger/pino';
-```
+**User equipment mods**: Per-user table of applied crafting modifications on equipment. One row per (user, equipment, slot index). Each row references the crafting recipe applied. Removing a mod deletes the row but does not refund materials.
 
-#### From apps/web/src/components/app/common/ (piece 03)
-```typescript
-AppButton, AppCard, AppDialog, AppInput, AppToast
-PageLayout
-```
+All user-data tables enforce row-level security: users can only read and modify their own rows. Global definition tables (skill trees, skills, trophies, equipment, crafting recipes) are readable by all authenticated users and writable only by service role (seeded from code).
 
-### Database Schema
-
-**`supabase/migrations/XXX_run_history.sql`** (inlined from session economy dependency):
-
-```sql
--- Run history (owned by session economy; reproduced here for unlock resolver reference)
-CREATE TABLE run_history (
-  id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role                TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
-  biome               TEXT NOT NULL,
-  score               INTEGER NOT NULL DEFAULT 0,
-  duration_seconds    INTEGER NOT NULL DEFAULT 0,
-  targets_eliminated  INTEGER,
-  evidence_collected  INTEGER,
-  outcome             TEXT NOT NULL CHECK (outcome IN ('WIN', 'LOSE', 'ABANDONED')),
-  materials_earned    JSONB NOT NULL DEFAULT '{}',
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_run_history_user ON run_history(user_id);
-ALTER TABLE run_history ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "run_history_own" ON run_history FOR ALL USING (auth.uid() = user_id);
-```
-
-**`supabase/migrations/XXX_progression.sql`**:
-
-```sql
--- Skill tree definitions (global, seeded from TypeScript const objects)
-CREATE TABLE skill_trees (
-  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  role        TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL,
-  branch_type TEXT NOT NULL CHECK (branch_type IN ('CORE', 'COUNTER_PLAY')),
-  -- CORE = standard progression, COUNTER_PLAY = abilities that undermine opponent
-  -- Counter-play trees cost 1.3x base material cost. Core trees cost 0.8x.
-  cost_multiplier NUMERIC NOT NULL DEFAULT 1.0,
-  icon_key    TEXT NOT NULL,
-  sort_order  INTEGER NOT NULL
-);
-
--- Individual skill nodes within trees (10 per tree, 60 total)
-CREATE TABLE skills (
-  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  tree_id        UUID NOT NULL REFERENCES skill_trees(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  description    TEXT NOT NULL,
-  tier           INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 5),
-  max_rank       INTEGER NOT NULL DEFAULT 1 CHECK (max_rank BETWEEN 1 AND 5),
-  -- rank cost array: index 0 = rank 1 cost, index 4 = rank 5 cost
-  -- e.g. [[{material:"blood_marks",amount:2}],[{material:"blood_marks",amount:4}],
-  --        [{material:"blood_marks",amount:7},{material:"ghost_tokens",amount:1}],
-  --        [{material:"blood_marks",amount:12},{material:"ghost_tokens",amount:2}],
-  --        [{material:"blood_marks",amount:18},{material:"ghost_tokens",amount:4}]]
-  cost_per_rank  JSONB NOT NULL,
-  -- prerequisites: array of {skillId, minRank} objects
-  prerequisites  JSONB NOT NULL DEFAULT '[]',
-  -- ranks array: each entry is the TOTAL effect at that rank (not incremental)
-  -- e.g. [{"rank":1,"effects":[{"type":"STAT_MOD","stat":"footprintRate","value":-0.08,"modType":"PERCENT"}]}, ...]
-  ranks          JSONB NOT NULL,
-  icon_key       TEXT NOT NULL,
-  position_x     INTEGER NOT NULL,  -- grid column for visual layout
-  position_y     INTEGER NOT NULL   -- grid row for visual layout
-);
-
--- User's skill unlock state
-CREATE TABLE user_skills (
-  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  skill_id     UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-  current_rank INTEGER NOT NULL DEFAULT 0 CHECK (current_rank >= 0),
-  unlocked_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, skill_id)
-);
-CREATE INDEX idx_user_skills_user ON user_skills(user_id);
-
--- Trophy definitions (global, 42 total: 18 killer, 18 fed, 6 shared)
--- Trophies are single-tier (no ranks). Power comes from unlock condition difficulty.
-CREATE TABLE trophies (
-  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  role             TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
-  name             TEXT NOT NULL,
-  description      TEXT NOT NULL,
-  -- passive_effect: array of Effect objects (same schema as skill ranks.effects)
-  passive_effect   JSONB NOT NULL,
-  unlock_condition JSONB NOT NULL,
-  -- e.g. {"type":"WIN_COUNT","role":"FED","count":5}
-  -- or   {"type":"SCORE_THRESHOLD","score":5000}
-  -- or   {"type":"BIOME_COMPLETE","biome":"city","role":"KILLER"}
-  -- or   {"type":"CUMULATIVE_STAT","stat":"targets_eliminated","threshold":20}
-  icon_key         TEXT NOT NULL,
-  rarity           TEXT NOT NULL CHECK (rarity IN ('COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY'))
-);
-
--- User's trophy collection
-CREATE TABLE user_trophies (
-  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  trophy_id   UUID NOT NULL REFERENCES trophies(id) ON DELETE CASCADE,
-  unlocked    BOOLEAN NOT NULL DEFAULT FALSE,
-  equipped    BOOLEAN NOT NULL DEFAULT FALSE,
-  unlocked_at TIMESTAMPTZ,
-  PRIMARY KEY (user_id, trophy_id)
-);
-CREATE INDEX idx_user_trophies_user ON user_trophies(user_id);
-
--- Equipment definitions (global)
--- Upgrade slots per rarity: COMMON 1, UNCOMMON 1, RARE 2, LEGENDARY 2, MYTHIC 3
-CREATE TABLE equipment (
-  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  role             TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
-  slot             TEXT NOT NULL CHECK (slot IN ('WEAPON', 'ARMOR', 'TOOL', 'ACCESSORY')),
-  name             TEXT NOT NULL,
-  description      TEXT NOT NULL,
-  stats            JSONB NOT NULL,
-  -- e.g. {"damageBonus":10,"startingItem":"advanced_forensic_kit"}
-  -- or   {"startingItems":["wiretap_kit","informant_badge"]}
-  unlock_condition JSONB NOT NULL,
-  icon_key         TEXT NOT NULL,
-  rarity           TEXT NOT NULL CHECK (rarity IN ('COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY', 'MYTHIC')),
-  -- upgrade_slots: derived from rarity at application time; stored for query efficiency
-  upgrade_slots    INTEGER NOT NULL DEFAULT 1,
-  -- obtain_condition for MYTHIC items (boss items)
-  obtain_condition JSONB
-  -- e.g. {"type":"BOSS_KILL","bossId":"the_watcher","difficulty":"HARD"}
-  -- or   {"type":"SCORE_SINGLE_RUN","role":"KILLER","minScore":10000,"mustWin":true}
-  -- or   {"type":"CUMULATIVE_STAT","stat":"wins_as_killer","threshold":25}
-);
-
--- User's equipment collection
-CREATE TABLE user_equipment (
-  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  equipment_id  UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
-  unlocked      BOOLEAN NOT NULL DEFAULT FALSE,
-  attuned       BOOLEAN NOT NULL DEFAULT FALSE,  -- MYTHIC items require attunement (5 ghost tokens, one-time)
-  unlocked_at   TIMESTAMPTZ,
-  PRIMARY KEY (user_id, equipment_id)
-);
-CREATE INDEX idx_user_equipment_user ON user_equipment(user_id);
-
--- User saved loadouts (4 equipment slots per loadout)
-CREATE TABLE user_loadouts (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role          TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
-  name          TEXT NOT NULL,
-  trophy_id     UUID REFERENCES trophies(id) ON DELETE SET NULL,
-  equipment_ids UUID[] NOT NULL DEFAULT '{}',  -- max 4, one per slot (WEAPON/ARMOR/TOOL/ACCESSORY)
-  is_default    BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_user_loadouts_user_role ON user_loadouts(user_id, role);
-
--- User material balances
-CREATE TABLE user_materials (
-  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  material_type TEXT NOT NULL,
-  -- valid types: evidence_dust, blood_marks, ghost_tokens, case_files, shadow_coins, salvage_parts
-  amount        INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
-  PRIMARY KEY (user_id, material_type)
-);
-
--- Crafting recipe definitions (global, seeded from code)
--- The Workshop (Killer) and The Armory (Fed) use this same table with role field
-CREATE TABLE crafting_recipes (
-  id                    UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  role                  TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
-  name                  TEXT NOT NULL,
-  description           TEXT NOT NULL,
-  category              TEXT NOT NULL,
-  -- e.g. 'BLADE_MOD', 'FORENSIC_MOD', 'ARMOR_MOD', 'TOOL_MOD', 'GARROTE_MOD', etc.
-  effects               JSONB NOT NULL,
-  -- Array of Effect objects
-  cost                  JSONB NOT NULL,
-  -- e.g. [{"material":"blood_marks","amount":15},{"material":"salvage_parts","amount":4}]
-  unlock_condition      JSONB NOT NULL DEFAULT '{"type":"DEFAULT"}',
-  -- e.g. {"type":"SKILL_RANK","skillId":"K-B4","minRank":2}
-  -- or   {"type":"TROPHY_OWNED","trophyId":"clean_hands"}
-  -- or   {"type":"DEFAULT"}
-  compatible_slots      TEXT[] NOT NULL DEFAULT '{}',
-  -- e.g. ['WEAPON','TOOL'] — equipment slot types this recipe can be applied to
-  compatible_categories TEXT[] NOT NULL DEFAULT '{}',
-  -- e.g. ['BLADE','BLUNT'] — empty = all categories in the slot
-  tier                  INTEGER NOT NULL DEFAULT 1 CHECK (tier BETWEEN 1 AND 3),
-  -- Tier 1: default. Tier 2: skill-gated. Tier 3: achievement-gated.
-  icon_key              TEXT NOT NULL
-);
-
--- User's applied modifications per equipment (persistent between runs)
-CREATE TABLE user_equipment_mods (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  equipment_id  UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
-  slot_index    INTEGER NOT NULL CHECK (slot_index >= 0),
-  recipe_id     UUID NOT NULL REFERENCES crafting_recipes(id) ON DELETE CASCADE,
-  applied_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, equipment_id, slot_index)
-  -- One mod per slot per equipment per user
-);
-CREATE INDEX idx_user_equipment_mods_user ON user_equipment_mods(user_id);
-
--- RLS
-ALTER TABLE skill_trees          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE skills                ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_skills           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trophies              ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_trophies         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE equipment             ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_equipment        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_loadouts         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_materials        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE crafting_recipes      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_equipment_mods   ENABLE ROW LEVEL SECURITY;
-
--- Global definitions: readable by all authenticated users
-CREATE POLICY "skill_trees_read_all"      ON skill_trees      FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "skills_read_all"           ON skills           FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "trophies_read_all"         ON trophies         FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "equipment_read_all"        ON equipment        FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "crafting_recipes_read_all" ON crafting_recipes FOR SELECT USING (auth.role() = 'authenticated');
-
--- User data: own rows only
-CREATE POLICY "user_skills_own"          ON user_skills         FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "user_trophies_own"        ON user_trophies       FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "user_equipment_own"       ON user_equipment      FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "user_loadouts_own"        ON user_loadouts       FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "user_materials_own"       ON user_materials      FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "user_equipment_mods_own"  ON user_equipment_mods FOR ALL USING (auth.uid() = user_id);
-```
+**JSONB rationale**: Effect lists, rank costs, unlock conditions, and equipment stats use flexible JSON storage because their schema varies significantly across content types. A fixed column schema would require migration for every new effect type. All JSON fields are validated with Zod on every read, and the content registry validates all registered content at boot.
 
 **JSONB usage rationale**: `cost_per_rank`, `ranks`, `passive_effect`, `unlock_condition`, `stats`, `effects`, and `cost` are JSONB because the schema of skill/trophy/equipment/recipe effects is highly variable. A fixed column schema would require ALTER TABLE for every new effect type. Mitigated by Zod validation on every read path and registry-level validation at boot. Plan to add GIN index on `effects` if query patterns warrant.
 
@@ -464,7 +153,7 @@ Every skill has 1-5 ranks (configured per skill, stored as `max_rank`). Each ran
 effectiveValue(rank) = baseValue * rank * (1 / (1 + 0.15 * (rank - 1)))
 ```
 
-Where `0.15` is the diminishing factor (tunable constant in `packages/shared/src/constants/balance.ts`).
+Where `0.15` is the diminishing factor (a tunable balance constant).
 
 | Rank | Multiplier | Cumulative % vs linear | Example: base 8% per rank |
 |------|-----------|----------------------|--------------------------|
@@ -476,7 +165,7 @@ Where `0.15` is the diminishing factor (tunable constant in `packages/shared/src
 
 Linear would give 40% at rank 5. Diminishing returns gives 25%. This means rank 1 is the best value-per-material, encouraging breadth over depth.
 
-Flat bonuses (damage, health, pixels) scale linearly with a hard cap enforced by `StatModifierSystem`.
+Flat bonuses (damage, health, pixels) scale linearly with a hard cap enforced by the stat modifier system.
 
 ### Adjusted Skill Cost Per Rank
 
@@ -501,28 +190,26 @@ Players are already competitive at 20-30 runs. Full tree completion is for dedic
 
 ### Stat Cap System
 
-All stats have hard caps enforced by `StatModifierSystem` regardless of source (skills, trophies, equipment, crafting mods). Defined in `packages/shared/src/constants/balance.ts`:
+All stats have hard caps enforced by the stat modifier system regardless of source (skills, trophies, equipment, crafting mods):
 
-```typescript
-export const STAT_CAPS: Record<string, { maxPercent?: number; maxFlat?: number }> = {
-  moveSpeed:            { maxPercent: 0.15 },   // max +15% from all sources
-  footprintRate:        { maxPercent: -0.85 },  // cannot reduce below 15% of base
-  detectionRadius:      { maxPercent: -0.50 },  // NPCs always detect within 50% of base radius
-  noiseGeneration:      { maxPercent: -0.50 },  // min 50% noise
-  meleeDamage:          { maxFlat: 80 },        // base 25 + max 55 bonus
-  rangedDamage:         { maxFlat: 60 },
-  scanRadius:           { maxPercent: 0.40 },   // max +40% scan radius
-  interviewReliability: { maxPercent: 0.15 },   // max +15% witness reliability
-  heatCostReduction:    { maxPercent: -0.40 },  // counter-play heat costs min 60% of base
-  falseEvidenceDetection: { maxPercent: 0.50 }, // max 50% passive detection (active analysis adds more)
-};
-```
+| Stat | Cap |
+|------|-----|
+| Move speed bonus | Maximum +15% from all sources combined |
+| Footprint generation reduction | Cannot reduce below 15% of base rate |
+| NPC detection radius reduction | NPCs always detect within 50% of their base radius |
+| Noise generation reduction | Minimum 50% of base noise level |
+| Melee damage bonus | Maximum +55 flat bonus (base 25, cap 80 total) |
+| Ranged damage bonus | Maximum 60 total |
+| Scan radius bonus | Maximum +40% from all sources |
+| Witness interview reliability bonus | Maximum +15% from all sources |
+| Counter-play heat cost reduction | Maximum 40% reduction (costs never fall below 60% of base) |
+| Passive false evidence detection | Maximum 50% passive detection rate (active analysis can add more) |
 
 Crafting mods count toward these caps — no stacking exploits through multiple sources.
 
 ### Skill Tree Catalog
 
-Each role has 3 trees with 10 skills each. Tier gating: Tier N requires at least 2 skills from Tier N-1 (any rank) before unlocking. Data files live at `packages/shared/src/data/skills/`.
+Each role has 3 trees with 10 skills each. Tier gating: Tier N requires at least 2 skills from Tier N-1 (any rank) before unlocking.
 
 #### KILLER TREE 1: STEALTH (CORE — 0.8x cost multiplier)
 
@@ -665,7 +352,7 @@ A typical "good" player earns ~0.7-1.0 GT per run. This creates genuine allocati
 
 ### Trophy System
 
-42 trophies total: 18 killer, 18 fed, 6 shared. Trophies are **single-tier** (no ranks) — power comes from unlock condition difficulty. Equip limit: **1 trophy per role per loadout**. Data files at `packages/shared/src/data/trophies/`.
+42 trophies total: 18 killer, 18 fed, 6 shared. Trophies are **single-tier** (no ranks) — power comes from unlock condition difficulty. Equip limit: **1 trophy per role per loadout**.
 
 #### KILLER TROPHIES (18)
 
@@ -736,21 +423,18 @@ Upgrade slots per rarity: COMMON: 1, UNCOMMON: 1, RARE: 2, LEGENDARY: 2, MYTHIC:
 Selected equipment items that unlock counter-play starting items:
 
 **Killer counter-play equipment**:
-- **Deceiver's Kit** (ACCESSORY, RARE) — starts run with 1x fake evidence bundle + 1x decoy trail marker
-  - `startingItems: ['fake_evidence_bundle', 'decoy_trail_marker']`
-  - Unlock: used FAKE_EVIDENCE_PLANT in 5 runs
+- **Deceiver's Kit** (ACCESSORY, RARE) — starts run with 1x fake evidence bundle and 1x decoy trail marker
+  - Unlock: used the fake evidence plant ability in 5 runs
 
 **Fed counter-play equipment**:
-- **Off-Books Briefcase** (TOOL, RARE) — starts run with WIRETAP_KIT + OFFBOOKS_LAB_KIT
-  - `startingItems: ['wiretap_kit', 'offbooks_lab_kit']`
-  - Unlock: used ILLEGAL_SURVEILLANCE in 5 runs
-- **Handler's Badge** (ACCESSORY, RARE) — starts run with INFORMANT_BADGE + ENTRAPMENT_KIT
-  - `startingItems: ['informant_badge', 'entrapment_kit']`
-  - Unlock: used PLANTED_INFORMANT in 8 runs
+- **Off-Books Briefcase** (TOOL, RARE) — starts run with a wiretap kit and an off-books lab kit
+  - Unlock: used the illegal surveillance ability in 5 runs
+- **Handler's Badge** (ACCESSORY, RARE) — starts run with an informant badge and an entrapment kit
+  - Unlock: used the planted informant ability in 8 runs
 
 ### Boss Items (MYTHIC Tier)
 
-Boss items are hand-crafted MYTHIC-rarity artifacts with unique CUSTOM effect handlers. 14 total: 7 killer (KB-1 through KB-7), 7 fed (FB-1 through FB-7). Data files at `packages/shared/src/data/boss-items/`. Custom handlers at `packages/game-engine/src/effects/boss-item-handlers.ts`.
+Boss items are hand-crafted MYTHIC-rarity artifacts with unique custom effect handlers. 14 total: 7 killer (KB-1 through KB-7), 7 fed (FB-1 through FB-7). Each boss item has a named custom handler that implements its unique mechanic — these handlers are registered in the effect processor at game boot alongside standard effect types.
 
 Attunement cost: **5 ghost tokens** per boss item (one-time). Once attuned, the item equips freely.
 
@@ -855,284 +539,99 @@ Each role has a thematic crafting system: **Killer = "The Workshop"** (dark, uti
 - LEGENDARY: 8 salvage
 - MYTHIC: cannot be dismantled
 
-Recipe data files at `packages/shared/src/data/crafting/`. All crafting bonuses count toward STAT_CAPS.
+All crafting bonuses count toward the stat caps defined in the Stat Cap System section above.
 
 #### Killer Workshop Recipes (10)
 
 **Tier 1 — Basic Modifications (default, no gate)**:
 
-| ID   | Recipe Name      | Category  | Effects | Cost |
-|------|-----------------|-----------|---------|------|
-| KR-1 | Whetstone Edge  | BLADE_MOD | `[{ type: 'STAT_MOD', stat: 'meleeDamage', value: 3, modType: 'FLAT' }]` | 8 BM + 2 salvage — WEAPON (BLADE only) |
-| KR-2 | Weighted Handle | BLUNT_MOD | `[{ type: 'STAT_MOD', stat: 'meleeDamage', value: 2, modType: 'FLAT' }, { type: 'APPLY_STATUS', statusId: 'STUN', durationMs: 500 }]` | 8 BM + 2 salvage — WEAPON (BLUNT only) |
-| KR-3 | Reinforced Padding | ARMOR_MOD | `[{ type: 'STAT_MOD', stat: 'maxHealth', value: 10, modType: 'FLAT' }]` | 6 BM + 3 salvage — ARMOR |
-| KR-4 | Silent Soles    | TOOL_MOD  | `[{ type: 'STAT_MOD', stat: 'noiseGeneration', value: -0.05, modType: 'PERCENT' }]` | 10 BM + 2 salvage — ARMOR, ACCESSORY |
+| ID   | Recipe Name      | Category  | Effect Description | Cost |
+|------|-----------------|-----------|-------------------|------|
+| KR-1 | Whetstone Edge  | Blade mod | +3 melee damage (flat) | 8 blood marks + 2 salvage — WEAPON (BLADE only) |
+| KR-2 | Weighted Handle | Blunt mod | +2 melee damage (flat); kills apply 500ms stun | 8 blood marks + 2 salvage — WEAPON (BLUNT only) |
+| KR-3 | Reinforced Padding | Armor mod | +10 max health (flat) | 6 blood marks + 3 salvage — ARMOR |
+| KR-4 | Silent Soles    | Tool mod  | -5% noise generation (percent) | 10 blood marks + 2 salvage — ARMOR, ACCESSORY |
 
 **Tier 2 — Advanced Modifications (skill-gated)**:
 
-| ID   | Recipe Name       | Category  | Effects | Cost | Unlock |
-|------|-------------------|-----------|---------|------|--------|
-| KR-5 | Serrated Filing   | BLADE_MOD | `[{ type: 'APPLY_STATUS', statusId: 'BLEED', durationMs: 4000 }]` | 15 BM + 4 salvage + 1 GT | K-B1 rank 3 |
-| KR-6 | Toxin Coating     | BLADE_MOD | `[{ type: 'APPLY_STATUS', statusId: 'POISON', durationMs: 6000 }]` | 15 BM + 4 salvage + 2 GT | K-B4 rank 2 |
-| KR-7 | Shadow Lining     | ARMOR_MOD | `[{ type: 'STAT_MOD', stat: 'detectionRadius', value: -0.08, modType: 'PERCENT' }]` | 12 BM + 3 salvage + 1 GT | K-S6 rank 2 |
-| KR-8 | Quick-Release Sheath | TOOL_MOD | `[{ type: 'STAT_MOD', stat: 'killAnimSpeed', value: 0.10, modType: 'PERCENT' }]` | 14 BM + 3 salvage + 2 GT | K-B2 rank 3 |
+| ID   | Recipe Name       | Category  | Effect Description | Cost | Unlock |
+|------|-------------------|-----------|-------------------|------|--------|
+| KR-5 | Serrated Filing   | Blade mod | Applies 4-second bleed on hit | 15 blood marks + 4 salvage + 1 GT | K-B1 rank 3 |
+| KR-6 | Toxin Coating     | Blade mod | Applies 6-second poison on hit | 15 blood marks + 4 salvage + 2 GT | K-B4 rank 2 |
+| KR-7 | Shadow Lining     | Armor mod | -8% NPC detection radius toward killer (percent) | 12 blood marks + 3 salvage + 1 GT | K-S6 rank 2 |
+| KR-8 | Quick-Release Sheath | Tool mod | +10% kill animation speed (percent) | 14 blood marks + 3 salvage + 2 GT | K-B2 rank 3 |
 
 **Tier 3 — Master Modifications (achievement-gated)**:
 
-| ID    | Recipe Name                   | Category  | Effects | Cost | Unlock |
-|-------|-------------------------------|-----------|---------|------|--------|
-| KR-9  | Evidence-Dissolving Compound  | BLADE_MOD | `[{ type: 'EVIDENCE_REDUCTION', evidenceTypeId: 'DNA', percent: 0.15 }]` | 25 BM + 8 salvage + 5 GT | Trophy: Clean Hands |
-| KR-10 | Phantom Grip                  | GARROTE_MOD | `[{ type: 'CUSTOM', handler: 'phantom_grip_silent_kill', params: { noiseReduction: 0.90, evidenceReduction: 0.30 } }]` | 30 BM + 10 salvage + 8 GT | K-S10 unlocked |
+| ID    | Recipe Name                   | Category   | Effect Description | Cost | Unlock |
+|-------|-------------------------------|------------|-------------------|------|--------|
+| KR-9  | Evidence-Dissolving Compound  | Blade mod  | -15% DNA evidence generation on blade kills | 25 blood marks + 8 salvage + 5 GT | Trophy: Clean Hands |
+| KR-10 | Phantom Grip                  | Garrote mod | Custom handler: garrote kills generate 90% less noise and 30% less evidence | 30 blood marks + 10 salvage + 8 GT | K-S10 unlocked |
 
 #### Fed Armory Recipes (10)
 
 **Tier 1 — Standard Issue Upgrades (default, no gate)**:
 
-| ID   | Recipe Name            | Category     | Effects | Cost |
-|------|------------------------|--------------|---------|------|
-| FR-1 | Improved Sights        | SIDEARM_MOD  | `[{ type: 'STAT_MOD', stat: 'rangedDamage', value: 3, modType: 'FLAT' }]` | 8 ED + 2 salvage — WEAPON (SIDEARM) |
-| FR-2 | Extended Mag           | SIDEARM_MOD  | `[{ type: 'STAT_MOD', stat: 'attackSpeed', value: 0.08, modType: 'PERCENT' }]` | 8 ED + 2 salvage — WEAPON (SIDEARM) |
-| FR-3 | Tactical Vest Upgrade  | ARMOR_MOD    | `[{ type: 'STAT_MOD', stat: 'maxHealth', value: 12, modType: 'FLAT' }]` | 6 ED + 3 salvage — ARMOR |
-| FR-4 | Enhanced Lens Assembly | FORENSIC_MOD | `[{ type: 'SCAN_RADIUS_MOD', percent: 0.05 }]` | 10 ED + 2 salvage — TOOL |
+| ID   | Recipe Name            | Category      | Effect Description | Cost |
+|------|------------------------|---------------|-------------------|------|
+| FR-1 | Improved Sights        | Sidearm mod   | +3 ranged damage (flat) | 8 evidence dust + 2 salvage — WEAPON (SIDEARM) |
+| FR-2 | Extended Mag           | Sidearm mod   | +8% attack speed (percent) | 8 evidence dust + 2 salvage — WEAPON (SIDEARM) |
+| FR-3 | Tactical Vest Upgrade  | Armor mod     | +12 max health (flat) | 6 evidence dust + 3 salvage — ARMOR |
+| FR-4 | Enhanced Lens Assembly | Forensic mod  | +5% scan radius (percent) | 10 evidence dust + 2 salvage — TOOL |
 
 **Tier 2 — Specialist Upgrades (skill-gated)**:
 
-| ID   | Recipe Name            | Category      | Effects | Cost | Unlock |
-|------|------------------------|---------------|---------|------|--------|
-| FR-5 | Trace Amplifier        | FORENSIC_MOD  | `[{ type: 'STAT_MOD', stat: 'evidenceQualityMod', value: 0.10, modType: 'PERCENT' }]` | 15 ED + 4 salvage + 1 GT | F-F4 rank 2 |
-| FR-6 | Reinforced Cuffs       | TACTICAL_MOD  | `[{ type: 'ARREST_VIABILITY_MOD', flat: 3 }]` | 12 ED + 3 salvage + 1 GT | F-T4 rank 1 |
-| FR-7 | Scramble-Proof Radio   | TACTICAL_MOD  | `[{ type: 'CUSTOM', handler: 'scramble_proof_radio', params: { jammingResistPercent: 0.50 } }]` | 14 ED + 3 salvage + 2 GT | F-I7 rank 2 |
-| FR-8 | Low-Light Optics       | FORENSIC_MOD  | `[{ type: 'FALSE_EVIDENCE_DETECTION_MOD', percent: 0.05 }]` | 15 ED + 4 salvage + 2 GT | F-F5 rank 3 |
+| ID   | Recipe Name            | Category      | Effect Description | Cost | Unlock |
+|------|------------------------|---------------|-------------------|------|--------|
+| FR-5 | Trace Amplifier        | Forensic mod  | +10% evidence quality upgrade speed (percent) | 15 evidence dust + 4 salvage + 1 GT | F-F4 rank 2 |
+| FR-6 | Reinforced Cuffs       | Tactical mod  | +3 arrest viability score (flat) | 12 evidence dust + 3 salvage + 1 GT | F-T4 rank 1 |
+| FR-7 | Scramble-Proof Radio   | Tactical mod  | Custom handler: 50% resistance to killer surveillance jamming effect | 14 evidence dust + 3 salvage + 2 GT | F-I7 rank 2 |
+| FR-8 | Low-Light Optics       | Forensic mod  | +5% passive false evidence detection chance (percent) | 15 evidence dust + 4 salvage + 2 GT | F-F5 rank 3 |
 
 **Tier 3 — Bureau-Level Requisitions (achievement-gated)**:
 
-| ID    | Recipe Name               | Category     | Effects | Cost | Unlock |
-|-------|---------------------------|--------------|---------|------|--------|
-| FR-9  | Forensic Neural Link      | FORENSIC_MOD | `[{ type: 'CUSTOM', handler: 'neural_link_auto_tag', params: { autoTagRadius: 64, autoTagChance: 0.15 } }]` | 25 ED + 8 salvage + 5 GT | Trophy: Master Detective |
-| FR-10 | Adaptive Armor Weave      | ARMOR_MOD    | `[{ type: 'STAT_MOD', stat: 'maxHealth', value: 20, modType: 'FLAT' }, { type: 'CUSTOM', handler: 'adaptive_armor_damage_resist', params: { stackPerHit: 0.03, maxStacks: 5, duration: 10 } }]` | 30 ED + 10 salvage + 8 GT | F-T9 unlocked |
+| ID    | Recipe Name               | Category      | Effect Description | Cost | Unlock |
+|-------|---------------------------|---------------|-------------------|------|--------|
+| FR-9  | Forensic Neural Link      | Forensic mod  | Custom handler: within 64px radius, 15% chance to auto-tag entities that touch evidence | 25 evidence dust + 8 salvage + 5 GT | Trophy: Master Detective |
+| FR-10 | Adaptive Armor Weave      | Armor mod     | +20 max health (flat); custom handler: each hit received adds +3% damage resistance stack (max 5 stacks, 10s duration) | 30 evidence dust + 10 salvage + 8 GT | F-T9 unlocked |
 
-### Types to Create
+### New Data Entities
 
-**`packages/shared/src/types/progression.ts`**:
+**Skill tree**: Represents one of the 6 skill trees (3 per role). Fields: unique ID, role (killer or fed), name, description, branch type (core or counter-play), cost multiplier (0.8 for core, 1.3 for counter-play), icon key, display sort order.
 
-```typescript
-import { ID, Timestamp } from './common';
+**Skill**: Represents one of the 60 individual skill nodes. Fields: unique ID, parent tree ID, name, description, tier (1-5), maximum rank (1-5), material costs per rank (a list of lists, each inner list is the cost to reach that rank), prerequisites (list of skill-ID + minimum-rank pairs), rank effects (list of total effects at each rank number — not incremental), icon key, grid position X and Y for the skill tree canvas layout.
 
-export interface SkillTree {
-  id: ID;
-  role: 'KILLER' | 'FED';
-  name: string;
-  description: string;
-  branchType: 'CORE' | 'COUNTER_PLAY';
-  costMultiplier: number;   // 0.8 for CORE, 1.3 for COUNTER_PLAY
-  iconKey: string;
-  sortOrder: number;
-}
+**Skill effect** (discriminated union): The types of effects a skill rank can produce — stat modification (stat name, value, flat or percent), ability unlock (ability ID), cooldown reduction (ability ID, percent), heat cost reduction (percent), evidence generation modifier (value), or counter-play ability enhancement (ability ID plus parameter overrides).
 
-export interface Skill {
-  id: ID;
-  treeId: ID;
-  name: string;
-  description: string;
-  tier: 1 | 2 | 3 | 4 | 5;
-  maxRank: 1 | 2 | 3 | 4 | 5;
-  costPerRank: Array<Array<{ material: string; amount: number }>>;
-  prerequisites: Array<{ skillId: ID; minRank: number }>;
-  ranks: Array<{ rank: number; effects: SkillEffect[] }>;
-  iconKey: string;
-  positionX: number;
-  positionY: number;
-}
+**Skill rank** (user state): Tracks which rank a user has achieved for a specific skill. Fields: user ID, skill ID, current rank, unlock timestamp.
 
-export type SkillEffect =
-  | { type: 'STAT_MOD'; stat: string; value: number; modType: 'FLAT' | 'PERCENT' }
-  | { type: 'ABILITY_UNLOCK'; abilityId: string }
-  | { type: 'COOLDOWN_REDUCTION'; abilityId: string; percent: number }
-  | { type: 'HEAT_REDUCTION'; percent: number }
-  | { type: 'EVIDENCE_MODIFIER'; value: number }
-  | { type: 'COUNTER_PLAY_ENHANCE'; abilityId: string; enhancement: Record<string, number> };
+**Trophy**: Represents one of the 42 trophies. Fields: unique ID, role (killer/fed/shared), name, description, passive effects (list of trophy effects), unlock condition, icon key, rarity (common/uncommon/rare/legendary).
 
-export interface SkillRank {
-  userId: ID;
-  skillId: ID;
-  currentRank: number;
-  unlockedAt: Timestamp;
-}
+**Trophy effect** (discriminated union): The types of effects a trophy passive can produce — stat modification, ability unlock, counter-play ability enhancement with optional heat reduction and effect boost, grant starting item at run start, increase heat cap, or increase material drop rate.
 
-export interface Trophy {
-  id: ID;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  name: string;
-  description: string;
-  passiveEffect: TrophyEffect[];
-  unlockCondition: UnlockCondition;
-  iconKey: string;
-  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
-}
+**Unlock condition** (discriminated union): All the ways content can be unlocked — win count for a role, score threshold in any or a specific role, biome completion, strong-or-better arrests, targets eliminated, counter-play ability uses, total materials spent, cumulative run stat threshold, boss kill with optional difficulty, single-run score with optional win requirement, total trophies owned, or default (always available).
 
-export type TrophyEffect =
-  | { type: 'STAT_MOD'; stat: string; value: number; modType: 'FLAT' | 'PERCENT' }
-  | { type: 'ABILITY_UNLOCK'; abilityId: string }
-  | { type: 'COUNTER_PLAY_ENHANCE'; abilityId: string; heatReduction?: number; effectBoost?: number }
-  | { type: 'START_WITH_ITEM'; itemId: string }
-  | { type: 'HEAT_CAP_INCREASE'; amount: number }
-  | { type: 'MATERIAL_DROP_MOD'; percent: number };
+**Equipment**: Represents one piece of equipment. Fields: unique ID, role (killer/fed/shared), slot (weapon/armor/tool/accessory), name, description, stat bundle (damage bonus, health bonus, starting items, additional stat modifiers), unlock condition, icon key, rarity (common through mythic), number of upgrade slots (1 for common/uncommon, 2 for rare/legendary, 3 for mythic), and for MYTHIC items an obtain condition specifying the challenge required to earn it.
 
-export type UnlockCondition =
-  | { type: 'WIN_COUNT'; role: 'KILLER' | 'FED'; count: number }
-  | { type: 'SCORE_THRESHOLD'; role?: 'KILLER' | 'FED'; score: number }
-  | { type: 'BIOME_COMPLETE'; biome: string; role?: 'KILLER' | 'FED' }
-  | { type: 'ARREST_STRONG'; count: number }
-  | { type: 'TARGETS_ELIMINATED'; count: number }
-  | { type: 'COUNTER_PLAY_USE'; ability: string; count: number }
-  | { type: 'MATERIAL_SPENT'; material: string; totalAmount: number }
-  | { type: 'CUMULATIVE_STAT'; stat: string; threshold: number }
-  | { type: 'BOSS_KILL'; bossId: string; difficulty?: string }
-  | { type: 'SCORE_SINGLE_RUN'; role: 'KILLER' | 'FED'; minScore: number; mustWin: boolean }
-  | { type: 'TROPHY_COUNT'; minCount: number }
-  | { type: 'DEFAULT' };  // always unlocked (starter items)
+**Loadout**: Represents a saved equipment and trophy configuration. Fields: unique ID, user ID, role, name, optional trophy ID (at most 1), list of up to 4 equipment IDs (one per slot), default flag, creation timestamp.
 
-export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC';
+**Material**: Represents a user's balance of one material type. Fields: user ID, material type name, amount (never negative).
 
-export interface Equipment {
-  id: ID;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  slot: 'WEAPON' | 'ARMOR' | 'TOOL' | 'ACCESSORY';
-  name: string;
-  description: string;
-  stats: EquipmentStats;
-  unlockCondition: UnlockCondition;
-  iconKey: string;
-  rarity: ItemRarity;
-  upgradeSlots: number;       // 1 (COMMON/UNCOMMON), 2 (RARE/LEGENDARY), 3 (MYTHIC)
-  obtainCondition?: UnlockCondition; // for MYTHIC boss items
-}
+**Crafting recipe**: Represents one of the 20 crafting modification recipes. Fields: unique ID, role, name, description, category (blade mod/blunt mod/garrote mod/sidearm mod/forensic mod/tactical mod/armor mod/tool mod/accessory mod), list of effects, list of material costs, unlock condition (default/skill-rank gated/trophy-owned), list of compatible equipment slot types, list of compatible equipment categories (empty means any in the slot), tier (1-3), icon key.
 
-export interface EquipmentStats {
-  damageBonus?: number;
-  healthBonus?: number;
-  startingItem?: string;
-  startingItems?: string[];
-  statModifiers?: Record<string, number>;
-}
+**Crafting unlock condition** (discriminated union): Default (tier 1, always available), skill rank requirement (specific skill at minimum rank), trophy ownership requirement, or run count requirement.
 
-export interface Loadout {
-  id: ID;
-  userId: ID;
-  role: 'KILLER' | 'FED';
-  name: string;
-  trophyId: ID | null;
-  equipmentIds: ID[];     // max 4, one per slot
-  isDefault: boolean;
-  createdAt: Timestamp;
-}
-
-export interface Material {
-  userId: ID;
-  materialType: string;
-  amount: number;
-}
-```
-
-**`packages/shared/src/types/crafting.ts`**:
-
-```typescript
-import { ID, Timestamp } from './common';
-import { UnlockCondition } from './progression';
-
-export interface CraftingRecipe {
-  id: ID;
-  role: 'KILLER' | 'FED' | 'SHARED';
-  name: string;
-  description: string;
-  category: CraftingCategory;
-  effects: Effect[];
-  cost: Array<{ material: string; amount: number }>;
-  unlockCondition: UnlockCondition | CraftingUnlockCondition;
-  compatibleSlots: string[];
-  compatibleCategories: string[];
-  tier: 1 | 2 | 3;
-  iconKey: string;
-}
-
-export type CraftingCategory =
-  | 'BLADE_MOD'
-  | 'BLUNT_MOD'
-  | 'GARROTE_MOD'
-  | 'RANGED_MOD'
-  | 'POISON_MOD'
-  | 'ARMOR_MOD'
-  | 'TOOL_MOD'
-  | 'ACCESSORY_MOD'
-  | 'FORENSIC_MOD'
-  | 'SIDEARM_MOD'
-  | 'TACTICAL_MOD';
-
-export type CraftingUnlockCondition =
-  | { type: 'SKILL_RANK'; skillId: string; minRank: number }
-  | { type: 'TROPHY_OWNED'; trophyId: string }
-  | { type: 'RUN_COUNT'; minRuns: number }
-  | { type: 'DEFAULT' };
-
-export interface EquipmentMod {
-  id: ID;
-  userId: ID;
-  equipmentId: ID;
-  slotIndex: number;
-  recipeId: ID;
-  appliedAt: Timestamp;
-}
-```
+**Equipment mod** (user state): Records a crafting modification applied to a user's equipment. Fields: unique ID, user ID, equipment ID, slot index (0-based position in the equipment's upgrade slots), recipe ID, application timestamp.
 
 ### ContentRegistry and Effect System
 
-The ContentRegistry is a generic, type-safe registry for all game content. Adding new skills, trophies, items, or status effects requires only adding a data file entry — no code changes needed (unless introducing a new Effect type, which requires an EffectProcessor handler).
+The ContentRegistry is a generic, validated registry for all game content. Adding new skills, trophies, items, or status effects requires only adding a data file entry — no code changes needed unless introducing a new effect type, which requires registering a new effect processor handler.
 
-**`packages/shared/src/registry/content-registry.ts`**:
+Each registry instance is created for a specific content type (skills, trophies, equipment, boss items, crafting recipes, status effects). Registering an entry validates it against the Zod schema for that type and throws on duplicate IDs or schema violations. The registry supports lookup by ID (returning the item or throwing if not found), existence checks, retrieval of all entries, and filtered retrieval. All content registered at game boot from data files; a single entry point calls each content type's registration function in sequence. The boot test verifies all registries reach expected counts (60 skills, 42 trophies, 14 boss items, 20 crafting recipes).
 
-```typescript
-import { type ZodSchema } from 'zod';
+The universal effect type is the shared language for all game mechanics — every skill rank, trophy passive, equipment stat, and crafting mod produces effects from this type. The effect processor handles all known effect types generically. Unknown effect types are logged as warnings for forward compatibility.
 
-export class ContentRegistry<T extends { id: string }> {
-  private entries = new Map<string, T>();
-
-  constructor(
-    private name: string,
-    private schema: ZodSchema<T>,
-  ) {}
-
-  register(entry: T): void {
-    const parsed = this.schema.parse(entry);  // throws if invalid
-    if (this.entries.has(parsed.id)) {
-      throw new Error(`${this.name} registry: duplicate ID "${parsed.id}"`);
-    }
-    this.entries.set(parsed.id, parsed);
-  }
-
-  registerAll(entries: T[]): void {
-    for (const entry of entries) this.register(entry);
-  }
-
-  get(id: string): T | undefined { return this.entries.get(id); }
-
-  getOrThrow(id: string): T {
-    const entry = this.entries.get(id);
-    if (!entry) throw new Error(`${this.name} registry: unknown ID "${id}"`);
-    return entry;
-  }
-
-  has(id: string): boolean { return this.entries.has(id); }
-  getAll(): T[] { return Array.from(this.entries.values()); }
-  getByFilter(predicate: (entry: T) => boolean): T[] { return this.getAll().filter(predicate); }
-  get size(): number { return this.entries.size; }
-}
-```
-
-Data files live at `packages/shared/src/data/`. All content registered at boot via `packages/shared/src/data/_register-all.ts`'s `registerAllContent()`, called once in `packages/game-engine/src/game-init.ts`.
-
-The universal `Effect` type (defined in `packages/shared/src/effects/effect-types.ts`) is the shared language for all game mechanics. Every skill rank, trophy, equipment stat, and crafting mod produces effects. The `EffectProcessor` in `packages/game-engine/src/effects/effect-processor.ts` handles all known types generically. Unknown types are logged as warnings (forward compatibility).
-
-Key Effect types used by this piece:
+Key effect types used by this piece:
 - `STAT_MOD`: percentage or flat stat modification
 - `ABILITY_UNLOCK`: grants an ability
 - `COOLDOWN_REDUCTION`: reduces cooldown for a specific ability
@@ -1145,113 +644,53 @@ Key Effect types used by this piece:
 
 Content definitions exist in both TypeScript const objects (source of truth) and database seed data. The seed script at `supabase/seed/seed-content.ts` reads from TypeScript const objects and upserts into the DB. This is a one-way sync: code → DB. Server actions validate against the DB tables.
 
-Adding new content: add entry to data file → run seed script → done. No schema migration needed unless adding a new Effect type discriminant (which requires an EffectProcessor handler addition).
+Adding new content: add entry to data file → run seed script → done. No schema migration needed unless adding a new effect type discriminant (which requires a new effect handler to be registered).
 
 ### Progression Effects Engine
 
-**`packages/game-engine/src/progression/progression-effects.ts`**
+Called by the run manager's start hook after loadout is selected. Converts equipped progression — skills at current rank, equipped trophy, equipment with mods — into concrete stat modifiers and ability unlocks applied to the player entity before gameplay begins.
 
-Called by `run-manager.ts onRunStart()` after loadout is selected. Converts equipped progression (skills at current rank, equipped trophy, equipment with mods) into concrete stat modifiers and ability unlocks applied to the player entity.
+The engine produces a bundle containing: a map of stat name to cumulative modifier value, list of ability IDs now unlocked, list of starting item IDs granted at run start, list of passive status effects applied immediately, list of effects from crafting mods on equipped items, and counter-play configuration (heat cost reduction multiplier capped at 40%, starting quality for planted evidence, informant survival chance).
 
-```typescript
-interface ProgressionEffectBundle {
-  statModifiers: Record<string, number>;
-  abilityUnlocks: string[];
-  startingItems: string[];
-  passiveStatusEffects: StatusEffect[];
-  equipmentModEffects: Effect[];   // from crafting mods on equipped items
-  counterPlayConfig: {
-    heatCostReduction: number;       // 0-1 multiplier on all heat costs (capped at 0.40)
-    evidencePlantQuality: string;    // starting quality for planted evidence
-    informantSurvivalChance: number; // 0-1 chance informant survives intimidation
-  };
-}
-
-class ProgressionEffectsEngine {
-  applyProgression(
-    userId: ID,
-    progression: UserProgressionState,
-    loadout: Loadout,
-  ): ProgressionEffectBundle;
-
-  applyBundleToPlayer(bundle: ProgressionEffectBundle, playerId: ID): void;
-}
-```
-
-The engine reads from `stores/progression.ts` (hydrated from server at page load) — no additional server calls at run start. For each equipped item, it also reads `user_equipment_mods` and applies crafting recipe effects via `craftingRecipeRegistry`. All effects subject to STAT_CAPS enforcement.
+The engine reads from the progression store which was hydrated from the server at page load — no additional server calls are needed at run start. For each equipped item, it reads the applied mods and processes each crafting recipe's effects through the registry. All effects are subject to stat cap enforcement before being applied to the player entity.
 
 ### Unlock Resolver
 
-**`packages/game-engine/src/progression/unlock-resolver.ts`**
+Runs post-run (after run results are shown) to check which trophies and equipment newly meet unlock conditions. Emits trophy-unlocked and equipment-unlocked events for UI notification (unlock toast and animation). Boss item obtain conditions follow the same pattern — evaluated against run history.
 
-Runs post-run (after run results) to check which trophies and equipment newly meet unlock conditions. Emits `progression:trophy-unlocked` and `progression:equipment-unlocked` events via EventBus for UI notification. Boss item obtain conditions follow the same pattern — evaluated against run history.
-
-```typescript
-class UnlockResolver {
-  checkTrophyUnlocks(
-    userId: ID,
-    runHistory: RunHistoryDTO[],
-    currentMaterials: Record<string, number>,
-    allTrophies: Trophy[],
-    userTrophies: UserTrophyState[],
-  ): Trophy[];
-
-  checkEquipmentUnlocks(
-    userId: ID,
-    runHistory: RunHistoryDTO[],
-    currentMaterials: Record<string, number>,
-    allEquipment: Equipment[],
-    userEquipment: UserEquipmentState[],
-  ): Equipment[];
-}
-```
+Takes as input: the user's run history, current material balances, all defined trophies or equipment items, and the user's current unlock state. Returns the list of newly unlocked items. Unlock condition checks are client-side for fast UX notification. Server actions are authoritative for persistence — the server re-validates unlock conditions before writing any unlock to the database.
 
 Unlock condition checks are client-side for UX notification. The server action `unlock-skill.ts` is authoritative for persistence.
 
-### React Progression Pages
+### Progression Pages
 
-**`apps/web/src/app/progression/skills/page.tsx`** — Server Component. Fetches user skill state from DAL. Renders `SkillTreeView.tsx` for each tree (role toggle at top of page).
+**Skills page** (server component): Fetches the user's skill state from the DAL. Renders the skill tree view for each tree with a role toggle at the top of the page.
 
-**`SkillTreeView.tsx`** — visual tree with SVG connection lines between `SkillNode` components. Node positions derived from `skill.positionX` / `skill.positionY`. CSS Grid layout with `position: absolute` nodes inside a bounded container. Counter-play branch trees rendered with dark background and red accent border.
+**Skill tree view component**: Visual tree with SVG connection lines between skill nodes. Node positions come from the skill's grid coordinates. Counter-play branch trees use a dark background with a red accent border to communicate their ethical weight visually.
 
-**`SkillNode.tsx`** — displays icon, name, current rank / max rank, cost, locked/unlocked/maxed state. Click triggers `unlock-skill` Server Action if prerequisites met and materials sufficient.
+**Skill node component**: Displays icon, name, current rank out of max rank, material cost to unlock next rank, and lock/unlock/maxed state. Clicking triggers the unlock-skill server action if prerequisites are met and materials are sufficient.
 
-**`SkillTooltip.tsx`** — hover tooltip showing full description, effect summary at current and next rank, prerequisite chain.
+**Skill tooltip component**: Hover tooltip showing full description, effect summary at current rank and the next rank, and the full prerequisite chain.
 
-**`apps/web/src/app/progression/trophies/page.tsx`** — `TrophyGrid.tsx` shows all 42 trophies filtered by current role view. Trophy cards: icon, name, rarity border, lock/unlock state, unlock condition description, passive effect summary.
+**Trophies page**: Displays all 42 trophies filtered by the currently selected role. Trophy cards show icon, name, rarity-coded border, lock/unlock state, the unlock condition in plain language, and passive effect summary.
 
-**`apps/web/src/app/progression/equipment/page.tsx`** — Equipment Collection + Loadout Builder sections. `LoadoutBuilder.tsx` uses HTML5 Drag API (no extra library). Four equipment slots as card zones, trophy slot at top, collection displayed below for drag-to-slot. MYTHIC items display with animated border and distinct visual treatment.
+**Equipment page**: Two sections — equipment collection and loadout builder. The loadout builder uses the HTML5 Drag API (no extra library). Four equipment slots as drop zones, one trophy slot at the top, and the collection displayed below for drag-to-slot assignment. MYTHIC items display with an animated border and visually distinct treatment. MYTHIC items in the collection that are not attuned show an attunement prompt before they can be dragged to a slot.
 
-**`apps/web/src/app/progression/workshop/page.tsx`** and **`armory/page.tsx`** — Crafting pages. `CraftingStation.tsx` is the shared component with role-appropriate theming. Flow: select equipment → see upgrade slots → browse compatible recipes → confirm application → Server Action validates.
+**Workshop page (Killer) and Armory page (Fed)**: Crafting pages using a shared crafting station component with role-appropriate theming. User flow: select an owned equipment piece, see its upgrade slots and any applied mods, browse compatible recipes filtered by the selected equipment's slot and category, review material costs and unlock requirements, confirm application via server action.
 
 ### DAL Modules
 
-```typescript
-// apps/web/src/dal/progression/skills.ts
-export async function getUserSkills(userId: string): Promise<Result<SkillRankDTO[], DatabaseError>>;
-export async function unlockSkill(userId: string, skillId: string, currentRank: number): Promise<Result<SkillRankDTO, DatabaseError>>;
+All DAL functions run server-side only. They use the server-side Supabase client and return a result type wrapping either success data or a database error — they never throw.
 
-// apps/web/src/dal/progression/trophies.ts
-export async function getUserTrophies(userId: string): Promise<Result<UserTrophyDTO[], DatabaseError>>;
-export async function equipTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
-export async function unequipTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
-export async function unlockTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
+**Skills DAL**: Fetch all skill ranks for a user (returns each skill with current rank and unlock timestamp). Update a skill's rank for a user (used atomically alongside material deduction in the unlock-skill server action).
 
-// apps/web/src/dal/progression/materials.ts
-export async function getMaterials(userId: string): Promise<Result<MaterialDTO[], DatabaseError>>;
-export async function spendMaterials(userId: string, costs: Array<{ material: string; amount: number }>): Promise<Result<MaterialDTO[], DatabaseError>>;
-export async function addMaterials(userId: string, gains: Record<string, number>): Promise<Result<MaterialDTO[], DatabaseError>>;
+**Trophies DAL**: Fetch all trophy state for a user (returns each trophy with unlocked and equipped flags). Equip a trophy for a user (server action calls this after validating ownership and unlock status). Unequip a trophy. Mark a trophy as unlocked (called by the post-run unlock-resolver flow after server validation).
 
-// apps/web/src/dal/crafting/recipes.ts
-export async function getCraftingRecipes(role: 'KILLER' | 'FED'): Promise<Result<CraftingRecipeDTO[], DatabaseError>>;
+**Materials DAL**: Fetch all material balances for a user. Deduct materials by a list of material-type/amount pairs (enforces non-negative balance atomically). Add materials to a user's balance (called when run results are saved).
 
-// apps/web/src/dal/crafting/mods.ts
-export async function getUserEquipmentMods(userId: string, equipmentId: string): Promise<Result<EquipmentModDTO[], DatabaseError>>;
-export async function applyMod(userId: string, equipmentId: string, slotIndex: number, recipeId: string): Promise<Result<EquipmentModDTO, DatabaseError>>;
-export async function removeMod(userId: string, equipmentId: string, slotIndex: number): Promise<Result<void, DatabaseError>>;
-```
+**Crafting recipes DAL**: Fetch all crafting recipes for a given role (returns public recipe definitions for display in the workshop/armory).
 
-All DAL functions: server-only (no "use client"), use `createServerClient()`, return Result<DTO, Error> (never throw).
+**Equipment mods DAL**: Fetch all mods applied to a specific piece of equipment for a user. Apply a mod (insert a new mod in a specific slot). Remove a mod (delete the mod record; material refund is NOT performed here — the server action handles deducting the salvage cost first).
 
 ### Server Actions
 
@@ -1269,60 +708,13 @@ All DAL functions: server-only (no "use client"), use `createServerClient()`, re
 
 **`dismantle-equipment.ts`**: Validates user owns equipment and it is not currently in any active loadout. Removes all applied mods first. Deletes from `user_equipment`. Grants salvage_parts based on equipment rarity. MYTHIC items cannot be dismantled.
 
-### Zustand Stores
+### Client State (Zustand Stores)
 
-**`apps/web/src/stores/progression.ts`**:
+**Progression store**: Holds the complete progression state for the current user session. State includes: all skill definitions, the user's skill ranks, all trophy definitions, the user's trophy unlock and equip state, all equipment definitions, the user's equipment unlock and attunement state, saved loadouts, and current material balances. Computed values derived from state: the currently active loadout, the equipped trophy, and the list of currently unlocked ability IDs (aggregated from skill tree unlocks and trophy effects). Actions: update a skill rank (after server action succeeds), toggle a trophy's equipped state, set the active loadout, update material balances, trigger unlock notification (shows toast and animation for newly unlocked trophy or equipment), and reset.
 
-```typescript
-interface ProgressionStore {
-  skills: Skill[];
-  userSkills: SkillRank[];
-  trophies: Trophy[];
-  userTrophies: UserTrophyState[];
-  equipment: Equipment[];
-  userEquipment: UserEquipmentState[];
-  loadouts: Loadout[];
-  materials: Record<string, number>;
+**Crafting store**: Holds crafting-related state. State includes: all crafting recipe definitions filtered for the user's role, the user's applied mods across all equipment, and the user's current salvage parts balance. Computed access: recipes compatible with a specific piece of equipment, mods applied to a specific piece of equipment, whether the user can afford a specific recipe, whether the user meets the unlock condition for a specific recipe. Actions: apply a mod (optimistic update, confirmed after server action), remove a mod (optimistic update), dismantle a piece of equipment (removes from collection and adds salvage), and setters for initializing store from server data.
 
-  // Computed
-  activeLoadout: Loadout | null;
-  equippedTrophy: Trophy | null;
-  unlockedAbilities: string[];    // from skills + trophy effects
-
-  // Actions
-  setSkillRank: (skillId: ID, rank: number) => void;
-  setTrophyEquipped: (trophyId: ID, equipped: boolean) => void;
-  setActiveLoadout: (loadoutId: ID) => void;
-  setMaterials: (materials: Record<string, number>) => void;
-  notifyUnlock: (type: 'trophy' | 'equipment', item: Trophy | Equipment) => void;
-  reset: () => void;
-}
-```
-
-**`apps/web/src/stores/crafting.ts`**:
-
-```typescript
-interface CraftingStore {
-  recipes: CraftingRecipe[];
-  userMods: EquipmentMod[];
-  salvageParts: number;
-
-  // Computed
-  availableRecipes: (equipmentId: string) => CraftingRecipe[];
-  getModsForEquipment: (equipmentId: string) => EquipmentMod[];
-  canAfford: (recipeId: string) => boolean;
-  meetsUnlockCondition: (recipeId: string) => boolean;
-
-  // Actions
-  applyMod: (equipmentId: string, slotIndex: number, recipeId: string) => void;
-  removeMod: (equipmentId: string, slotIndex: number) => void;
-  dismantleEquipment: (equipmentId: string) => void;
-  setRecipes: (recipes: CraftingRecipe[]) => void;
-  setUserMods: (mods: EquipmentMod[]) => void;
-}
-```
-
-Both stores initialize from server-rendered data (passed as props via Server Component to Client Component boundary). Mutations happen via Server Actions; on success, store is updated optimistically then confirmed.
+Both stores initialize from server-rendered data passed as props at the Server Component to Client Component boundary. Mutations are optimistic — the UI updates immediately, then the server action response confirms or rolls back.
 
 ### Pre-Run Loadout Integration
 
@@ -1330,7 +722,7 @@ At the role selection page (piece 07), extend the flow:
 1. User selects role (KILLER or FED)
 2. Loadout picker shows user's saved loadouts for that role
 3. Selected loadout displayed: trophy effect summary, equipment slot items, applied mods on each item, starting items list, counter-play abilities available
-4. "Start Run" confirms loadout → passed to `RunConfig.loadout` → `ProgressionEffectsEngine.applyProgression()` at run start
+4. "Start Run" confirms loadout — passed to the run configuration and triggers the progression effects engine to apply all modifiers before gameplay begins
 
 ### Counter-Play Balance Matrix
 
@@ -1356,10 +748,10 @@ No build dominates all matchups. Build diversity creates replay value and meta-g
 
 - **New player (no progression unlocked)**: All counter-play abilities locked. Default loadout has no trophy, basic equipment, no mods. Base abilities only. Intentional — counter-play is a mid/late-game reward.
 - **Skill prerequisite chain integrity**: If prerequisite data is inconsistent, `unlock-resolver.ts` checks full chain server-side. Dependent skills remain unlocked (no revocation), but UI shows a warning badge.
-- **Material anti-cheat**: `spend-materials.ts` checks balance server-side. Client store is optimistic but server is authoritative. If server rejects, store rolls back to confirmed balance.
-- **Effect stacking cap**: Trophy + skill heat reduction stacks additively up to 40% total cap. E.g., Rough Interrogation skill -17% + trophy -15% = effective -32% (under cap). Shadow Network skill -25% + trophy -15% = clamped to -40%.
-- **Crafting + skill + trophy stacking**: All bonuses counted by `StatModifierSystem` against STAT_CAPS. No stacking exploits possible.
-- **MYTHIC item attunement gate**: A player who earns a boss item but lacks ghost tokens cannot use it. The `unlock-skill.ts` and `save-loadout.ts` actions validate attunement status. Attuning is a deliberate commitment (spending 5 ghost tokens that could go toward skill ranks).
+- **Material anti-cheat**: The spend-materials server action checks balance server-side. The client store is optimistic but the server is authoritative. If the server rejects the spend, the store rolls back to the confirmed balance.
+- **Effect stacking cap**: Trophy + skill heat reduction stacks additively up to the 40% total cap. E.g., Rough Interrogation skill -17% + trophy -15% = effective -32% (under cap). Shadow Network skill -25% + trophy -15% = clamped to -40%.
+- **Crafting + skill + trophy stacking**: All bonuses are counted by the stat modifier system against the stat caps. No stacking exploits possible.
+- **MYTHIC item attunement gate**: A player who earns a boss item but lacks ghost tokens cannot use it. The skill unlock and loadout save server actions validate attunement status. Attuning is a deliberate commitment (spending 5 ghost tokens that could go toward skill ranks).
 - **Mod removal cost**: 2 salvage_parts flat fee prevents free experimentation. If user has no salvage, they cannot remove mods — they must dismantle other equipment first. This makes crafting choices feel consequential.
 - **False alibi detectability**: At K-D8 rank 1, detection chance by forensic analysis is 40%. At K-D8 rank 3 + The Setup (LEGENDARY trophy), detection drops to ~25%. At fed with F-F10 (Master Analyst), passive detection is 25% + active adds 14% = 39% total. Counter-play depth preserved: no combination reaches 0% detection.
 - **Loadout counter-play equipment without skill tree**: Counter-play equipment (e.g., Off-Books Briefcase) grants starting items. These items function as the activation mechanism even without the ability unlocked in skill tree. This is intentional: equipment provides an alternate gating path for counter-play tools.
@@ -1515,6 +907,515 @@ supabase/
 - Component test crafting flow: recipe selection, cost display, confirmation fires server action
 - Integration test: complete skill unlock → materials deducted → ability available in next run
 - Integration test: apply crafting mod → mod persists → effects present in ProgressionEffectBundle at run start
+
+### TypeScript Types
+
+**`packages/shared/src/types/progression.ts`**:
+
+```typescript
+import { ID, Timestamp } from './common';
+
+export interface SkillTree {
+  id: ID;
+  role: 'KILLER' | 'FED';
+  name: string;
+  description: string;
+  branchType: 'CORE' | 'COUNTER_PLAY';
+  costMultiplier: number;   // 0.8 for CORE, 1.3 for COUNTER_PLAY
+  iconKey: string;
+  sortOrder: number;
+}
+
+export interface Skill {
+  id: ID;
+  treeId: ID;
+  name: string;
+  description: string;
+  tier: 1 | 2 | 3 | 4 | 5;
+  maxRank: 1 | 2 | 3 | 4 | 5;
+  costPerRank: Array<Array<{ material: string; amount: number }>>;
+  prerequisites: Array<{ skillId: ID; minRank: number }>;
+  ranks: Array<{ rank: number; effects: SkillEffect[] }>;
+  iconKey: string;
+  positionX: number;
+  positionY: number;
+}
+
+export type SkillEffect =
+  | { type: 'STAT_MOD'; stat: string; value: number; modType: 'FLAT' | 'PERCENT' }
+  | { type: 'ABILITY_UNLOCK'; abilityId: string }
+  | { type: 'COOLDOWN_REDUCTION'; abilityId: string; percent: number }
+  | { type: 'HEAT_REDUCTION'; percent: number }
+  | { type: 'EVIDENCE_MODIFIER'; value: number }
+  | { type: 'COUNTER_PLAY_ENHANCE'; abilityId: string; enhancement: Record<string, number> };
+
+export interface SkillRank {
+  userId: ID;
+  skillId: ID;
+  currentRank: number;
+  unlockedAt: Timestamp;
+}
+
+export interface Trophy {
+  id: ID;
+  role: 'KILLER' | 'FED' | 'SHARED';
+  name: string;
+  description: string;
+  passiveEffect: TrophyEffect[];
+  unlockCondition: UnlockCondition;
+  iconKey: string;
+  rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
+}
+
+export type TrophyEffect =
+  | { type: 'STAT_MOD'; stat: string; value: number; modType: 'FLAT' | 'PERCENT' }
+  | { type: 'ABILITY_UNLOCK'; abilityId: string }
+  | { type: 'COUNTER_PLAY_ENHANCE'; abilityId: string; heatReduction?: number; effectBoost?: number }
+  | { type: 'START_WITH_ITEM'; itemId: string }
+  | { type: 'HEAT_CAP_INCREASE'; amount: number }
+  | { type: 'MATERIAL_DROP_MOD'; percent: number };
+
+export type UnlockCondition =
+  | { type: 'WIN_COUNT'; role: 'KILLER' | 'FED'; count: number }
+  | { type: 'SCORE_THRESHOLD'; role?: 'KILLER' | 'FED'; score: number }
+  | { type: 'BIOME_COMPLETE'; biome: string; role?: 'KILLER' | 'FED' }
+  | { type: 'ARREST_STRONG'; count: number }
+  | { type: 'TARGETS_ELIMINATED'; count: number }
+  | { type: 'COUNTER_PLAY_USE'; ability: string; count: number }
+  | { type: 'MATERIAL_SPENT'; material: string; totalAmount: number }
+  | { type: 'CUMULATIVE_STAT'; stat: string; threshold: number }
+  | { type: 'BOSS_KILL'; bossId: string; difficulty?: string }
+  | { type: 'SCORE_SINGLE_RUN'; role: 'KILLER' | 'FED'; minScore: number; mustWin: boolean }
+  | { type: 'TROPHY_COUNT'; minCount: number }
+  | { type: 'DEFAULT' };
+
+export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY' | 'MYTHIC';
+
+export interface Equipment {
+  id: ID;
+  role: 'KILLER' | 'FED' | 'SHARED';
+  slot: 'WEAPON' | 'ARMOR' | 'TOOL' | 'ACCESSORY';
+  name: string;
+  description: string;
+  stats: EquipmentStats;
+  unlockCondition: UnlockCondition;
+  iconKey: string;
+  rarity: ItemRarity;
+  upgradeSlots: number;
+  obtainCondition?: UnlockCondition;
+}
+
+export interface EquipmentStats {
+  damageBonus?: number;
+  healthBonus?: number;
+  startingItem?: string;
+  startingItems?: string[];
+  statModifiers?: Record<string, number>;
+}
+
+export interface Loadout {
+  id: ID;
+  userId: ID;
+  role: 'KILLER' | 'FED';
+  name: string;
+  trophyId: ID | null;
+  equipmentIds: ID[];
+  isDefault: boolean;
+  createdAt: Timestamp;
+}
+
+export interface Material {
+  userId: ID;
+  materialType: string;
+  amount: number;
+}
+```
+
+**`packages/shared/src/types/crafting.ts`**:
+
+```typescript
+import { ID, Timestamp } from './common';
+import { UnlockCondition } from './progression';
+
+export interface CraftingRecipe {
+  id: ID;
+  role: 'KILLER' | 'FED' | 'SHARED';
+  name: string;
+  description: string;
+  category: CraftingCategory;
+  effects: Effect[];
+  cost: Array<{ material: string; amount: number }>;
+  unlockCondition: UnlockCondition | CraftingUnlockCondition;
+  compatibleSlots: string[];
+  compatibleCategories: string[];
+  tier: 1 | 2 | 3;
+  iconKey: string;
+}
+
+export type CraftingCategory =
+  | 'BLADE_MOD'
+  | 'BLUNT_MOD'
+  | 'GARROTE_MOD'
+  | 'RANGED_MOD'
+  | 'POISON_MOD'
+  | 'ARMOR_MOD'
+  | 'TOOL_MOD'
+  | 'ACCESSORY_MOD'
+  | 'FORENSIC_MOD'
+  | 'SIDEARM_MOD'
+  | 'TACTICAL_MOD';
+
+export type CraftingUnlockCondition =
+  | { type: 'SKILL_RANK'; skillId: string; minRank: number }
+  | { type: 'TROPHY_OWNED'; trophyId: string }
+  | { type: 'RUN_COUNT'; minRuns: number }
+  | { type: 'DEFAULT' };
+
+export interface EquipmentMod {
+  id: ID;
+  userId: ID;
+  equipmentId: ID;
+  slotIndex: number;
+  recipeId: ID;
+  appliedAt: Timestamp;
+}
+```
+
+### ContentRegistry Class
+
+**`packages/shared/src/registry/content-registry.ts`**:
+
+```typescript
+import { type ZodSchema } from 'zod';
+
+export class ContentRegistry<T extends { id: string }> {
+  private entries = new Map<string, T>();
+
+  constructor(
+    private name: string,
+    private schema: ZodSchema<T>,
+  ) {}
+
+  register(entry: T): void {
+    const parsed = this.schema.parse(entry);
+    if (this.entries.has(parsed.id)) {
+      throw new Error(`${this.name} registry: duplicate ID "${parsed.id}"`);
+    }
+    this.entries.set(parsed.id, parsed);
+  }
+
+  registerAll(entries: T[]): void {
+    for (const entry of entries) this.register(entry);
+  }
+
+  get(id: string): T | undefined { return this.entries.get(id); }
+
+  getOrThrow(id: string): T {
+    const entry = this.entries.get(id);
+    if (!entry) throw new Error(`${this.name} registry: unknown ID "${id}"`);
+    return entry;
+  }
+
+  has(id: string): boolean { return this.entries.has(id); }
+  getAll(): T[] { return Array.from(this.entries.values()); }
+  getByFilter(predicate: (entry: T) => boolean): T[] { return this.getAll().filter(predicate); }
+  get size(): number { return this.entries.size; }
+}
+```
+
+### ProgressionEffectsEngine Class
+
+**`packages/game-engine/src/progression/progression-effects.ts`**:
+
+```typescript
+import { ID } from '@shared/types/common';
+import { StatusEffect } from '@shared/types/combat';
+import { Loadout } from '@shared/types/progression';
+import { Effect } from '@shared/effects/effect-types';
+
+interface ProgressionEffectBundle {
+  statModifiers: Record<string, number>;
+  abilityUnlocks: string[];
+  startingItems: string[];
+  passiveStatusEffects: StatusEffect[];
+  equipmentModEffects: Effect[];
+  counterPlayConfig: {
+    heatCostReduction: number;       // 0-1 multiplier (capped at 0.40)
+    evidencePlantQuality: string;
+    informantSurvivalChance: number; // 0-1
+  };
+}
+
+class ProgressionEffectsEngine {
+  applyProgression(
+    userId: ID,
+    progression: UserProgressionState,
+    loadout: Loadout,
+  ): ProgressionEffectBundle;
+
+  applyBundleToPlayer(bundle: ProgressionEffectBundle, playerId: ID): void;
+}
+```
+
+### UnlockResolver Class
+
+**`packages/game-engine/src/progression/unlock-resolver.ts`**:
+
+```typescript
+import { ID } from '@shared/types/common';
+import { Trophy, Equipment } from '@shared/types/progression';
+import { RunHistoryDTO } from '@/dal/runs/history';
+
+class UnlockResolver {
+  checkTrophyUnlocks(
+    userId: ID,
+    runHistory: RunHistoryDTO[],
+    currentMaterials: Record<string, number>,
+    allTrophies: Trophy[],
+    userTrophies: UserTrophyState[],
+  ): Trophy[];
+
+  checkEquipmentUnlocks(
+    userId: ID,
+    runHistory: RunHistoryDTO[],
+    currentMaterials: Record<string, number>,
+    allEquipment: Equipment[],
+    userEquipment: UserEquipmentState[],
+  ): Equipment[];
+}
+```
+
+### DAL Function Signatures
+
+```typescript
+// apps/web/src/dal/progression/skills.ts
+export async function getUserSkills(userId: string): Promise<Result<SkillRankDTO[], DatabaseError>>;
+export async function unlockSkill(userId: string, skillId: string, currentRank: number): Promise<Result<SkillRankDTO, DatabaseError>>;
+
+// apps/web/src/dal/progression/trophies.ts
+export async function getUserTrophies(userId: string): Promise<Result<UserTrophyDTO[], DatabaseError>>;
+export async function equipTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
+export async function unequipTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
+export async function unlockTrophy(userId: string, trophyId: string): Promise<Result<UserTrophyDTO, DatabaseError>>;
+
+// apps/web/src/dal/progression/materials.ts
+export async function getMaterials(userId: string): Promise<Result<MaterialDTO[], DatabaseError>>;
+export async function spendMaterials(userId: string, costs: Array<{ material: string; amount: number }>): Promise<Result<MaterialDTO[], DatabaseError>>;
+export async function addMaterials(userId: string, gains: Record<string, number>): Promise<Result<MaterialDTO[], DatabaseError>>;
+
+// apps/web/src/dal/crafting/recipes.ts
+export async function getCraftingRecipes(role: 'KILLER' | 'FED'): Promise<Result<CraftingRecipeDTO[], DatabaseError>>;
+
+// apps/web/src/dal/crafting/mods.ts
+export async function getUserEquipmentMods(userId: string, equipmentId: string): Promise<Result<EquipmentModDTO[], DatabaseError>>;
+export async function applyMod(userId: string, equipmentId: string, slotIndex: number, recipeId: string): Promise<Result<EquipmentModDTO, DatabaseError>>;
+export async function removeMod(userId: string, equipmentId: string, slotIndex: number): Promise<Result<void, DatabaseError>>;
+```
+
+### Zustand Store Interfaces
+
+**`apps/web/src/stores/progression.ts`**:
+
+```typescript
+interface ProgressionStore {
+  skills: Skill[];
+  userSkills: SkillRank[];
+  trophies: Trophy[];
+  userTrophies: UserTrophyState[];
+  equipment: Equipment[];
+  userEquipment: UserEquipmentState[];
+  loadouts: Loadout[];
+  materials: Record<string, number>;
+
+  activeLoadout: Loadout | null;
+  equippedTrophy: Trophy | null;
+  unlockedAbilities: string[];
+
+  setSkillRank: (skillId: ID, rank: number) => void;
+  setTrophyEquipped: (trophyId: ID, equipped: boolean) => void;
+  setActiveLoadout: (loadoutId: ID) => void;
+  setMaterials: (materials: Record<string, number>) => void;
+  notifyUnlock: (type: 'trophy' | 'equipment', item: Trophy | Equipment) => void;
+  reset: () => void;
+}
+```
+
+**`apps/web/src/stores/crafting.ts`**:
+
+```typescript
+interface CraftingStore {
+  recipes: CraftingRecipe[];
+  userMods: EquipmentMod[];
+  salvageParts: number;
+
+  availableRecipes: (equipmentId: string) => CraftingRecipe[];
+  getModsForEquipment: (equipmentId: string) => EquipmentMod[];
+  canAfford: (recipeId: string) => boolean;
+  meetsUnlockCondition: (recipeId: string) => boolean;
+
+  applyMod: (equipmentId: string, slotIndex: number, recipeId: string) => void;
+  removeMod: (equipmentId: string, slotIndex: number) => void;
+  dismantleEquipment: (equipmentId: string) => void;
+  setRecipes: (recipes: CraftingRecipe[]) => void;
+  setUserMods: (mods: EquipmentMod[]) => void;
+}
+```
+
+### Database Schema (SQL DDL)
+
+**`supabase/migrations/XXX_progression.sql`**:
+
+```sql
+CREATE TABLE skill_trees (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role        TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL,
+  branch_type TEXT NOT NULL CHECK (branch_type IN ('CORE', 'COUNTER_PLAY')),
+  cost_multiplier NUMERIC NOT NULL DEFAULT 1.0,
+  icon_key    TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL
+);
+
+CREATE TABLE skills (
+  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tree_id        UUID NOT NULL REFERENCES skill_trees(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  description    TEXT NOT NULL,
+  tier           INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 5),
+  max_rank       INTEGER NOT NULL DEFAULT 1 CHECK (max_rank BETWEEN 1 AND 5),
+  cost_per_rank  JSONB NOT NULL,
+  prerequisites  JSONB NOT NULL DEFAULT '[]',
+  ranks          JSONB NOT NULL,
+  icon_key       TEXT NOT NULL,
+  position_x     INTEGER NOT NULL,
+  position_y     INTEGER NOT NULL
+);
+
+CREATE TABLE user_skills (
+  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  skill_id     UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  current_rank INTEGER NOT NULL DEFAULT 0 CHECK (current_rank >= 0),
+  unlocked_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, skill_id)
+);
+CREATE INDEX idx_user_skills_user ON user_skills(user_id);
+
+CREATE TABLE trophies (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role             TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
+  name             TEXT NOT NULL,
+  description      TEXT NOT NULL,
+  passive_effect   JSONB NOT NULL,
+  unlock_condition JSONB NOT NULL,
+  icon_key         TEXT NOT NULL,
+  rarity           TEXT NOT NULL CHECK (rarity IN ('COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY'))
+);
+
+CREATE TABLE user_trophies (
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  trophy_id   UUID NOT NULL REFERENCES trophies(id) ON DELETE CASCADE,
+  unlocked    BOOLEAN NOT NULL DEFAULT FALSE,
+  equipped    BOOLEAN NOT NULL DEFAULT FALSE,
+  unlocked_at TIMESTAMPTZ,
+  PRIMARY KEY (user_id, trophy_id)
+);
+CREATE INDEX idx_user_trophies_user ON user_trophies(user_id);
+
+CREATE TABLE equipment (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role             TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
+  slot             TEXT NOT NULL CHECK (slot IN ('WEAPON', 'ARMOR', 'TOOL', 'ACCESSORY')),
+  name             TEXT NOT NULL,
+  description      TEXT NOT NULL,
+  stats            JSONB NOT NULL,
+  unlock_condition JSONB NOT NULL,
+  icon_key         TEXT NOT NULL,
+  rarity           TEXT NOT NULL CHECK (rarity IN ('COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY', 'MYTHIC')),
+  upgrade_slots    INTEGER NOT NULL DEFAULT 1,
+  obtain_condition JSONB
+);
+
+CREATE TABLE user_equipment (
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  equipment_id  UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+  unlocked      BOOLEAN NOT NULL DEFAULT FALSE,
+  attuned       BOOLEAN NOT NULL DEFAULT FALSE,
+  unlocked_at   TIMESTAMPTZ,
+  PRIMARY KEY (user_id, equipment_id)
+);
+CREATE INDEX idx_user_equipment_user ON user_equipment(user_id);
+
+CREATE TABLE user_loadouts (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role          TEXT NOT NULL CHECK (role IN ('KILLER', 'FED')),
+  name          TEXT NOT NULL,
+  trophy_id     UUID REFERENCES trophies(id) ON DELETE SET NULL,
+  equipment_ids UUID[] NOT NULL DEFAULT '{}',
+  is_default    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_user_loadouts_user_role ON user_loadouts(user_id, role);
+
+CREATE TABLE user_materials (
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  material_type TEXT NOT NULL,
+  amount        INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  PRIMARY KEY (user_id, material_type)
+);
+
+CREATE TABLE crafting_recipes (
+  id                    UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role                  TEXT NOT NULL CHECK (role IN ('KILLER', 'FED', 'SHARED')),
+  name                  TEXT NOT NULL,
+  description           TEXT NOT NULL,
+  category              TEXT NOT NULL,
+  effects               JSONB NOT NULL,
+  cost                  JSONB NOT NULL,
+  unlock_condition      JSONB NOT NULL DEFAULT '{"type":"DEFAULT"}',
+  compatible_slots      TEXT[] NOT NULL DEFAULT '{}',
+  compatible_categories TEXT[] NOT NULL DEFAULT '{}',
+  tier                  INTEGER NOT NULL DEFAULT 1 CHECK (tier BETWEEN 1 AND 3),
+  icon_key              TEXT NOT NULL
+);
+
+CREATE TABLE user_equipment_mods (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  equipment_id  UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+  slot_index    INTEGER NOT NULL CHECK (slot_index >= 0),
+  recipe_id     UUID NOT NULL REFERENCES crafting_recipes(id) ON DELETE CASCADE,
+  applied_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, equipment_id, slot_index)
+);
+CREATE INDEX idx_user_equipment_mods_user ON user_equipment_mods(user_id);
+
+ALTER TABLE skill_trees          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE skills                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_skills           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trophies              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_trophies         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_equipment        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_loadouts         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_materials        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crafting_recipes      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_equipment_mods   ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "skill_trees_read_all"      ON skill_trees      FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "skills_read_all"           ON skills           FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "trophies_read_all"         ON trophies         FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "equipment_read_all"        ON equipment        FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "crafting_recipes_read_all" ON crafting_recipes FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "user_skills_own"          ON user_skills         FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "user_trophies_own"        ON user_trophies       FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "user_equipment_own"       ON user_equipment      FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "user_loadouts_own"        ON user_loadouts       FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "user_materials_own"       ON user_materials      FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "user_equipment_mods_own"  ON user_equipment_mods FOR ALL USING (auth.uid() = user_id);
+```
 
 ### Constitution Compliance Checklist
 

@@ -49,582 +49,155 @@ Implement the evidence and clue system that is the central asymmetric mechanic c
 
 ### Dependency Context (Inline)
 
-This piece depends on outputs from earlier pieces. These are reproduced here in full so this document is self-contained:
+This piece depends on several earlier systems. These are described here so this document is self-contained.
 
-**From project-scaffold**:
-```
-packages/shared/src/utils/result.ts:
-  - ok<T>(value: T): Ok<T, never>
-  - err<E>(error: E): Err<never, E>
-  - type AppError = { code: string; message: string }
-  - type ValidationError extends AppError
-  - type DatabaseError extends AppError
-apps/web/src/lib/logger/pino.ts — Pino singleton
-apps/web/src/config/env.ts — Zod-validated env vars
-```
+**Project scaffold** provides the shared Result type, Zod for schema validation, a Pino logger singleton, and Zod-validated environment config.
 
-**From design-system**:
-```typescript
-// apps/web/src/components/app/common/
-// AppButton, AppCard, AppDialog, AppInput, AppToast — branded wrappers
-// Tailwind v4 CSS custom properties available in all React components
-```
+**Design system** provides the shared component library (AppButton, AppCard, AppDialog, AppInput, AppToast) used by the evidence panel React component.
 
-**From game-engine-bootstrap**:
-```typescript
-// packages/game-engine/src/events/event-bus.ts
-eventBus.emit<K>(event: K, payload: GameEvents[K]): void
-eventBus.on<K>(event: K, handler: (payload: GameEvents[K]) => void): void
-// apps/web/src/stores/game.ts — { isRunning, isPaused, currentScene }
-// packages/shared/src/constants/game.ts — TICK_RATE
-```
+**Game engine bootstrap** provides the EventBus (emit and subscribe typed events) and game constants.
 
-**From world-and-maps**:
-```typescript
-// packages/game-engine/src/world/zone-manager.ts
-getZone(pos: Vec2): Zone | null
-getZoneById(id: string): Zone | null
-// packages/game-engine/src/world/tile-manager.ts
-getTileAt(pos: Vec2): Tile | null
-// packages/shared/src/types/biome.ts — Vec2, Zone, Tile, Biome
-```
+**World and maps** provides the zone manager (evidence objects are placed in zones), the tile manager (tile type affects evidence generation, e.g. soft surfaces generate more visible footprints), and the shared position, zone, tile, and biome types.
 
-**From entity-and-npc-system**:
-```typescript
-// packages/game-engine/src/entities/npc.ts
-class NPC extends BaseEntity {
-  isWitness: boolean
-  witnessLog: WitnessEvent[]
-  canBeInterviewed: boolean
-  getWitnessStatement(): WitnessStatement | null
-}
-type WitnessEvent = { eventType: string; pos: Vec2; timestamp: number; description: string }
-type WitnessStatement = { npcId: string; events: WitnessEvent[]; reliability: number }
-// packages/game-engine/src/entities/npc-spawner.ts
-getNPCById(npcId: string): NPC | null
-getAllNPCs(): NPC[]
-// packages/game-engine/src/ai/perception.ts — registerSuspiciousEvent()
-```
+**Entity and NPC system** provides the NPC class (has a witness flag, a witness event log, an interviewable flag, and a method to produce a witness statement), the NPC spawner (for querying NPCs by ID), and the perception system (for registering suspicious events).
 
-**From player-and-roles**:
-```typescript
-// packages/game-engine/src/player/player-actions.ts
-type PlayerAction = { type: PlayerActionType; targetId?: string; pos?: Vec2; data?: Record<string, unknown> }
-type PlayerActionType = 'INTERACT' | 'USE_ABILITY' | 'USE_ITEM' | ...
-// packages/game-engine/src/player/inventory.ts — Inventory (evidence-modifying items)
-// packages/shared/src/types/player.ts — PlayerRole
-// packages/shared/src/types/inventory.ts — InventoryItem, ItemEffect
-// apps/web/src/stores/player.ts — player Zustand store (role determines evidence perspective)
-// EventBus: PLAYER_ACTION, DAMAGE_DEALT (with witnesses[])
-```
+**Player and roles** provides player action types and the PLAYER_ACTION event that the evidence generator subscribes to. It also provides the inventory class (some items modify evidence generation), player role type, inventory item types, and the player Zustand store.
 
-**From combat-system**:
-```typescript
-// packages/shared/src/types/combat.ts
-type Attack = { id: string; attackerId: string; defenderId: string; damageType: DamageType; weaponId: string | null; pos: Vec2; timestamp: number }
-// EventBus DAMAGE_DEALT: { attack: Attack; witnesses: string[] }
-// EventBus ENTITY_DIED: { entityId: string; killedById: string; weapon: string | null; pos: Vec2; isPlayer: boolean }
-```
+**Combat system** provides the DAMAGE_DEALT event (which includes a list of NPC witness IDs with line-of-sight to the impact position) and the ENTITY_DIED event, both of which the evidence generator subscribes to. It also provides the Attack type used in combat event payloads.
 
-### Evidence Types and State
+### Evidence Data Model
 
-**File**: `packages/shared/src/types/evidence.ts`
+Ten types of evidence can exist on the map:
 
-```typescript
-type EvidenceType =
-  | 'FOOTPRINT'           // killer walked through area; more visible on soft surfaces
-  | 'DNA'                 // blood, skin cells; generated by wounds and violence
-  | 'WEAPON_TRACE'        // marks left by weapons (blade marks, bullet casings)
-  | 'BODY'                // victim's body; highest-value evidence, generates sub-clues
-  | 'WITNESS'             // an NPC who saw something (links to WitnessStatement)
-  | 'SURVEILLANCE'        // camera footage capturing the killer; requires camera in zone
-  | 'BROKEN_LOCK'         // forced entry trace
-  | 'DISTURBED_SCENE'     // overturned furniture, spilled items — signs of struggle
-  | 'FALSE_EVIDENCE'      // planted by killer's counter-play abilities (FAKE — can be detected)
-  | 'INFORMANT_REPORT'    // planted by fed's informant counter-play ability
+- **Footprint**: the killer walked through the area; more visible on soft surfaces; decays after approximately 2 minutes
+- **DNA**: blood or skin cells from wounds and violence; never decays
+- **Weapon trace**: marks left by weapons (blade cuts, bullet casings); never decays
+- **Body**: the victim's body; the highest-value evidence and the source of many sub-clues; never decays within a run
+- **Witness**: a reference to an NPC who witnessed something crime-relevant; never decays
+- **Surveillance**: camera footage capturing the killer; only generated in zones with cameras; never decays
+- **Broken lock**: traces of forced entry; never decays
+- **Disturbed scene**: overturned furniture or spilled items indicating a struggle; decays after approximately 1.5 minutes
+- **False evidence**: planted by the killer's counter-play abilities; appears real until analyzed
+- **Informant report**: created by the fed's planted informant ability when an informant NPC witnesses an event
 
-type EvidenceState = 'HIDDEN' | 'DISCOVERABLE' | 'DISCOVERED' | 'DESTROYED' | 'DISCREDITED'
-// DISCREDITED: fed discovered it was FALSE_EVIDENCE; no longer counts toward case
+Each evidence object has five states: hidden (exists but not yet detectable), discoverable (can be found by proximity), discovered (the fed has found it), destroyed (cleaned up by killer or decayed), and discredited (the fed proved it was false evidence — no longer counts toward the case).
 
-type EvidenceQuality = 'LOW' | 'MEDIUM' | 'HIGH' | 'IRREFUTABLE'
-// Quality affects how much the evidence contributes to arrest viability score
-// IRREFUTABLE: cannot be reduced below HIGH by any killer counter-play
+Evidence quality has four levels: low, medium, high, and irrefutable. Quality determines how much each piece contributes to the arrest viability score. Irrefutable evidence cannot have its quality reduced by any killer counter-play.
 
-type Evidence = {
-  id: string
-  type: EvidenceType
-  state: EvidenceState
-  quality: EvidenceQuality
-  pos: Vec2
-  zoneId: string
-  linkedEntityId: string | null  // the NPC or player entity this evidence relates to
-  generatedBy: string            // player action or event that created this
-  generatedAt: number            // timestamp ms
-  decayStartAt: number | null    // null = no decay; otherwise timestamp when decay started
-  decayDurationMs: number | null
-  isFalse: boolean               // true for counter-play planted evidence
-  discoveredBy: string | null    // fed player ID if discovered
-  discoveredAt: number | null
-  notes: string                  // human-readable description for evidence log
-}
+Each evidence object also carries: a unique ID, the type, state, and quality; its world position and zone ID; the entity it relates to (optional); what generated it and when; decay timing (null means no decay); a flag marking it as planted false evidence; who discovered it and when; and a human-readable description note for the evidence log.
 
-type CaseFile = {
-  runId: string
-  fedPlayerId: string
-  discoveredEvidence: Evidence[]
-  witnessStatements: WitnessStatement[]
-  suspectIds: string[]            // NPC IDs narrowed down as suspects
-  arrestViability: number         // 0-100 score
-  arrestViabilityTier: ArrestViabilityTier
-  lastUpdatedAt: number
-}
+Default quality by evidence type: body is irrefutable; DNA and surveillance are high; witness and weapon trace are medium (witness quality is also modified by the NPC's reliability score); footprint, broken lock, and disturbed scene are low. False evidence initially appears at high quality to deceive the fed.
 
-type ArrestViabilityTier = 'INSUFFICIENT' | 'WEAK' | 'MODERATE' | 'STRONG' | 'AIRTIGHT'
-// INSUFFICIENT (<20): arrest not possible
-// WEAK (20-39): arrest attempt triggers combat with target
-// MODERATE (40-59): arrest is possible but target may resist
-// STRONG (60-79): arrest attempt succeeds with minor resistance
-// AIRTIGHT (80-100): clean arrest, no resistance, bonus score
-```
+### Case File
 
-**File**: `packages/shared/src/constants/evidence.ts`
+The case file aggregates everything the fed has discovered into a prosecutable case. It contains: the run ID, the fed player's ID, the list of all discovered evidence objects, all collected witness statements, a narrowed-down suspect list (NPC IDs), an arrest viability score from 0 to 100, a tier classification of that score, and a last-updated timestamp.
 
-```typescript
-const EVIDENCE_GENERATION: Record<string, EvidenceGenerationRule[]>
-// action type → array of evidence to generate
+Arrest viability tiers define what actions the fed can take:
+- **Insufficient** (below 20): arrest is not possible
+- **Weak** (20–39): attempting arrest triggers active resistance from the target
+- **Moderate** (40–59): arrest is possible but the target may resist
+- **Strong** (60–79): arrest succeeds with minor resistance
+- **Airtight** (80–100): clean arrest, no resistance, and bonus score
 
-const EVIDENCE_DECAY_TIMERS: Record<EvidenceType, number | null> = {
-  FOOTPRINT: 120_000,       // 2 minutes
-  DNA: null,                // never decays (permanent forensic trace)
-  WEAPON_TRACE: null,
-  BODY: null,               // bodies don't decay during a run
-  WITNESS: null,            // witnesses persist
-  SURVEILLANCE: null,
-  BROKEN_LOCK: null,
-  DISTURBED_SCENE: 90_000,  // 1.5 minutes
-  FALSE_EVIDENCE: null,     // planted evidence persists until detected
-  INFORMANT_REPORT: null,
-}
+### Evidence Generation
 
-const EVIDENCE_QUALITY_WEIGHTS: Record<EvidenceType, EvidenceQuality> = {
-  BODY: 'IRREFUTABLE',
-  DNA: 'HIGH',
-  SURVEILLANCE: 'HIGH',
-  WITNESS: 'MEDIUM',   // modified by witness reliability
-  WEAPON_TRACE: 'MEDIUM',
-  FOOTPRINT: 'LOW',
-  BROKEN_LOCK: 'LOW',
-  DISTURBED_SCENE: 'LOW',
-  FALSE_EVIDENCE: 'HIGH',   // initially appears HIGH quality — deception
-  INFORMANT_REPORT: 'MEDIUM',
-}
+Killer actions automatically generate forensic traces based on generation rules. The evidence generator subscribes to EventBus events (player actions, damage dealt, entity deaths, NPC witness events) and applies the appropriate rules:
 
-const ARREST_VIABILITY_THRESHOLDS: Record<ArrestViabilityTier, number> = {
-  INSUFFICIENT: 0,
-  WEAK: 20,
-  MODERATE: 40,
-  STRONG: 60,
-  AIRTIGHT: 80,
-}
+- An interaction kill generates a body (irrefutable), DNA (high quality), and a weapon trace (medium quality)
+- Breaking into a locked location generates a broken lock (low quality) and a footprint on soft flooring (low quality)
+- Combat damage generates DNA at the impact position and a weapon trace
+- Running generates a footprint trail at regular intervals (low quality)
+- An NPC witnessing a suspicious event generates a witness evidence object linked to that NPC
 
-const DISCOVERY_SEARCH_RADIUS_PX = 128   // base radius for proximity search
-const EVIDENCE_SPATIAL_HASH_CELL_SIZE = 256
-```
-
-### Evidence Generator
-
-**File**: `packages/game-engine/src/evidence/evidence-generator.ts`
-
-Rules mapping game events and player actions to evidence objects. Subscribes to EventBus events:
-
-```typescript
-class EvidenceGenerator {
-  constructor(evidenceManager: EvidenceManager, modifiers: EvidenceModifiers)
-  // Called when PLAYER_ACTION event fires — generates evidence for relevant actions
-  onPlayerAction(action: PlayerAction, role: PlayerRole, pos: Vec2): Evidence[]
-  // Called when DAMAGE_DEALT event fires — generates violence-related evidence
-  onDamageDealt(attack: Attack, witnesses: string[]): Evidence[]
-  // Called when ENTITY_DIED event fires — generates body and related evidence
-  onEntityDied(entityId: string, killedById: string, weapon: string | null, pos: Vec2): Evidence[]
-  // Called when NPC perceives suspicious event — creates WITNESS evidence object
-  onNPCWitnessEvent(npc: NPC, suspiciousEvent: SuspiciousEvent): Evidence | null
-}
-
-type EvidenceGenerationRule = {
-  eventType: string       // action type or event type that triggers generation
-  evidenceType: EvidenceType
-  baseQuality: EvidenceQuality
-  probability: number     // 0-1: chance this evidence is generated
-  // position offset relative to action position
-  positionOffset: Vec2
-  conditions?: EvidenceCondition[]  // additional conditions required
-}
-
-type EvidenceCondition = {
-  type: 'TILE_TYPE' | 'ZONE_HAS_CAMERA' | 'TIME_OF_DAY' | 'WEATHER'
-  value: string | number
-}
-
-// Example generation rules:
-// INTERACT (with target → kill): BODY (irrefutable), DNA (high), WEAPON_TRACE (medium)
-// INTERACT (with lock → break in): BROKEN_LOCK (low), FOOTPRINT (low if soft floor)
-// DAMAGE_DEALT (combat): DNA at impact pos (high), WEAPON_TRACE (medium)
-// RUNNING: FOOTPRINT trail every 3 tiles (low quality)
-```
+Each generation rule specifies: which event type triggers it, the evidence type to generate, the base quality, the probability (0–1 chance), a position offset from the action position, and optional conditions (tile type, whether the zone has a camera, etc.). The killer's evidence modifier system is applied to each candidate evidence object before it is added, potentially reducing quality or suppressing generation entirely.
 
 ### Evidence Modifiers
 
-**File**: `packages/game-engine/src/evidence/evidence-modifiers.ts`
+The killer can equip skills, items, and trophies that reduce the evidence their actions generate. An evidence modifier system tracks these active modifiers and applies them during generation. Each modifier specifies which evidence types it targets (null means all types), a probability reduction (e.g. 50% less likely to generate), and a quality downgrade step count (each step drops quality one tier).
 
-Tracks active modifiers from killer skills, items, and trophies. Applied during evidence generation to reduce quality or probability:
-
-```typescript
-class EvidenceModifiers {
-  // Register a modifier from an equipped item, skill, or trophy
-  addModifier(mod: EvidenceMod): void
-  removeModifier(modId: string): void
-  // Apply all active mods to a candidate evidence object; returns modified version or null (suppressed)
-  applyToEvidence(candidate: Evidence): Evidence | null
-  // Get current modifier summary for HUD display
-  getModifierSummary(): EvidenceModSummary
-}
-
-type EvidenceMod = {
-  id: string
-  source: 'ITEM' | 'SKILL' | 'TROPHY' | 'ABILITY'
-  name: string
-  // Target which evidence types are affected (null = all types)
-  targetTypes: EvidenceType[] | null
-  // Probability reduction (0.5 = 50% less likely to generate)
-  probabilityReduction: number
-  // Quality downgrade steps (1 = HIGH becomes MEDIUM, 2 = HIGH becomes LOW)
-  qualityDowngrade: number
-}
-
-type EvidenceModSummary = {
-  totalReduction: Record<EvidenceType, number>  // aggregate probability reduction per type
-  activeModCount: number
-}
-```
+The system exposes a summary of total reduction per evidence type and the active modifier count, which the killer's HUD uses to show the current evidence trail reduction.
 
 ### Counter-Play Abilities
 
-Counter-play is the strategic layer where each role actively undermines the other's objective. These abilities are gated behind skill tree progression and trophy unlocks (piece 13). Most powerful ones are Tier 2-3. All have risk/reward tradeoffs.
+Counter-play abilities are the strategic depth layer. Each role has active tools to undermine the other's objectives. These abilities are unlocked through skill tree progression. All have risk and reward trade-offs — none should be "always use this."
 
-#### Killer Counter-Play Abilities
+#### Killer Counter-Play
 
-These abilities manipulate the evidence trail to mislead the fed:
+**Fake evidence plant** (Deception tree, Tier 2): The killer places a false evidence object of a chosen type (footprint, DNA, weapon trace) at a target position, linked to an innocent NPC. The false evidence initially appears at high quality — visually and data-identical to real evidence. The fed's forensic analysis ability gives a probability-based chance to detect inconsistencies. If detected, the evidence is discredited. If the fed detects planted evidence, the killer is flagged as sophisticated (alert level increases) but the fed's arrest viability is not penalized. Using a disguise kit consumable is required.
 
-**`FAKE_EVIDENCE_PLANT`** (Tier 2 skill, Deception tree)
-- Killer places a `FALSE_EVIDENCE` object of chosen type (FOOTPRINT, DNA, WEAPON_TRACE) at a target position pointing toward an innocent NPC
-- The evidence appears as `EvidenceQuality.HIGH` to the fed initially (indistinguishable from real)
-- Detection: Fed can use forensic analysis ability (`FORENSIC_ANALYSIS`) to detect inconsistencies; detected FALSE_EVIDENCE is DISCREDITED and removed from arrest viability score
-- Fed also has a passive chance (skill-modified) to notice false evidence during thorough examination
-- Risk: If fed detects planted evidence, arrest viability is NOT penalized but killer is flagged as sophisticated (alert level increases)
-- Implementation: `KillerAbility.FAKE_EVIDENCE_PLANT` → calls `EvidenceManager.plantFalseEvidence(type, pos, linkedNpcId)`
+**Decoy trail** (Deception tree, Tier 2): Creates a series of 5–13 footprint false evidence objects leading away from the kill site toward an innocent zone. Decoy footprints are slightly lower quality than genuine ones — a skilled fed with forensic analysis can notice the difference. Costs a cleaning supplies consumable.
 
-**`DECOY_TRAIL`** (Tier 2 skill, Deception tree)
-- Creates a series of FOOTPRINT evidence objects in a path leading away from the kill site toward an innocent zone
-- Costs 1 inventory item (disguise kit or consumable) per use
-- Risk: Decoys are slightly lower quality than genuine footprints — a skilled fed with FORENSIC_ANALYSIS can tell the difference
-- Implementation: Generates 5-8 FOOTPRINT objects with `isFalse: true` along a specified path
+**Witness intimidation** (Deception tree, Tier 1): The killer approaches a specific NPC witness and silences them — the NPC's interview flag is cleared and their witness log is erased. If the fed was already tracking that NPC, the sudden silencing registers as a disturbed scene evidence near the NPC's last known position. Wasted on NPCs the fed has not found yet.
 
-**`WITNESS_INTIMIDATION`** (Tier 1 skill, all Killer trees)
-- Killer interacts with a specific NPC witness (proximity required) and silences them before the fed can interview
-- Silenced NPC: `canBeInterviewed = false`, `witnessLog` is cleared
-- Risk: If fed was already tracking that NPC (had proximity), the fed sees the NPC was "silenced" (logged as `DISTURBED_SCENE` evidence near the NPC's last known position)
-- Risk: Using intimidation on the wrong NPC (one the fed hadn't found yet) wastes the action
-- Implementation: `KillerAbility.WITNESS_INTIMIDATION` → calls `NPC.silenceAsWitness()` + emits `WITNESS_SILENCED` event
+**Surveillance jamming** (Stealth tree, Tier 2): Disables cameras in a zone for a duration (45–105 seconds depending on skill rank), preventing surveillance evidence from generating during that window. Jammed cameras show as "offline" to the fed — the jammed camera itself is a clue that something happened in that zone. Requires a lockpick set in inventory (not consumed).
 
-**`SURVEILLANCE_JAMMING`** (Tier 2 skill, Stealth tree)
-- Disables surveillance cameras in a zone for a duration (default: 60 seconds)
-- Prevents `SURVEILLANCE` evidence from being generated in that zone during the window
-- Jammed cameras are visible to the fed (camera icon shows "offline") — fed knows someone jammed it
-- Risk: Jammed camera is itself a clue that something happened in that zone
-- Implementation: `KillerAbility.SURVEILLANCE_JAMMING` → calls `ZoneManager.jamCameras(zoneId, durationMs)`
+**False alibi construction** (Deception tree, Tier 3): The killer interacts with a specific NPC to create a false witness evidence object — the NPC appears to have seen the killer at a different location at the time of the kill. The fed interviewing that NPC receives false location data. If the fed cross-references with real witness accounts that contradict the alibi, the false statement is discredited. Cannot be used on an NPC who already witnessed the crime. Costs a bribery gift consumable.
 
-**`FALSE_ALIBI_CONSTRUCTION`** (Tier 3 skill, Deception tree — highest tier counter-play)
-- Killer interacts with a specific NPC to construct a false alibi event
-- Creates a `FALSE_EVIDENCE` object of type `WITNESS` — appears as if that NPC "saw" the killer in a different location at the time of the kill
-- Fed interviewing that NPC gets false location data
-- Risk: High — if fed cross-references with real witness accounts that contradict the alibi, the false witness is DISCREDITED. Using on an NPC who already witnessed the crime is impossible (system checks `witnessLog`)
-- Implementation: `KillerAbility.FALSE_ALIBI` → `EvidenceManager.plantFalseWitnessEvidence(npcId, alibiLocation, timestamp)`
+#### Fed Counter-Play
 
-#### Fed Counter-Play Abilities
+**Illegal surveillance** (Forensics tree, Tier 2): Instantly reveals all surveillance evidence in a zone, bypassing normal proximity discovery. Evidence gathered this way is flagged as illegally obtained — a score penalty applies at the end of the run, but arrest viability is unaffected. Using this more than 3 times in a run generates a reprimand status that caps the arrest viability bonus from the airtight tier.
 
-These abilities accelerate or broaden evidence gathering, at the cost of legal or political consequences:
+**Rough interrogation** (Interrogation tree, Tier 1): When interviewing a witness NPC, the fed forces a full statement regardless of the NPC's reliability score — reliability is overridden to 1.0 for this statement. A disturbed scene evidence object is generated at the interrogation location. Using this more than twice in a run generates a misconduct warning that slightly reduces the maximum achievable arrest viability. Risk: if the target NPC carries a killer-planted false alibi, that false statement is now delivered with full reliability, making it harder to detect.
 
-**`ILLEGAL_SURVEILLANCE`** (Tier 2 skill, Forensics tree)
-- Fed accesses camera feeds for a zone without authorization (off-the-books)
-- Instantly reveals all `SURVEILLANCE` evidence in that zone, bypassing normal discovery proximity
-- Consequence: If the run ends with an arrest, evidence gathered via illegal surveillance is flagged — reduces final score bonus but does NOT affect arrest viability for gameplay purposes
-- If killer's lawyer gets the evidence suppressed (flavor text outcome), score penalty applies
-- Risk: If fed uses this too aggressively (>3 times in a run), receives a "reprimand" status — reduces arrest viability bonus from AIRTIGHT tier
-- Implementation: `FedAbility.ILLEGAL_SURVEILLANCE` → `EvidenceManager.revealZoneSurveillance(zoneId, isIllegal: true)`
+**Planted informants** (Tactics tree, Tier 2): The fed converts a specific NPC into an active informant — that NPC automatically reports suspicious events they perceive to the fed. Each report creates an informant report evidence object. The killer can detect informants by observing unusual NPC behavior (noticing they report to a fixed location). If the killer intimidates or kills an informant, the silencing event notifies the fed. Maximum of 2 active informants per run at rank 2, 3 at rank 3.
 
-**`ROUGH_INTERROGATION`** (Tier 1 skill, Interrogation tree)
-- Fed uses coercive tactics when interviewing an NPC witness — forces full WitnessStatement regardless of NPC reliability
-- Effect: NPC reliability is overridden to 1.0 for this statement (full detail, no omissions)
-- Consequence: Generates a `DISTURBED_SCENE` minor evidence trail at interrogation location (the NPC was roughed up — visible to the killer if they return to that area)
-- Consequence: If used >2 times in a run, fed gets a "misconduct warning" — slight arrest viability cap reduction (max 90 instead of 100)
-- Risk: NPC "breaks" under pressure and gives accurate but extreme information — if it was a false alibi planted by the killer, the false statement is delivered with 1.0 reliability, making it harder to detect
-- Implementation: `FedAbility.ROUGH_INTERROGATION` → `WitnessSystem.forceInterview(npcId)` with reliability override
+**Entrapment setup** (Tactics tree, Tier 3): The fed converts an NPC into entrapment bait placed in a high-traffic area. If the killer approaches and interacts with the bait NPC, the fed is alerted to the killer's position. The killer sees a normal NPC; the fed sees it highlighted as bait. If entrapment is the primary evidence in an arrest, the arrest viability is capped at moderate regardless of physical evidence strength. The fed must be within 3 zones of the trap to receive the alert.
 
-**`PLANTED_INFORMANTS`** (Tier 2 skill, Tactics tree)
-- Fed converts a specific NPC into an active informant — they will report suspicious activity they witness to the fed automatically
-- Effect: Creates an `INFORMANT_REPORT` evidence object whenever the informant NPC's perception system triggers
-- Reports arrive as EventBus messages `INFORMANT_REPORT` with position and description
-- Killer can detect that an NPC is an informant by observing them (looking at their route, noticing they "report" to a fixed spot) — this is a behavioral tell
-- Risk: If killer intimidates or kills the informant, the informant's status becomes known to the fed via `WITNESS_SILENCED` event
-- Max 2 active informants per run at Tier 2; Tier 3 allows 3
-- Implementation: `FedAbility.PLANT_INFORMANT` → `NPCSpawner.convertToInformant(npcId)`
+**Off-the-books forensics** (Forensics tree, Tier 1): Reduces discovery time dramatically — evidence is discovered instantly on proximity rather than requiring a slow scan animation. Evidence gathered this way is admissible but flagged with a minor score penalty. Risk: expedited processing on false evidence reduces the chance to detect it's false by 50% while this is active.
 
-**`ENTRAPMENT_SETUP`** (Tier 3 skill, Tactics tree — highest tier fed counter-play)
-- Fed stages a scenario to draw the killer out — places a fake "target" NPC in a location with high NPC traffic
-- If the killer approaches and interacts with the fake target (proximity trigger), fed is alerted to killer's position
-- Killer sees a normal NPC. Fed sees the NPC highlighted as "bait"
-- Risk: Entrapment evidence is legally questionable — if killer is arrested and entrapment is the primary evidence, arrest viability score capped at MODERATE even with AIRTIGHT physical evidence
-- Timing: Fed must be within 3 zones of the trap to receive the alert (otherwise signal degrades)
-- Implementation: `FedAbility.ENTRAPMENT_SETUP` → `NPCSpawner.convertToEntrapmentBait(npcId, alertRadius)`
+### Evidence Discovery
 
-**`OFF_THE_BOOKS_FORENSICS`** (Tier 1 skill, Forensics tree)
-- Fed processes evidence faster than standard protocol allows — reduces discovery time from evidence objects (instant discovery on approach vs slow scan animation)
-- Evidence gathered is admissible but flagged as "expedited processing" — minor score reduction
-- Consequence: None for arrest viability; score adjustment only
-- Risk: If used on FALSE_EVIDENCE, the expedited processing reduces chance to detect it's false (false detection probability reduced by 50% while this is active)
-- Implementation: `FedAbility.OFF_THE_BOOKS_FORENSICS` → discovery time multiplier 0.1 (10% of normal)
+The fed finds evidence through several mechanisms:
 
-### Evidence Manager
+- **Passive proximity**: Walking within the base discovery radius of a discoverable evidence object automatically transitions it to discovered. Skills and items can expand this radius.
+- **Area scan ability**: The fed can actively scan an area to instantly reveal all hidden evidence in range.
+- **Forensic analysis**: Examining a specific evidence object provides richer detail and gives a probability-based chance to detect false evidence. Detection probability starts low at base skill level and can reach high levels with advanced forensic skills.
+- **Surveillance review**: Manually accessing camera footage for a zone reveals all surveillance evidence in that zone.
 
-**File**: `packages/game-engine/src/evidence/evidence-manager.ts`
+### Case Strength Calculation
 
-Central store for all evidence objects. Uses spatial hashing for efficient proximity queries:
+The arrest viability score is computed from the collected evidence set. Each quality level contributes a fixed score increment: irrefutable evidence contributes the most, then high, medium, and low. False evidence before it is discredited contributes the same as high-quality real evidence — this is how it misleads the calculation. Discredited evidence contributes nothing and is removed from scoring.
 
-```typescript
-class EvidenceManager {
-  // Add new evidence to the map
-  addEvidence(evidence: Evidence): void
-  // Retrieve evidence near a position (within radius)
-  getNearby(pos: Vec2, radius: number): Evidence[]
-  // Fed discovers evidence (transitions HIDDEN/DISCOVERABLE → DISCOVERED)
-  discover(evidenceId: string, discoveredBy: string): Evidence
-  // Killer destroys evidence (transitions → DESTROYED)
-  destroy(evidenceId: string): Result<void, NotFoundError>
-  // Plant false evidence (killer counter-play)
-  plantFalseEvidence(type: EvidenceType, pos: Vec2, linkedNpcId: string | null): Evidence
-  // Plant false witness evidence (false alibi construction)
-  plantFalseWitnessEvidence(npcId: string, alibiLocation: Vec2, timestamp: number): Evidence
-  // Reveal all surveillance evidence in zone (fed illegal surveillance ability)
-  revealZoneSurveillance(zoneId: string, isIllegal: boolean): Evidence[]
-  // Get all evidence of a type in a zone
-  getByZone(zoneId: string, type?: EvidenceType): Evidence[]
-  // Tick decay timers, transition decayed evidence to DESTROYED
-  update(delta: number): void
-  // Discredit false evidence (fed detected a plant)
-  discreditEvidence(evidenceId: string): void
-}
-```
+The suspect list is derived by starting with all NPCs on the map and narrowing based on evidence chains and witness statements.
 
-### Discovery Mechanics
+### Evidence Rendering
 
-**File**: `packages/game-engine/src/evidence/discovery-mechanics.ts`
+Evidence objects are rendered in the Phaser scene on a dedicated layer above the map. Visibility rules:
+- Fed: always sees all discoverable and discovered evidence
+- Killer: can see their own generated evidence (a stealth awareness feature allowing them to track and clean up their trail)
 
-How the fed finds evidence:
+Visual indicators: proximity highlight ring when the fed is near discoverable evidence, a discovered badge when found, a discredited indicator (crossed out) when false evidence is exposed.
 
-```typescript
-class DiscoveryMechanics {
-  // Passive proximity: fed walking near DISCOVERABLE evidence triggers discovery
-  // Radius: DISCOVERY_SEARCH_RADIUS_PX (modified by skills/items)
-  checkProximityDiscovery(fedPos: Vec2, role: PlayerRole, modifiers: DiscoveryModifiers): Evidence[]
-  // Active area scan ability: reveals all HIDDEN evidence in range instantly
-  performAreaScan(fedPos: Vec2, radius: number): Evidence[]
-  // Forensic analysis: examine specific evidence for higher detail + false evidence detection
-  analyzeEvidence(evidenceId: string, skill: ForensicSkillLevel): ForensicAnalysisResult
-  // Surveillance review: manually access camera footage for a zone
-  reviewSurveillance(zoneId: string, isIllegal: boolean): Evidence[]
-}
+### Evidence HUD (Fed Only)
 
-type DiscoveryModifiers = {
-  radiusMultiplier: number       // skill-modified search radius
-  hiddenDiscoveryChance: number  // chance to discover HIDDEN (normally requires ability)
-  discoverySpeed: number         // multiplier for time-gated discovery (1.0 = normal)
-  falsEvidenceDetectionChance: number  // chance to notice FALSE_EVIDENCE during analysis
-}
+A React client component rendered only when the player role is fed. It shows:
+- A case strength meter from 0–100, color-coded by arrest viability tier
+- A scrollable evidence log with type icon, quality badge, and brief note for each discovered piece
+- An evidence detail popup (click to expand) showing full description, location, and associated suspect if known
+- An arrest readiness indicator that activates at the weak tier and glows at strong and airtight
+- Discredited evidence shown crossed out in the log
 
-type ForensicAnalysisResult = {
-  evidence: Evidence
-  additionalDetails: string        // richer description from analysis
-  isFalseDetected: boolean         // true if false evidence was detected
-  confidence: number               // 0-1 confidence in analysis result
-}
+### Server-Side Validation
 
-type ForensicSkillLevel = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED'
-```
+A server-only data access layer validates evidence state for multiplayer anti-cheat:
+1. The killer cannot submit a run with zero evidence generated (impossible if actions were taken)
+2. The fed cannot fabricate evidence — submitted evidence IDs must match server-known action records
+3. The arrest viability score is recalculated server-side from the submitted evidence set and must match within a small tolerance
 
-### Case File Tracker
+The server validation function accepts the run ID, the submitted case file, and a log of run actions, and returns a validation report with the computed viability score and any discrepancies.
 
-**File**: `packages/game-engine/src/evidence/case-file.ts`
+### EventBus Events
 
-Aggregates all discovered evidence into a prosecutable case. Recalculated on every evidence discovery:
-
-```typescript
-class CaseFileTracker {
-  computeCaseFile(
-    runId: string,
-    fedPlayerId: string,
-    discoveredEvidence: Evidence[],
-    witnessStatements: WitnessStatement[]
-  ): CaseFile
-
-  // Calculate arrest viability score 0-100 from evidence set
-  // IRREFUTABLE: +25, HIGH: +15, MEDIUM: +8, LOW: +3
-  // FALSE_EVIDENCE before discrediting: +15 (misleads calculation)
-  // DISCREDITED evidence: -0 (removed from scoring)
-  calculateArrestViability(evidence: Evidence[], statements: WitnessStatement[]): number
-
-  // Derive suspect list from evidence chains
-  // Starts with all NPCs + any behavioral observations, narrows based on evidence
-  deriveSuspects(evidence: Evidence[], statements: WitnessStatement[], allNPCIds: string[]): string[]
-
-  // Get tier from score
-  getViabilityTier(score: number): ArrestViabilityTier
-}
-```
-
-### Evidence Renderer
-
-**File**: `packages/game-engine/src/evidence/evidence-renderer.ts`
-
-Visual representation in the Phaser scene. Evidence objects are only visible when:
-- Player role is FED (always visible to fed)
-- Player role is KILLER and they are looking at their own generated evidence (stealth awareness feature — killer can see their own traces to clean them up)
-
-```typescript
-class EvidenceRenderer {
-  // Renders evidence objects on a dedicated render layer above the map
-  renderEvidence(scene: Phaser.Scene, evidence: Evidence[], playerRole: PlayerRole): void
-  // Shows highlight ring when fed is near discoverable evidence
-  showProximityHighlight(evidenceId: string): void
-  // Shows "DISCOVERED" badge when evidence is found
-  showDiscoveredMarker(evidenceId: string): void
-  // Shows "FALSE" badge when evidence is discredited (visible only to fed)
-  showDiscreditedMarker(evidenceId: string): void
-  // Remove evidence visual when destroyed/discredited
-  removeEvidenceVisual(evidenceId: string): void
-}
-```
-
-### Evidence Zustand Store
-
-**File**: `apps/web/src/stores/evidence.ts`
-
-```typescript
-type EvidenceStore = {
-  // Fed-perspective: their discovered evidence and case file
-  discoveredEvidence: Evidence[]
-  caseFile: CaseFile | null
-  arrestViability: number
-  arrestViabilityTier: ArrestViabilityTier
-  // Killer-perspective: their generated evidence trail (so killer knows what to clean up)
-  generatedEvidence: Evidence[]    // populated for KILLER role only
-  activeModifiers: EvidenceModSummary
-  // Actions
-  addDiscoveredEvidence: (evidence: Evidence) => void
-  updateCaseFile: (caseFile: CaseFile) => void
-  addGeneratedEvidence: (evidence: Evidence) => void
-  removeGeneratedEvidence: (evidenceId: string) => void
-  discreditEvidence: (evidenceId: string) => void
-}
-```
-
-### Evidence HUD (Fed)
-
-**File**: `apps/web/src/components/app/game/hud/EvidencePanel.tsx`
-
-React component, "use client". Only rendered when player role is FED. Reads from `evidenceStore`:
-- Case strength meter (visual arc/bar from 0-100, color-coded by tier)
-- Evidence log: scrollable list of discovered evidence with type icon, quality badge, and brief note
-- Evidence detail popup: click on evidence to see full description, location, associated suspect (if known)
-- Arrest readiness indicator: prominent button becomes active at WEAK tier, glows at STRONG/AIRTIGHT
-- False evidence indicators: DISCREDITED items shown crossed out in the log
-
-### Evidence Schemas
-
-**File**: `packages/shared/src/schemas/evidence.ts`
-
-Zod schemas for server-side validation of evidence state in multiplayer:
-
-```typescript
-const evidenceSchema = z.object({
-  id: z.string().uuid(),
-  type: z.enum(['FOOTPRINT', 'DNA', 'WEAPON_TRACE', 'BODY', 'WITNESS', 'SURVEILLANCE', 'BROKEN_LOCK', 'DISTURBED_SCENE', 'FALSE_EVIDENCE', 'INFORMANT_REPORT']),
-  state: z.enum(['HIDDEN', 'DISCOVERABLE', 'DISCOVERED', 'DESTROYED', 'DISCREDITED']),
-  quality: z.enum(['LOW', 'MEDIUM', 'HIGH', 'IRREFUTABLE']),
-  pos: z.object({ x: z.number(), y: z.number() }),
-  zoneId: z.string(),
-  generatedBy: z.string(),
-  generatedAt: z.number(),
-  isFalse: z.boolean(),
-})
-
-const caseFileSchema = z.object({
-  runId: z.string().uuid(),
-  fedPlayerId: z.string().uuid(),
-  discoveredEvidence: z.array(evidenceSchema),
-  arrestViability: z.number().min(0).max(100),
-})
-```
-
-### Server-Side Evidence Validation
-
-**File**: `apps/web/src/dal/evidence/validation.ts`
-
-Server-only DAL for evidence state anti-cheat in multiplayer. Validates that:
-1. Killer cannot submit a run with zero evidence generated (impossible if actions were taken)
-2. Fed cannot fabricate evidence (evidence IDs must match server-known actions)
-3. Arrest viability score matches the submitted evidence set (recalculated server-side)
-
-```typescript
-// Server-only (import 'server-only' at top of file)
-async function validateRunEvidence(
-  runId: string,
-  submittedCaseFile: CaseFile,
-  runActions: RunAction[]
-): Promise<Result<ValidationReport, ValidationError>>
-
-type ValidationReport = {
-  isValid: boolean
-  computedArrestViability: number
-  discrepancies: string[]
-}
-```
-
-### EventBus Integration
-
-New events added to GameEvents:
-
-```typescript
-EVIDENCE_GENERATED: { evidence: Evidence; generatedBy: string }
-EVIDENCE_DISCOVERED: { evidence: Evidence; discoveredBy: string; pos: Vec2 }
-EVIDENCE_DESTROYED: { evidenceId: string; destroyedBy: string }
-EVIDENCE_DISCREDITED: { evidenceId: string; detectedBy: string }
-CASE_FILE_UPDATED: { caseFile: CaseFile }
-ARREST_VIABLE: { tier: ArrestViabilityTier; viabilityScore: number }
-WITNESS_SILENCED: { npcId: string; pos: Vec2 }  // killer used intimidation
-INFORMANT_REPORT: { npcId: string; pos: Vec2; description: string }  // fed planted informant
-ENTRAPMENT_TRIGGERED: { npcId: string; killerPos: Vec2 }  // fed entrapment bait activated
-SURVEILLANCE_JAMMED: { zoneId: string; durationMs: number }
-FALSE_EVIDENCE_PLANTED: { evidenceId: string; type: EvidenceType; pos: Vec2 }  // killer perspective only
-```
+New events added for the evidence system: evidence generated (object and source), evidence discovered (object, discoverer, and position), evidence destroyed (ID and destroyer), evidence discredited (ID and detective), case file updated (full case file), arrest viable (current tier and score), witness silenced (killer used intimidation), informant report (informant NPC reported an event), entrapment triggered (bait activated with killer position), surveillance jammed (zone and duration), and false evidence planted (killer-perspective only event).
 
 ### Edge Cases
 
-- Evidence placed by killer's `FAKE_EVIDENCE_PLANT` must be indistinguishable from real evidence in all visual and data representations; only `ForensicAnalysisResult.isFalseDetected` and the internal `Evidence.isFalse` flag distinguish them
-- Fed using `ROUGH_INTERROGATION` on an already-intimidated witness (canBeInterviewed = false) returns empty result — the NPC cannot be forced to remember what was erased
-- If killer destroys evidence that the fed had already discovered (already in fed's `discoveredEvidence` list), the in-memory evidence is marked DESTROYED but it remains in the case file — you can't un-ring that bell
-- `SURVEILLANCE_JAMMING` applied after fed already collected SURVEILLANCE evidence does not retroactively remove it
-- Spatial hash must be updated when evidence is added, destroyed, or moved — movement does not normally occur but false evidence can be "relocated" by edge cases
-- `FALSE_EVIDENCE` of type WITNESS must reference a real NPC ID to be plausible — system validates the NPC exists in the run before allowing plant
+- False evidence must be completely indistinguishable from real evidence in all visual and data representations; only the forensic analysis result and the internal flag distinguish them
+- Rough interrogation on an already-intimidated witness (interview flag cleared) returns an empty result — what was erased cannot be forced back
+- If the killer destroys evidence the fed has already discovered, the in-memory object is marked destroyed but it remains in the fed's case file and continues counting toward arrest viability
+- Surveillance jamming applied after the fed already collected surveillance evidence does not retroactively remove it
+- The spatial hash must be updated when evidence is added, destroyed, or moved
+- False witness evidence must reference a real NPC ID — the system validates the NPC exists in the current run before allowing the plant
 
 ----
 
@@ -640,6 +213,418 @@ FALSE_EVIDENCE_PLANTED: { evidenceId: string; type: EvidenceType; pos: Vec2 }  /
 The evidence system is entirely passive from the killer's perspective (evidence is generated automatically by their actions via EventBus listeners) and active from the fed's perspective (fed must physically explore and trigger discovery mechanics).
 
 Counter-play abilities are implemented as PlayerAbility objects that call EvidenceManager and NPC methods directly — no new evidence systems needed. The ability system (piece 08) handles cooldowns and resource costs; evidence methods implement the actual effect.
+
+### Core Types
+
+```typescript
+// packages/shared/src/types/evidence.ts
+
+export type EvidenceType =
+  | 'FOOTPRINT'
+  | 'DNA'
+  | 'WEAPON_TRACE'
+  | 'BODY'
+  | 'WITNESS'
+  | 'SURVEILLANCE'
+  | 'BROKEN_LOCK'
+  | 'DISTURBED_SCENE'
+  | 'FALSE_EVIDENCE'
+  | 'INFORMANT_REPORT';
+
+export type EvidenceState =
+  | 'HIDDEN'
+  | 'DISCOVERABLE'
+  | 'DISCOVERED'
+  | 'DESTROYED'
+  | 'DISCREDITED';
+
+export type EvidenceQuality = 'LOW' | 'MEDIUM' | 'HIGH' | 'IRREFUTABLE';
+
+export type ArrestViabilityTier =
+  | 'INSUFFICIENT'   // 0–19
+  | 'WEAK'           // 20–39
+  | 'MODERATE'       // 40–59
+  | 'STRONG'         // 60–79
+  | 'AIRTIGHT';      // 80–100
+
+export interface Evidence {
+  id: string;
+  type: EvidenceType;
+  state: EvidenceState;
+  quality: EvidenceQuality;
+  position: Vec2;
+  zoneId: string;
+  relatedEntityId?: string;            // NPC or player entity ID
+  generatedBy: string;                 // player ID or system
+  generatedAt: number;                 // game timestamp (ms)
+  decaysAt: number | null;             // null = never decays
+  isPlanted: boolean;                  // true = killer-placed false evidence
+  discoveredBy?: string;               // fed player ID
+  discoveredAt?: number;               // game timestamp (ms)
+  note: string;                        // human-readable description for evidence log
+}
+
+export interface WitnessStatement {
+  npcId: string;
+  reliability: number;                 // 0.0–1.0
+  statement: string;
+  observedAt: number;
+  observedPosition: Vec2;
+}
+
+export interface CaseFile {
+  runId: string;
+  fedPlayerId: string;
+  evidence: Evidence[];
+  witnessStatements: WitnessStatement[];
+  suspectList: string[];               // NPC entity IDs
+  arrestViability: number;             // 0–100
+  viabilityTier: ArrestViabilityTier;
+  updatedAt: number;
+}
+```
+
+### Evidence Constants
+
+```typescript
+// packages/shared/src/constants/evidence.ts
+
+export const EVIDENCE_DECAY_MS = {
+  FOOTPRINT: 120_000,      // 2 minutes
+  DISTURBED_SCENE: 90_000, // 1.5 minutes
+} as const;
+
+export const EVIDENCE_BASE_QUALITY: Record<EvidenceType, EvidenceQuality> = {
+  BODY: 'IRREFUTABLE',
+  DNA: 'HIGH',
+  SURVEILLANCE: 'HIGH',
+  WITNESS: 'MEDIUM',
+  WEAPON_TRACE: 'MEDIUM',
+  INFORMANT_REPORT: 'MEDIUM',
+  FOOTPRINT: 'LOW',
+  BROKEN_LOCK: 'LOW',
+  DISTURBED_SCENE: 'LOW',
+  FALSE_EVIDENCE: 'HIGH',  // appears identical to high-quality real evidence
+} as const;
+
+export const EVIDENCE_QUALITY_SCORE: Record<EvidenceQuality, number> = {
+  LOW: 5,
+  MEDIUM: 10,
+  HIGH: 20,
+  IRREFUTABLE: 35,
+} as const;
+
+export const ARREST_VIABILITY_THRESHOLDS: Record<ArrestViabilityTier, number> = {
+  INSUFFICIENT: 0,
+  WEAK: 20,
+  MODERATE: 40,
+  STRONG: 60,
+  AIRTIGHT: 80,
+} as const;
+
+export const EVIDENCE_DISCOVERY_RADIUS = 64;         // px — base proximity radius
+export const EVIDENCE_SPATIAL_HASH_CELL_SIZE = 256;  // px — grid cell size
+export const FORENSIC_ANALYSIS_BASE_CHANCE = 0.2;    // 20% base false-evidence detection
+export const FORENSIC_ANALYSIS_MAX_CHANCE = 0.7;     // 70% with max skill
+export const MAX_ACTIVE_INFORMANTS = 2;              // rank 2; 3 at rank 3
+export const ENTRAPMENT_ALERT_ZONE_RADIUS = 3;       // zones
+export const ILLEGAL_SURVEILLANCE_REPRIMAND_THRESHOLD = 3; // uses before reprimand
+export const ROUGH_INTERROGATION_MISCONDUCT_THRESHOLD = 2; // uses before misconduct warning
+export const DECOY_TRAIL_MIN_FOOTPRINTS = 5;
+export const DECOY_TRAIL_MAX_FOOTPRINTS = 13;
+export const SURVEILLANCE_JAM_MIN_MS = 45_000;
+export const SURVEILLANCE_JAM_MAX_MS = 105_000;
+```
+
+### EvidenceGenerator
+
+```typescript
+// packages/game-engine/src/evidence/evidence-generator.ts
+
+export interface EvidenceGenerationRule {
+  triggerEvent: string;                // EventBus event type key
+  evidenceType: EvidenceType;
+  baseQuality: EvidenceQuality;
+  probability: number;                 // 0.0–1.0
+  positionOffset?: Vec2;
+  conditions?: EvidenceCondition[];
+}
+
+export interface EvidenceCondition {
+  type: 'TILE_TYPE' | 'ZONE_HAS_CAMERA' | 'NPC_HAS_LOS';
+  value: string | boolean;
+}
+
+export class EvidenceGenerator {
+  constructor(
+    private readonly evidenceManager: EvidenceManager,
+    private readonly evidenceModifiers: EvidenceModifiers,
+    private readonly eventBus: EventBus,
+    private readonly zoneManager: ZoneManager,
+    private readonly tileManager: TileManager,
+    private readonly npcSpawner: NPCSpawner,
+  ) {}
+
+  initialize(): void;                  // subscribe to EventBus events
+  destroy(): void;                     // unsubscribe all listeners
+
+  private applyRule(rule: EvidenceGenerationRule, payload: unknown): void;
+  private meetsConditions(conditions: EvidenceCondition[], context: GenerationContext): boolean;
+  private generateEvidence(
+    type: EvidenceType,
+    quality: EvidenceQuality,
+    position: Vec2,
+    context: GenerationContext,
+  ): Evidence | null;                  // null if suppressed by modifiers
+}
+```
+
+### EvidenceModifiers
+
+```typescript
+// packages/game-engine/src/evidence/evidence-modifiers.ts
+
+export interface EvidenceMod {
+  targetTypes: EvidenceType[] | null;  // null = applies to all types
+  probabilityReduction: number;        // 0.0–1.0; subtracted from generation probability
+  qualityDowngradeSteps: number;       // steps; each step drops quality one tier
+}
+
+export interface EvidenceModSummary {
+  perType: Record<EvidenceType, { totalProbabilityReduction: number; totalQualityDowngrade: number }>;
+  activeModCount: number;
+}
+
+export class EvidenceModifiers {
+  addModifier(mod: EvidenceMod): void;
+  removeModifier(mod: EvidenceMod): void;
+  applyToCandidate(evidence: Evidence): Evidence | null;  // null = suppressed
+  getSummary(): EvidenceModSummary;
+}
+```
+
+### EvidenceManager
+
+```typescript
+// packages/game-engine/src/evidence/evidence-manager.ts
+
+export class EvidenceManager {
+  constructor(
+    private readonly eventBus: EventBus,
+    private readonly logger: Logger,
+  ) {}
+
+  addEvidence(evidence: Evidence): void;
+  getById(id: string): Evidence | undefined;
+  getNearby(pos: Vec2, radius: number): Evidence[];   // spatial hash lookup
+  markDiscovered(id: string, discoveredBy: string): void;
+  markDestroyed(id: string, destroyedBy: string): void;
+  markDiscredited(id: string, detectedBy: string): void;
+  updateDecay(now: number): void;                     // call each game tick
+  getAllForRole(role: PlayerRole): Evidence[];         // respects visibility rules
+  destroy(): void;
+}
+```
+
+### DiscoveryMechanics
+
+```typescript
+// packages/game-engine/src/evidence/discovery-mechanics.ts
+
+export interface DiscoveryModifiers {
+  proximityRadiusBonus: number;         // px added to base radius
+  scanRadiusBonus: number;
+  forensicDetectionBonus: number;       // 0.0–1.0 added to base chance
+  offTheBooks: boolean;                 // instant discovery mode
+  offTheBooksDetectionPenalty: number;  // 0.0–1.0 reduction to false-evidence detection
+}
+
+export interface ForensicAnalysisResult {
+  evidenceId: string;
+  isPlanted: boolean;                  // true = false evidence detected
+  wasDetected: boolean;                // false = analysis found nothing suspicious
+  detectionChance: number;             // the computed probability used
+}
+
+export class DiscoveryMechanics {
+  constructor(
+    private readonly evidenceManager: EvidenceManager,
+    private readonly eventBus: EventBus,
+  ) {}
+
+  checkProximity(fedPosition: Vec2, modifiers: DiscoveryModifiers): Evidence[];
+  performAreaScan(center: Vec2, radius: number, modifiers: DiscoveryModifiers): Evidence[];
+  performForensicAnalysis(
+    evidenceId: string,
+    modifiers: DiscoveryModifiers,
+  ): ForensicAnalysisResult;
+  reviewSurveillance(zoneId: string, isIllegal: boolean): Evidence[];
+}
+```
+
+### CaseFileTracker
+
+```typescript
+// packages/game-engine/src/evidence/case-file.ts
+
+export class CaseFileTracker {
+  constructor(
+    private readonly evidenceManager: EvidenceManager,
+    private readonly eventBus: EventBus,
+    private readonly npcSpawner: NPCSpawner,
+  ) {}
+
+  getCaseFile(): CaseFile;
+  addWitnessStatement(statement: WitnessStatement): void;
+  recalculateViability(): void;
+  getViabilityTier(): ArrestViabilityTier;
+  getSuspectList(): string[];          // derived from evidence chains + witness statements
+  applyScorePenalty(amount: number, reason: string): void;
+}
+```
+
+### EvidenceRenderer
+
+```typescript
+// packages/game-engine/src/evidence/evidence-renderer.ts
+
+export class EvidenceRenderer {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly evidenceManager: EvidenceManager,
+    private readonly eventBus: EventBus,
+  ) {}
+
+  initialize(): void;                  // create evidence layer above map tiles
+  update(role: PlayerRole, fedPosition: Vec2): void;
+  destroy(): void;
+  private renderEvidence(evidence: Evidence, role: PlayerRole): void;
+  private updateProximityHighlight(fedPosition: Vec2): void;
+}
+```
+
+### Zod Schemas
+
+```typescript
+// packages/shared/src/schemas/evidence.ts
+
+import { z } from 'zod';
+
+export const evidenceTypeSchema = z.enum([
+  'FOOTPRINT', 'DNA', 'WEAPON_TRACE', 'BODY', 'WITNESS',
+  'SURVEILLANCE', 'BROKEN_LOCK', 'DISTURBED_SCENE',
+  'FALSE_EVIDENCE', 'INFORMANT_REPORT',
+]);
+
+export const evidenceStateSchema = z.enum([
+  'HIDDEN', 'DISCOVERABLE', 'DISCOVERED', 'DESTROYED', 'DISCREDITED',
+]);
+
+export const evidenceQualitySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'IRREFUTABLE']);
+
+export const evidenceSchema = z.object({
+  id: z.string().uuid(),
+  type: evidenceTypeSchema,
+  state: evidenceStateSchema,
+  quality: evidenceQualitySchema,
+  position: z.object({ x: z.number(), y: z.number() }),
+  zoneId: z.string(),
+  relatedEntityId: z.string().optional(),
+  generatedBy: z.string(),
+  generatedAt: z.number(),
+  decaysAt: z.number().nullable(),
+  isPlanted: z.boolean(),
+  discoveredBy: z.string().optional(),
+  discoveredAt: z.number().optional(),
+  note: z.string(),
+});
+
+export const witnessStatementSchema = z.object({
+  npcId: z.string(),
+  reliability: z.number().min(0).max(1),
+  statement: z.string(),
+  observedAt: z.number(),
+  observedPosition: z.object({ x: z.number(), y: z.number() }),
+});
+
+export const caseFileSchema = z.object({
+  runId: z.string().uuid(),
+  fedPlayerId: z.string(),
+  evidence: z.array(evidenceSchema),
+  witnessStatements: z.array(witnessStatementSchema),
+  suspectList: z.array(z.string()),
+  arrestViability: z.number().min(0).max(100),
+  viabilityTier: z.enum(['INSUFFICIENT', 'WEAK', 'MODERATE', 'STRONG', 'AIRTIGHT']),
+  updatedAt: z.number(),
+});
+
+export type EvidenceInput = z.infer<typeof evidenceSchema>;
+export type CaseFileInput = z.infer<typeof caseFileSchema>;
+```
+
+### Server-Side Validation
+
+```typescript
+// apps/web/src/dal/evidence/validation.ts
+// server-only — never imported from client bundle
+
+import { Result, ok, err } from 'neverthrow';
+
+export interface ValidationReport {
+  valid: boolean;
+  computedViability: number;
+  submittedViability: number;
+  discrepancies: string[];
+}
+
+export async function validateRunEvidence(
+  runId: string,
+  submittedCaseFile: CaseFileInput,
+  runActionLog: RunActionLog,
+): Promise<Result<ValidationReport, ValidationError>>;
+```
+
+### Zustand Store
+
+```typescript
+// apps/web/src/stores/evidence.ts
+
+export interface EvidenceStore {
+  // State
+  caseFile: CaseFile | null;
+  evidenceCount: number;
+  arrestViability: number;
+  viabilityTier: ArrestViabilityTier;
+  illegalSurveillanceUses: number;
+  roughInterrogationUses: number;
+  activeInformantCount: number;
+
+  // Actions
+  updateCaseFile: (caseFile: CaseFile) => void;
+  incrementIllegalSurveillance: () => void;
+  incrementRoughInterrogation: () => void;
+  setActiveInformantCount: (count: number) => void;
+  reset: () => void;
+}
+```
+
+### EventBus Event Types
+
+New events added to the shared EventBus map in `packages/game-engine/src/events/event-types.ts`:
+
+```typescript
+EVIDENCE_GENERATED: { evidence: Evidence; sourceEvent: string };
+EVIDENCE_DISCOVERED: { evidence: Evidence; discoveredBy: string; position: Vec2 };
+EVIDENCE_DESTROYED: { evidenceId: string; destroyedBy: string };
+EVIDENCE_DISCREDITED: { evidenceId: string; detectedBy: string };
+CASE_FILE_UPDATED: { caseFile: CaseFile };
+ARREST_VIABLE: { tier: ArrestViabilityTier; score: number };
+WITNESS_SILENCED: { npcId: string; killerPosition: Vec2 };
+INFORMANT_REPORT: { informantNpcId: string; eventType: string; position: Vec2 };
+ENTRAPMENT_TRIGGERED: { baitNpcId: string; killerPosition: Vec2 };
+SURVEILLANCE_JAMMED: { zoneId: string; durationMs: number };
+FALSE_EVIDENCE_PLANTED: { evidence: Evidence; plantedBy: string }; // killer-perspective only
+```
 
 ### Spatial Hashing for Performance
 

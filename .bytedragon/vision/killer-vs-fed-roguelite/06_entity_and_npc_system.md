@@ -44,101 +44,184 @@ Build the entity framework and NPC AI system for an asymmetric roguelite game. N
 
 ### Dependency Context (Inline)
 
-This piece depends on outputs from three earlier pieces. These are reproduced here in full so this document is self-contained:
+This piece depends on three earlier systems. These are described here so this document is self-contained.
 
-**Monorepo structure** (from project-scaffold):
-```
-packages/game-engine/src/   — Phaser code, MUST NOT import React
-packages/shared/src/types/  — Shared TypeScript types
-packages/shared/src/constants/ — Shared constants
-packages/shared/src/utils/result.ts — neverthrow Result<T,E>
-  - ok<T>(value: T): Ok<T, never>
-  - err<E>(error: E): Err<never, E>
-  - type AppError = { code: string; message: string }
-  - type ValidationError extends AppError
-  - type NotFoundError extends AppError
-apps/web/src/lib/logger/pino.ts — Pino singleton (logger.info, logger.error, etc.)
-```
+**Project scaffold** provides the shared Result type for error-returning operations (used in spawner functions that can fail), a Pino logger singleton, and the monorepo package structure. Game engine code must not import React.
 
-**Game engine bootstrap** (from game-engine-bootstrap):
-```typescript
-// packages/game-engine/src/events/event-bus.ts
-class EventBus {
-  emit<K extends keyof GameEvents>(event: K, payload: GameEvents[K]): void
-  on<K extends keyof GameEvents>(event: K, handler: (payload: GameEvents[K]) => void): void
-  off<K extends keyof GameEvents>(event: K, handler: (payload: GameEvents[K]) => void): void
-}
-export const eventBus: EventBus
+**Game engine bootstrap** provides an EventBus for emitting and subscribing to typed game events. It also provides the shared game constants (physics tick rate, world dimensions), scene key identifiers, and initial Zustand stores for game state and player state that this piece extends by emitting events into.
 
-// packages/shared/src/types/events.ts — GameEvents interface (extended by each piece)
-// packages/shared/src/constants/events.ts — event name string constants
-// packages/shared/src/constants/game.ts — TICK_RATE, PHYSICS_GRAVITY, GAME_WIDTH, GAME_HEIGHT
-// packages/game-engine/src/scenes/scene-keys.ts — SceneKey enum
-// apps/web/src/stores/game.ts — { isRunning, isPaused, currentScene }
-// apps/web/src/stores/player.ts — { health, position, inventory }
-```
-
-**World and maps** (from world-and-maps):
-```typescript
-// packages/game-engine/src/world/pathfinding.ts
-function findPath(grid: PathGrid, from: Vec2, to: Vec2): Vec2[]
-function isWalkable(grid: PathGrid, pos: Vec2): boolean
-
-// packages/game-engine/src/world/zone-manager.ts
-function getZone(pos: Vec2): Zone | null
-function getZoneById(id: string): Zone | null
-function getNPCsInZone(zoneId: string): string[]  // entity IDs
-
-// packages/game-engine/src/world/spawn-manager.ts
-function getNPCSpawnPoints(zoneId: string): SpawnPoint[]
-function getSpawnPoint(type: SpawnType): SpawnPoint | null
-
-// packages/game-engine/src/world/collision-layer.ts
-function hasLineOfSight(from: Vec2, to: Vec2): boolean
-function getCollisionAt(pos: Vec2): boolean
-
-// packages/game-engine/src/scenes/map-scene.ts — main gameplay scene (entities added here)
-
-// packages/shared/src/types/biome.ts
-type Biome = 'rural' | 'city' | 'cruise-ship' | 'office-building' | 'amusement-park'
-  | 'shopping-mall' | 'airport' | 'abandoned-asylum' | 'remote-island'
-  | 'ghost-town' | 'concert-venue' | 'subway-network'
-type Vec2 = { x: number; y: number }
-type Zone = { id: string; name: string; bounds: Rect; type: ZoneType }
-type SpawnPoint = { id: string; pos: Vec2; type: SpawnType }
-```
+**World and maps** provides the pathfinding API (find a walkable path between two positions), the zone manager (query which named zone a world position falls in, get all entities in a zone), the spawn manager (get available spawn points by type), the collision and line-of-sight API (check whether two positions have unobstructed sight), and the main map scene where entities are added. It also defines the shared 2D position type, zone descriptor type, and the full list of biome names the game supports.
 
 ### Base Entity System
 
-**File**: `packages/game-engine/src/entities/base-entity.ts`
+Every game entity — both NPCs and the player character — extends a shared abstract base class. This shared hierarchy is fundamental to the disguise mechanic: since player and NPC share the same sprite and animation system, a human player mimicking an NPC is visually indistinguishable.
 
-Base class for all game entities (players AND NPCs — critical for the disguise mechanic: both use the same sprite/animation system so human players look identical to NPCs):
+The base entity holds:
+- A unique ID, world position, velocity, and a directional facing
+- A Phaser sprite with an associated animation state (current animation key and facing direction)
+- A physics collision body for movement and overlap detection
+- Optional health values (NPCs used only as background crowd do not need a health pool)
+- An interaction radius — when the player comes within this distance, an interaction prompt may appear
+- A visibility flag and entity type classification
 
-```typescript
-abstract class BaseEntity {
-  readonly id: string           // UUID
-  pos: Vec2                     // world position
-  velocity: Vec2                // pixels/second
-  sprite: Phaser.GameObjects.Sprite
-  animState: AnimationState
-  collisionBody: Phaser.Physics.Arcade.Body
-  health: number | null         // null = invulnerable/irrelevant (pure NPCs)
-  maxHealth: number | null
-  interactionRadius: number     // pixels, triggers interaction prompt
-  isVisible: boolean
-  entityType: EntityType
+The base entity defines the interface that all entities share: an update loop called each frame, methods to apply damage and healing, set the current animation, and query position and world bounds.
 
-  abstract update(delta: number): void
-  takeDamage(amount: number, source: string): void
-  heal(amount: number): void
-  setAnimation(key: AnimationKey, direction: Direction): void
-  getPosition(): Vec2
-  getWorldBounds(): Phaser.Geom.Rectangle
-  destroy(): void
-}
-```
+### Entity and NPC Data Model
 
-### Shared Types
+Entities are classified by type: NPC, Player, Item, and Interactable objects. Each entity has a current state: idle, moving, interacting, fleeing, alerted, or dead.
+
+Animation states represent which animation is playing (walk, run, idle, work, sit, talk, flee, die) and the cardinal direction the entity is facing (up, down, left, right).
+
+NPCs have four roles: **Resident** (lives in the map, follows home/outside cycle), **Worker** (commutes to a work location, follows work/break/commute cycle), **Pedestrian** (walks between street waypoints, occasionally socializes), and **Shopkeeper** (stays near their shop, works at counter, takes brief breaks). Each role has a defined routine schedule that the NPC cycles through.
+
+NPC behavior states: patrolling, idle, working, commuting, socializing, fleeing, alerted.
+
+NPCs have a suspicion level that escalates in response to witnessed events: none, curious, suspicious, alarmed.
+
+A collection of constants defines the operational parameters for the NPC system:
+- The role metadata and number of sprite appearance variants per role (3-5 per role)
+- Named constants for all animation keys
+- The AI tick interval: NPC decision-making runs on a throttled schedule rather than every render frame, keeping many NPCs performant
+- The interaction detection radius: how close the player must be before an NPC becomes interactable
+- The perception radius: maximum distance at which an NPC can notice suspicious events
+- The line-of-sight forward cone angle: the angular width of the NPC's field of perception
+
+### NPC Class
+
+An NPC extends the base entity with:
+- Its assigned role and sprite key
+- An ordered routine schedule (list of behaviors to cycle through)
+- A behavior tree that drives moment-to-moment decisions
+- A suspicion level and a log of suspicious events this NPC has witnessed
+- A witness flag (set when this NPC has seen something crime-relevant)
+- An interviewable flag (the fed can interview this NPC to gather testimony)
+
+An NPC can receive a suspicious event notification from the perception system, start a flee routine from a threat position, become alerted with a cause, and produce a witness statement. The witness statement includes the list of events witnessed and a reliability score (a 0–1 float seeded from the NPC's ID and the run seed — so the same NPC is always the same reliability level within a run, enabling consistent unreliable-witness gameplay).
+
+To create an NPC, a configuration object specifies its ID, role, starting position, assigned zone, and initial routine schedule.
+
+### Behavior Tree Engine
+
+NPC decisions are driven by a lightweight behavior tree. The tree provides four node types:
+
+- **Selector**: evaluates children left-to-right, returns success on the first child that succeeds
+- **Sequence**: evaluates children left-to-right, returns failure on the first child that fails
+- **Condition**: tests a predicate against the NPC's current context, returns success or failure
+- **Action**: executes a behavior function, returns success, failure, or "running" (still in progress)
+
+The tree root ticks each AI update cycle. The context passed to each node contains the NPC being evaluated, the pathfinding grid, the zone manager, the current Phaser scene, and the time delta. Behavior tree depth is capped to keep evaluation fast.
+
+### NPC Routines
+
+Six routines are implemented as composable behavior tree subtrees:
+
+- **Patrol**: NPC walks between a set of waypoints in a loop within their assigned zone, pausing briefly at each stop
+- **Idle**: NPC stands still, plays the idle animation, and occasionally looks around
+- **Work**: NPC moves to a specific workstation position, plays the work animation, and stays for a set duration
+- **Commute**: NPC pathfinds from their current zone to a destination zone
+- **Socialize**: NPC approaches the nearest idle NPC in their zone and faces them, simulating conversation
+- **Flee**: NPC pathfinds away from a threat position at maximum movement speed
+
+Each routine is a factory function accepting the relevant parameters (waypoints, duration, destination zone, etc.) and returning a behavior node subtree ready to be inserted into a behavior tree.
+
+### NPC Role Compositions
+
+Each NPC role has a factory that builds a full routine schedule:
+
+- **Resident**: starts at home, idles inside, walks outside, socializes, returns home
+- **Worker**: commutes to work zone, works, takes a break (idle or socialize), commutes home
+- **Pedestrian**: patrols between 3–5 street waypoints, occasionally socializes
+- **Shopkeeper**: stays in their shop zone, works at the counter, takes brief idle breaks
+
+These factories accept a role-specific configuration and return the ordered routine schedule for that NPC.
+
+### Behavioral Variation
+
+Without variation, NPCs with the same role follow identical timing, making it trivial to spot a human player whose timing differs slightly. A behavioral variation module prevents this by randomizing per-NPC timing, path offsets, and idle durations.
+
+All variation is seeded from the run seed plus the NPC's ID, making variation deterministic within a run (the same NPC always has the same behavioral quirks per run) while ensuring different NPCs behave differently. The module exposes functions to randomize routine durations, jitter waypoints within a small radius, decide whether an NPC should break into a socialize routine at a given moment, and compute idle duration variants.
+
+### Interaction System
+
+When the player comes within an entity's interaction radius, an interaction becomes available. The interaction system maintains a registry of entities and their associated interaction handlers. Each frame, it checks the player's proximity to registered entities and emits events when interactions become available or are cleared.
+
+When the player triggers an interaction (via the input key), the system calls the entity's registered handler and emits an event with the result. Interaction results describe the type of interaction (talk, examine, pick up, use, or attack) and any associated data.
+
+Three events flow through the EventBus: interaction available (specifying the entity and available interaction types), interaction cleared (entity is no longer in range), and interaction resolved (the interaction was triggered, with its result).
+
+### Sprite Management
+
+A sprite manager handles character atlases for both NPCs and the player character. Using the same atlas for both is required by the disguise mechanic — a player calling the same sprite creation function as an NPC looks visually identical.
+
+The manager preloads the character atlas into Phaser's cache, creates sprites with the correct animation configuration for a given role and appearance variant (variant is a numbered clothing variation within the role's sprite rows), registers all animation configurations, and returns the animation key for any combination of action and direction.
+
+Each NPC role has 3–5 appearance variants. The animation atlas covers 4 cardinal directions and all action animations (walk, run, idle, work, sit, talk, flee, die).
+
+### NPC Perception System
+
+NPCs can notice suspicious events that occur within their perception radius AND within their forward-facing detection cone. An NPC that notices a suspicious event becomes a witness and may transition to fleeing or alerted states.
+
+The perception system receives registrations of one-frame suspicious events (a kill, a break-in, someone running, a weapon drawn, a body discovered). Each AI tick, it checks which NPCs have line-of-sight to each recent event and whether the event falls within their perception cone. Checks are spatially culled — only NPCs reasonably near the event are considered.
+
+Suspicious events carry a type, position, visibility radius, timestamp, and the ID of the entity that caused them.
+
+NPC reactions by event type:
+- Violence or body discovered: NPC becomes alarmed, logs the witness event, begins fleeing
+- Break-in: NPC becomes suspicious and either approaches (shopkeeper) or flees (resident), depending on role
+- Running or weapon drawn: NPC suspicion escalates from curious to suspicious over time
+
+### NPC Spawner
+
+The NPC spawner populates map zones with role-appropriate NPCs using spawn points from the world system. It can spawn NPCs for an entire map (respecting biome-appropriate role distributions) or for a specific zone with explicit role and count parameters. It also provides lookup by NPC ID and enumeration of all active NPCs, and handles despawning when NPCs are no longer needed.
+
+Spawn population per biome is calibrated to balance believability against performance:
+- Small biomes (rural, office building): approximately 15–20 NPCs
+- Medium biomes (city, shopping mall): approximately 25–35 NPCs
+- Large biomes (airport, concert venue): approximately 30–40 NPCs
+
+Role distributions reflect the biome's character — a city has mostly pedestrians; an office building is dominated by workers; a rural area has more residents.
+
+### EventBus Integration
+
+This piece adds events to the shared GameEvents type. These events notify the React HUD and other game systems of NPC state changes:
+
+- Nearby NPC changed: which NPCs are close enough to interact with
+- Interaction available: an entity is within interaction range, with the interaction types it supports
+- Interaction cleared: the player has moved out of interaction range
+- Interaction resolved: an interaction was completed, with its result
+- NPC alerted: a specific NPC has entered the alerted state, with cause and position
+- NPC became witness: a specific NPC witnessed a suspicious event
+- NPC fleeing: a specific NPC has begun fleeing, with the threat position
+- Suspicious event registered: a suspicious event entered the system (position and actor)
+
+### Performance Requirements
+
+NPC AI runs on a throttled tick rate rather than every render frame, using Phaser's timer system. Entity pooling reuses NPC instances rather than destroying and recreating them. Perception checks are spatially culled — only NPCs within a reasonable distance of an event are evaluated. Behavior tree depth is kept shallow.
+
+### Edge Cases
+
+- NPCs must not clip into walls when following patrol paths — validate waypoints against the collision layer before assigning
+- NPC fleeing must use pathfinding (not just "run away from threat position") to avoid getting stuck against walls
+- If all NPCs in a zone flee (due to body discovery), the zone should register as "disturbed" for evidence system use
+- NPC witness reliability is seeded from NPC ID plus run seed — the same NPC is always the same reliability level per run, enabling consistent false-lead designs
+- An NPC that is a witness MUST remain interviewable by the fed until the run ends, even if the NPC has fled
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+All entity/NPC code lives in `packages/game-engine/src/`. No React imports anywhere in this package. State that the React HUD needs (nearby NPC count, interaction prompts) flows out via EventBus events, which Zustand stores in `apps/web/src/stores/player.ts` (extended) subscribe to.
+
+The base entity class must be abstract. Both NPC and the future player controller (piece 07) extend it. This shared hierarchy is what makes the disguise mechanic work: a human player using the same `BaseEntity.setAnimation()` system looks identical to an NPC from a renderer perspective.
+
+### Shared Types and Constants
 
 **File**: `packages/shared/src/types/entity.ts`
 
@@ -179,26 +262,52 @@ const NPC_PERCEPTION_RADIUS = 192  // pixels, max distance NPC can "notice" even
 const NPC_LINE_OF_SIGHT_ANGLE = 120  // degrees forward cone for perception
 ```
 
-### NPC Class
+### BaseEntity Signature
+
+**File**: `packages/game-engine/src/entities/base-entity.ts`
+
+```typescript
+abstract class BaseEntity {
+  readonly id: string           // UUID
+  pos: Vec2                     // world position
+  velocity: Vec2                // pixels/second
+  sprite: Phaser.GameObjects.Sprite
+  animState: AnimationState
+  collisionBody: Phaser.Physics.Arcade.Body
+  health: number | null         // null = invulnerable/irrelevant (pure NPCs)
+  maxHealth: number | null
+  interactionRadius: number     // pixels, triggers interaction prompt
+  isVisible: boolean
+  entityType: EntityType
+
+  abstract update(delta: number): void
+  takeDamage(amount: number, source: string): void
+  heal(amount: number): void
+  setAnimation(key: AnimationKey, direction: Direction): void
+  getPosition(): Vec2
+  getWorldBounds(): Phaser.Geom.Rectangle
+  destroy(): void
+}
+```
+
+### NPC Class Signature
 
 **File**: `packages/game-engine/src/entities/npc.ts`
-
-Extends `BaseEntity`. Adds AI behavior tree controller, routine scheduler, and suspicion state:
 
 ```typescript
 class NPC extends BaseEntity {
   role: NPCRole
-  routineSchedule: NPCRoutine[]  // ordered list of routines to cycle through
+  routineSchedule: NPCRoutine[]
   currentRoutineIndex: number
   behaviorTree: BehaviorTree
   suspicion: NPCSuspicionLevel
-  witnessLog: WitnessEvent[]     // what suspicious things this NPC has seen
-  isWitness: boolean             // true if this NPC witnessed a crime-relevant event
-  canBeInterviewed: boolean      // true if the fed can interview this NPC
+  witnessLog: WitnessEvent[]
+  isWitness: boolean
+  canBeInterviewed: boolean
 
   constructor(config: NPCConfig, scene: Phaser.Scene): NPC
   update(delta: number): void    // runs behavior tree at NPC_AI_TICK_MS rate
-  onSuspiciousEvent(event: SuspiciousEvent): void  // called by perception system
+  onSuspiciousEvent(event: SuspiciousEvent): void
   startFleeing(from: Vec2): void
   becomeAlerted(cause: string): void
   getWitnessStatement(): WitnessStatement | null
@@ -223,20 +332,13 @@ type WitnessEvent = {
 type WitnessStatement = {
   npcId: string
   events: WitnessEvent[]
-  reliability: number  // 0-1, randomized per NPC — unreliable witnesses add false leads
+  reliability: number  // 0-1, seeded from NPC ID + run seed
 }
 ```
 
-### Behavior Tree Engine
+### Behavior Tree Engine Signature
 
 **File**: `packages/game-engine/src/ai/behavior-tree.ts`
-
-Lightweight behavior tree for NPC decision-making. Provides four node types:
-
-- **Selector**: Tries child nodes left-to-right, returns SUCCESS on first success
-- **Sequence**: Runs child nodes left-to-right, returns FAILURE on first failure
-- **Condition**: Tests a predicate, returns SUCCESS/FAILURE
-- **Action**: Executes a function, returns SUCCESS/FAILURE/RUNNING
 
 ```typescript
 type NodeStatus = 'SUCCESS' | 'FAILURE' | 'RUNNING'
@@ -279,63 +381,57 @@ type BTContext = {
 }
 ```
 
-### NPC Routines
+### NPC Routine Signatures
 
 **Directory**: `packages/game-engine/src/ai/routines/`
 
-Each routine is a BehaviorNode subtree that can be composed into the behavior tree:
+```typescript
+// patrol.ts
+function createPatrolRoutine(waypoints: Vec2[]): BehaviorNode
+// idle.ts
+function createIdleRoutine(duration: number): BehaviorNode
+// work.ts
+function createWorkRoutine(workstationPos: Vec2, duration: number): BehaviorNode
+// commute.ts
+function createCommuteRoutine(destinationZoneId: string): BehaviorNode
+// socialize.ts
+function createSocializeRoutine(): BehaviorNode
+// flee.ts
+function createFleeRoutine(threatPos: Vec2): BehaviorNode
+```
 
-- **`patrol.ts`**: NPC walks between 2-4 waypoints in a loop within assigned zone. Pauses briefly at each. `createPatrolRoutine(waypoints: Vec2[]): BehaviorNode`
-- **`idle.ts`**: NPC stands still, plays idle animation, occasionally looks around. `createIdleRoutine(duration: number): BehaviorNode`
-- **`work.ts`**: NPC moves to work station tile, plays work animation, stays for duration. `createWorkRoutine(workstationPos: Vec2, duration: number): BehaviorNode`
-- **`commute.ts`**: NPC pathfinds from one zone to another zone. `createCommuteRoutine(destinationZoneId: string): BehaviorNode`
-- **`socialize.ts`**: NPC approaches nearest idle NPC within zone, faces them, idles. Simulates conversation. `createSocializeRoutine(): BehaviorNode`
-- **`flee.ts`**: NPC pathfinds away from threat position at max speed. `createFleeRoutine(threatPos: Vec2): BehaviorNode`
-
-### NPC Role Compositions
+### NPC Role Factory Signatures
 
 **Directory**: `packages/game-engine/src/ai/roles/`
 
-Each file exports a factory that creates a full routine schedule for that role:
-
-- **`resident.ts`**: Home → idle inside → walk outside → socialize → return home
-- **`worker.ts`**: Commute to work zone → work routine → break (idle/socialize) → commute home
-- **`pedestrian.ts`**: Patrol between 3-5 street waypoints, occasionally socialize
-- **`shopkeeper.ts`**: Stay near shop zone, work routine at counter, brief idle breaks
-
 ```typescript
-// Example signature pattern (all roles follow this pattern)
 function createResidentSchedule(config: ResidentConfig): NPCRoutine[]
 function createWorkerSchedule(config: WorkerConfig): NPCRoutine[]
 function createPedestrianSchedule(config: PedestrianConfig): NPCRoutine[]
 function createShopkeeperSchedule(config: ShopkeeperConfig): NPCRoutine[]
 ```
 
-### Behavioral Variation
+### Behavioral Variation Signatures
 
 **File**: `packages/game-engine/src/ai/variation.ts`
 
-Prevents robotic-looking patterns by randomizing per-NPC timing, path offsets, and idle durations:
-
 ```typescript
-// All variation is seeded from run seed + NPC ID (deterministic per run, varied across NPCs)
+// All variation seeded from run seed + NPC ID (deterministic per run, varied across NPCs)
 function randomizeRoutineDuration(base: number, npcId: string, runSeed: string): number
 function randomizeWaypoints(base: Vec2[], npcId: string, jitterRadius: number): Vec2[]
 function shouldSocialize(npcId: string, frame: number): boolean
 function getIdleVariantDuration(npcId: string): number
 ```
 
-### Interaction System
+### Interaction Manager Signature
 
 **File**: `packages/game-engine/src/entities/interaction-manager.ts`
-
-Proximity-based interaction detection. Player approaching within `interactionRadius` of an entity triggers an interaction prompt. Resolving the interaction calls the entity's interaction handler:
 
 ```typescript
 class InteractionManager {
   register(entity: BaseEntity, handler: InteractionHandler): void
   unregister(entityId: string): void
-  update(playerPos: Vec2): void  // checks proximity, emits events
+  update(playerPos: Vec2): void
   resolveInteraction(entityId: string, actor: BaseEntity): InteractionResult
 }
 
@@ -348,44 +444,26 @@ type InteractionResult = {
 }
 ```
 
-Emits EventBus events:
-- `INTERACTION_AVAILABLE`: `{ entityId: string; entityType: EntityType; interactionTypes: InteractionResult['type'][] }`
-- `INTERACTION_CLEARED`: `{ entityId: string }`
-- `INTERACTION_RESOLVED`: `{ entityId: string; result: InteractionResult }`
-
-### Sprite Management
+### SpriteManager Signature
 
 **File**: `packages/game-engine/src/entities/sprite-manager.ts`
 
-Manages character sprite atlases. Both NPCs and player use the same atlas keys — this is required for the disguise mechanic:
-
 ```typescript
 class SpriteManager {
-  // Loads character atlas into Phaser cache
   preloadAtlas(scene: Phaser.Scene): void
-  // Creates a sprite with correct animation config for given role/variant
   createCharacterSprite(scene: Phaser.Scene, role: NPCRole, variant: number): Phaser.GameObjects.Sprite
-  // Registers all animation configs for a character type
   registerAnimations(scene: Phaser.Scene): void
-  // Returns animation key for given action+direction combo
   getAnimationKey(action: AnimationKey, direction: Direction, variant: number): string
 }
-
-// Sprite variants per role: 3-5 clothing color/style variations
-// Animation atlas: 8-directional movement (simplified to 4) + all action animations
 ```
 
-### NPC Perception System
+### Perception System Signature
 
 **File**: `packages/game-engine/src/ai/perception.ts`
 
-NPCs can notice suspicious events within their perception radius AND within their line-of-sight cone. An NPC that witnesses a suspicious event becomes a "witness" and may flee, become alerted, or both:
-
 ```typescript
 class PerceptionSystem {
-  // Call each NPC AI tick — checks all registered suspicious events against each NPC
   update(npcs: NPC[], events: SuspiciousEvent[]): void
-  // Register a one-frame suspicious event (kill, break-in, running, etc.)
   registerSuspiciousEvent(event: SuspiciousEvent): void
 }
 
@@ -393,27 +471,15 @@ type SuspiciousEvent = {
   id: string
   type: 'VIOLENCE' | 'BREAK_IN' | 'BODY_FOUND' | 'RUNNING' | 'WEAPON_DRAWN'
   pos: Vec2
-  radius: number      // how far the event's "visibility" extends
+  radius: number
   timestamp: number
-  actorId: string     // who caused the event
+  actorId: string
 }
-
-// Perception check: NPC notices event if:
-// 1. distance(npc.pos, event.pos) <= NPC_PERCEPTION_RADIUS
-// 2. hasLineOfSight(npc.pos, event.pos) == true
-// 3. event.pos is within NPC's forward cone (NPC_LINE_OF_SIGHT_ANGLE)
 ```
 
-When an NPC perceives an event:
-- `VIOLENCE` or `BODY_FOUND`: NPC becomes `ALARMED`, logs witness event, begins FLEE routine
-- `BREAK_IN`: NPC becomes `SUSPICIOUS`, may approach or flee depending on role (shopkeeper approaches, resident flees)
-- `RUNNING` or `WEAPON_DRAWN`: NPC suspicion increases to `CURIOUS` then `SUSPICIOUS`
-
-### NPC Spawner
+### NPC Spawner Signature
 
 **File**: `packages/game-engine/src/entities/npc-spawner.ts`
-
-Populates map zones with role-appropriate NPCs using spawn points from the world system:
 
 ```typescript
 class NPCSpawner {
@@ -423,20 +489,18 @@ class NPCSpawner {
   getNPCById(npcId: string): NPC | null
   getAllNPCs(): NPC[]
 }
-
-// Spawn rules per biome (examples):
-// city: 60% pedestrians, 20% workers, 20% residents — 25-35 total NPCs
-// rural: 40% residents, 30% workers, 30% pedestrians — 15-20 total NPCs
-// office-building: 70% workers, 20% pedestrians, 10% shopkeepers — 20-30 total NPCs
-// NPC count ranges per biome balance believability vs performance
 ```
 
-### EventBus Integration
+Biome spawn distributions:
+- `city`: 60% pedestrians, 20% workers, 20% residents — 25–35 NPCs
+- `rural`: 40% residents, 30% workers, 30% pedestrians — 15–20 NPCs
+- `office-building`: 70% workers, 20% pedestrians, 10% shopkeepers — 20–30 NPCs
 
-New events added to `packages/shared/src/types/events.ts` and `packages/shared/src/constants/events.ts`:
+### EventBus Event Types
+
+Added to `packages/shared/src/types/events.ts`:
 
 ```typescript
-// Events emitted by entity/NPC system
 NEARBY_NPC_CHANGED: { npcIds: string[]; interactable: boolean }
 INTERACTION_AVAILABLE: { entityId: string; entityType: EntityType; types: string[] }
 INTERACTION_CLEARED: { entityId: string }
@@ -446,36 +510,6 @@ NPC_BECAME_WITNESS: { npcId: string; eventType: string; pos: Vec2 }
 NPC_FLEEING: { npcId: string; fromPos: Vec2 }
 SUSPICIOUS_EVENT: { type: string; pos: Vec2; actorId: string }
 ```
-
-### Performance Budget
-
-- NPC AI tick rate: every 150ms (not every render frame) — use Phaser TimerEvent
-- Entity pooling: reuse NPC instances when NPCs are despawned/respawned
-- Perception checks: only run against NPCs within 3x NPC_PERCEPTION_RADIUS of the registered event (spatial cull)
-- Behavior tree depth: max 4 levels deep — keep trees shallow for performance
-
-### Edge Cases
-
-- NPCs must not clip into walls when following patrol paths — validate waypoints against collision layer before assigning
-- NPC fleeing must use pathfinding (not just "run away from threat position") to avoid getting stuck
-- If all NPCs in a zone flee (due to body discovery), the zone should register as "disturbed" for evidence system use
-- NPC witness reliability (0.0-1.0 float) is seeded from NPC ID + run seed — same NPC is always the same reliability level per run, enabling consistent false-lead designs
-- An NPC that is a witness MUST remain interviewable by the fed until the run ends, even if the NPC has fled
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-All entity/NPC code lives in `packages/game-engine/src/`. No React imports anywhere in this package. State that the React HUD needs (nearby NPC count, interaction prompts) flows out via EventBus events, which Zustand stores in `apps/web/src/stores/player.ts` (extended) subscribe to.
-
-The base entity class must be abstract. Both NPC and the future player controller (piece 07) extend it. This shared hierarchy is what makes the disguise mechanic work: a human player using the same `BaseEntity.setAnimation()` system looks identical to an NPC from a renderer perspective.
 
 ### NPC Count vs Performance
 

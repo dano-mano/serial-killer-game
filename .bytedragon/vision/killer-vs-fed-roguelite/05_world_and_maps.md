@@ -49,53 +49,20 @@ Fourteen biomes are defined, ranging from familiar settings (rural farmland, cit
 
 Before this piece can be implemented, the following must exist from the game engine bootstrap piece:
 
-```typescript
-// packages/game-engine/src/events/event-bus.ts
-export const eventBus: Phaser.Events.EventEmitter  // singleton
+- **EventBus singleton**: used to emit map-loaded and zone events
+- **SceneKey constants**: this piece adds the map scene key to the registry
+- **Game config factory**: this piece registers the map scene in the scene array
+- **Asset loader utilities**: functions for loading images, atlases, tilemaps, and resolving asset URLs
+- **GAME_CONFIG constants**: specifically the tile size (32px) and AI tick rate (12 Hz), which this piece uses throughout
+- **GAME_EVENTS constants**: this piece adds map-loaded, zone-entered, and zone-exited events to the existing event registry
 
-// packages/game-engine/src/scenes/scene-keys.ts
-export const SceneKey = {
-  BOOT: 'BootScene',
-  PRELOAD: 'PreloadScene',
-  // This piece adds:
-  MAP: 'MapScene',
-} as const
-
-// packages/game-engine/src/config/game-config.ts
-export function createGameConfig(parent: string): Phaser.Types.Core.GameConfig
-// This piece adds MapScene to the scene array in createGameConfig
-
-// packages/game-engine/src/utils/asset-loader.ts
-export function loadImages(scene: Phaser.Scene, assets: AssetDefinition[]): void
-export function loadAtlases(scene: Phaser.Scene, atlases: AtlasDefinition[]): void
-export function loadTilemaps(scene: Phaser.Scene, tilemaps: TilemapDefinition[]): void
-export function getAssetUrl(relativePath: string, baseUrl?: string): string
-
-// packages/shared/src/constants/game.ts
-export const GAME_CONFIG = {
-  TILE_SIZE: 32,  // pixels per tile — used everywhere in this piece
-  AI_TICK_RATE: 12,
-  // ... other constants
-}
-
-// packages/shared/src/constants/events.ts
-export const GAME_EVENTS = {
-  // This piece adds:
-  MAP_LOADED: 'game:map-loaded',
-  ZONE_ENTERED: 'game:zone-entered',
-  ZONE_EXITED: 'game:zone-exited',
-}
-```
-
-This piece MUST update `SceneKey` to add `MAP`, update `GAME_EVENTS` to add map events, and update `createGameConfig` to include `MapScene` in the scene array.
+This piece must update the scene keys registry, the event constants, and the game config factory to register the map scene.
 
 ### Procedural Map Generation
 
-**`packages/game-engine/src/world/map-generator.ts`**:
-
 The map generator uses a seeded pseudo-random number generator (PRNG) so the same seed always produces the same map. This is critical for multiplayer — the server sends the seed to both clients, and both generate identical maps locally without transmitting tile data.
 
-**Algorithm**: Template-based room-and-corridor generation with biome-specific overrides. This is simpler than Wave Function Collapse (WFC) or BSP trees and produces reliably playable layouts:
+**Algorithm**: Template-based room-and-corridor generation with biome-specific overrides. This is simpler than Wave Function Collapse or BSP trees and produces reliably playable layouts:
 
 1. Select a biome to determine map dimensions, structural templates, and tile palette
 2. Initialize an empty grid (all walls)
@@ -105,178 +72,54 @@ The map generator uses a seeded pseudo-random number generator (PRNG) so the sam
 6. Place spawn points: player spawn, NPC spawns, item locations, exit points
 7. Run passability validation — confirm all spawn points are reachable
 
-```typescript
-import Phaser from 'phaser'
-import type { MapGrid, GeneratedMap, SpawnPoints } from '@repo/shared/types/tiles'
-import type { BiomeConfig } from '@repo/shared/types/biome'
-
-export class MapGenerator {
-  private rng: Phaser.Math.RandomDataGenerator
-
-  constructor(seed: string) {
-    this.rng = new Phaser.Math.RandomDataGenerator([seed])
-  }
-
-  generate(biomeConfig: BiomeConfig): GeneratedMap {
-    const grid = this.initializeGrid(biomeConfig.width, biomeConfig.height)
-    this.placeStructures(grid, biomeConfig)
-    this.connectStructures(grid, biomeConfig)
-    const zones = this.assignZones(grid, biomeConfig)
-    const spawns = this.placeSpawnPoints(grid, biomeConfig, zones)
-    this.validatePassability(grid, spawns)
-
-    return { grid, zones, spawns, biome: biomeConfig.id, seed: this.rng.state() }
-  }
-
-  private initializeGrid(width: number, height: number): MapGrid { /* ... */ }
-  private placeStructures(grid: MapGrid, config: BiomeConfig) { /* ... */ }
-  private connectStructures(grid: MapGrid, config: BiomeConfig) { /* ... */ }
-  private assignZones(grid: MapGrid, config: BiomeConfig) { /* ... */ }
-  private placeSpawnPoints(grid: MapGrid, config: BiomeConfig, zones: Zone[]): SpawnPoints { /* ... */ }
-  private validatePassability(grid: MapGrid, spawns: SpawnPoints): void { /* throw if unreachable */ }
-}
-```
+The map generator takes a seed string and produces a complete generated map containing the tile grid, zone list, spawn points, biome ID, and serialized RNG state.
 
 ### Tile System
 
-**`packages/shared/src/types/tiles.ts`**:
+Each tile in the map has a type and properties:
 
-```typescript
-export type TileType =
-  | 'floor'
-  | 'wall'
-  | 'door'
-  | 'water'
-  | 'interactable'  // dumpsters, lockers, crates — can hide bodies or items
-  | 'hazard'        // environmental danger
-  | 'exit'          // run exit point
-  | 'void'          // impassable empty space
+**Tile types**: floor, wall, door, water, interactable (dumpsters, lockers, crates — can hide bodies or items), hazard (environmental danger), exit (run exit point), void (impassable empty space).
 
-export interface TileProperties {
-  type: TileType
-  passable: boolean
-  transparent: boolean    // blocks line-of-sight
-  tilesheetIndex: number  // index into the biome's tilesheet
-}
+**Tile properties**: type, passable (whether entities can walk on it), transparent (whether it blocks line-of-sight), and a tilesheet index for rendering.
 
-export interface MapGrid {
-  width: number           // tiles wide
-  height: number          // tiles tall
-  tiles: TileProperties[][]  // [row][col]
-}
+**Map grid**: A 2D array of tile properties with width and height in tile units.
 
-export interface Zone {
-  id: string
-  name: string            // human-readable: "Main Hall", "Parking Lot B", "Ride Area 3"
-  bounds: {               // tile coordinates
-    x: number
-    y: number
-    width: number
-    height: number
-  }
-  zoneType: ZoneType
-}
+### Zones
 
-export type ZoneType =
-  | 'indoor'
-  | 'outdoor'
-  | 'restricted'     // high security — alarm if killer enters
-  | 'crowd'          // dense NPC presence
-  | 'isolated'       // few NPCs, low visibility
-  | 'transit'        // vehicles, movement corridors
-  | 'surveillance'   // cameras present
+Each zone represents a named semantic area within the map. Zones have:
+- A unique ID and human-readable name (e.g., "Main Hall", "Parking Lot B")
+- Bounding rectangle in tile coordinates
+- A zone type that governs gameplay behavior
 
-export interface SpawnPoints {
-  playerSpawn: { x: number; y: number }        // tile coordinates
-  npcSpawns: Array<{ x: number; y: number; role?: string }>
-  itemSpawns: Array<{ x: number; y: number; tier: 'common' | 'uncommon' | 'rare' }>
-  targetSpawns: Array<{ x: number; y: number }> // killer's assigned targets start here
-  exitPoints: Array<{ x: number; y: number }>
-}
+**Zone types**: indoor, outdoor, restricted (alarm if killer enters), crowd (dense NPC presence), isolated (few NPCs, low visibility), transit (movement corridors), surveillance (cameras present).
 
-export interface GeneratedMap {
-  grid: MapGrid
-  zones: Zone[]
-  spawns: SpawnPoints
-  biome: string
-  seed: string
-}
-```
+### Spawn Points
 
-### Biome Type System
+The spawn system tracks locations for: the player spawn, NPC spawn positions with optional role hints, item spawn positions with rarity tier (common/uncommon/rare), target spawn positions (killer's assigned targets start here), and exit points.
 
-**`packages/shared/src/types/biome.ts`**:
+### Biome Data Model
 
-```typescript
-export interface BiomeDifficulty {
-  killerDifficulty: 1 | 2 | 3 | 4 | 5  // 1 = easiest for killer, 5 = hardest
-  fedDifficulty: 1 | 2 | 3 | 4 | 5      // 1 = easiest for fed, 5 = hardest
-  rationale: string                      // why these ratings
-}
+Each of the 14 biomes has a configuration object defining:
+- Unique ID and display name
+- Map dimensions (width × height in tiles)
+- Asymmetric difficulty ratings for killer and fed (1–5 scale), with rationale
+- NPC density (sparse / moderate / dense / massive)
+- Lighting level (dark / dim / normal / bright)
+- Boolean flags: has indoors, has surveillance cameras, has restricted alarm zones
+- Asset keys for ambient sound and the biome's tilesheet
+- Structure template IDs for procedural placement
+- Structure density and object density (0.0–1.0 floats)
+- Unlock requirement: default, runs-completed threshold, achievement, or purchased
 
-export interface BiomeConfig {
-  id: string
-  name: string
-  description: string
-  width: number          // map width in tiles
-  height: number         // map height in tiles
-  difficulty: BiomeDifficulty
-  npcDensity: 'sparse' | 'moderate' | 'dense' | 'massive'
-  lightingLevel: 'dark' | 'dim' | 'normal' | 'bright'
-  hasIndoors: boolean
-  hasSurveillance: boolean    // cameras present (fed advantage)
-  hasRestrictedZones: boolean // alarm zones (killer disadvantage)
-  ambientSound: string        // asset key for ambient audio
-  tilesheetKey: string        // Phaser asset key for tilesheet
-  structureTemplates: string[] // template IDs for procedural placement
-  structureDensity: number    // 0.0-1.0, how many structures fill the map
-  objectDensity: number       // 0.0-1.0, interactables per area
-  unlockRequirement: BiomeUnlockRequirement
-}
-
-export interface BiomeUnlockRequirement {
-  type: 'default' | 'runs_completed' | 'achievement' | 'purchased'
-  value?: number | string
-}
-```
-
-**`packages/shared/src/constants/biomes.ts`**:
-
-```typescript
-import type { BiomeConfig } from '../types/biome'
-
-export const BIOME_CATALOG: Record<string, BiomeConfig> = {
-  'rural-farmland': ruralFarmlandConfig,
-  'city-streets': cityStreetsConfig,
-  'office-building': officeBuildingConfig,
-  'cruise-ship': cruiseShipConfig,
-  'amusement-park': amusementParkConfig,
-  'shopping-mall': shoppingMallConfig,
-  'airport-terminal': airportTerminalConfig,
-  'abandoned-asylum': abandonedAsylumConfig,
-  'remote-island': remoteIslandConfig,
-  'ghost-town': ghostTownConfig,
-  'concert-festival': concertFestivalConfig,
-  'subway-network': subwayNetworkConfig,
-  'casino-floor': casinoFloorConfig,
-  'university-campus': universityCampusConfig,
-} as const
-
-export const DEFAULT_BIOMES = [
-  'rural-farmland',
-  'city-streets',
-] as const  // Available from first run, no unlock required
-
-export const BIOME_IDS = Object.keys(BIOME_CATALOG) as Array<keyof typeof BIOME_CATALOG>
-```
+**Unlock requirement types**: Each biome specifies how it is unlocked. Default biomes are available from the first run. Others require completing a certain number of runs, earning an achievement, or purchasing. The biome catalog exports: `BIOME_CATALOG` (all 14 configs by ID), `DEFAULT_BIOMES` (the 2 launch biomes), and `BIOME_IDS` (all keys for iteration).
 
 ### Biome Catalog
 
-All 14 biomes, each with a definition file in `packages/game-engine/src/world/biomes/`:
+All 14 biomes, each with its own definition in the biomes directory of the game engine:
 
 ---
 
-#### 1. Rural Farmland (`biomes/rural-farmland.ts`)
+#### 1. Rural Farmland
 
 Open countryside with scattered farmhouses, barns, fields, and a dirt road network. Sparse population of farmers and residents.
 
@@ -295,7 +138,7 @@ Open countryside with scattered farmhouses, barns, fields, and a dirt road netwo
 
 ---
 
-#### 2. City Streets (`biomes/city-streets.ts`)
+#### 2. City Streets
 
 Dense urban grid of blocks, storefronts, back alleys, parked cars, and pedestrian traffic. Moderate to high population.
 
@@ -314,7 +157,7 @@ Dense urban grid of blocks, storefronts, back alleys, parked cars, and pedestria
 
 ---
 
-#### 3. Office Building (`biomes/office-building.ts`)
+#### 3. Office Building
 
 Multi-floor corporate office complex with cubicle farms, conference rooms, break rooms, server room, and rooftop access.
 
@@ -333,7 +176,7 @@ Multi-floor corporate office complex with cubicle farms, conference rooms, break
 
 ---
 
-#### 4. Cruise Ship (`biomes/cruise-ship.ts`)
+#### 4. Cruise Ship
 
 Luxury ocean liner with multiple decks: casino, pool deck, dining hall, cabins corridor, engine room, and bridge.
 
@@ -352,7 +195,7 @@ Luxury ocean liner with multiple decks: casino, pool deck, dining hall, cabins c
 
 ---
 
-#### 5. Amusement Park (`biomes/amusement-park.ts`)
+#### 5. Amusement Park
 
 A bustling theme park with roller coasters, carnival games, food stalls, a haunted house attraction, maintenance tunnels, and massive crowds.
 
@@ -371,7 +214,7 @@ A bustling theme park with roller coasters, carnival games, food stalls, a haunt
 
 ---
 
-#### 6. Shopping Mall (`biomes/shopping-mall.ts`)
+#### 6. Shopping Mall
 
 Three-floor enclosed shopping mall with anchor stores, food court, escalators, service corridors, parking structure, and a rooftop cinema.
 
@@ -390,7 +233,7 @@ Three-floor enclosed shopping mall with anchor stores, food court, escalators, s
 
 ---
 
-#### 7. Airport Terminal (`biomes/airport-terminal.ts`)
+#### 7. Airport Terminal
 
 International airport terminal with departures hall, security checkpoint, gate lounges, baggage claim, duty-free shops, and service tunnels.
 
@@ -409,7 +252,7 @@ International airport terminal with departures hall, security checkpoint, gate l
 
 ---
 
-#### 8. Abandoned Asylum / Haunted House (`biomes/abandoned-asylum.ts`)
+#### 8. Abandoned Asylum / Haunted House
 
 Decrepit psychiatric hospital, half-collapsed, with long corridors, padded cells, a morgue, operating theater, and overgrown courtyard. Minimal NPC presence.
 
@@ -429,7 +272,7 @@ Decrepit psychiatric hospital, half-collapsed, with long corridors, padded cells
 
 ---
 
-#### 9. Remote Island (`biomes/remote-island.ts`)
+#### 9. Remote Island
 
 A tropical island resort with beach areas, a hotel complex, jungle interior, boat dock, and a lighthouse. Surrounded by water — no leaving except via the boat dock.
 
@@ -448,7 +291,7 @@ A tropical island resort with beach areas, a hotel complex, jungle interior, boa
 
 ---
 
-#### 10. Decaying Ghost Town (`biomes/ghost-town.ts`)
+#### 10. Decaying Ghost Town
 
 An abandoned American frontier town — saloon, general store, sheriff's office, church, houses — with tumbleweeds, dust, and a sparse population of squatters and drifters.
 
@@ -468,7 +311,7 @@ An abandoned American frontier town — saloon, general store, sheriff's office,
 
 ---
 
-#### 11. Concert Venue / Festival (`biomes/concert-festival.ts`)
+#### 11. Concert Venue / Festival
 
 An outdoor music festival with main stage, multiple smaller stages, food vendor rows, backstage areas, VIP section, camping grounds, and tens of thousands of fictional attendees represented by dense NPC clusters.
 
@@ -487,7 +330,7 @@ An outdoor music festival with main stage, multiple smaller stages, food vendor 
 
 ---
 
-#### 12. Subway Network (`biomes/subway-network.ts`)
+#### 12. Subway Network
 
 Underground metro system with interconnected platforms, maintenance tunnels, control room, train cars, employee-only areas, and multiple station exits to the surface.
 
@@ -506,7 +349,7 @@ Underground metro system with interconnected platforms, maintenance tunnels, con
 
 ---
 
-#### 13. Casino Floor (`biomes/casino-floor.ts`)
+#### 13. Casino Floor
 
 A Las Vegas-style casino with table games floor, slot machine rows, a high-roller VIP room, backstage money handling, hotel lobby connection, and a rooftop bar.
 
@@ -525,7 +368,7 @@ A Las Vegas-style casino with table games floor, slot machine rows, a high-rolle
 
 ---
 
-#### 14. University Campus (`biomes/university-campus.ts`)
+#### 14. University Campus
 
 A sprawling university with lecture buildings, library, student dorms, research labs, gymnasium, quad, and underground steam tunnels connecting buildings.
 
@@ -559,58 +402,289 @@ Remaining 10 biomes are implemented during this piece but unlocked through play 
 
 ### Tile Manager
 
-**`packages/game-engine/src/world/tile-manager.ts`**:
-
-- Holds the `MapGrid` for the current run
-- Provides tile lookup by coordinate: `getTile(x, y): TileProperties`
-- Provides tile mutation for runtime changes: `setTile(x, y, type: TileType)`
-- Renders the tilemap to Phaser: wraps `Phaser.Tilemaps.Tilemap` creation from the generated grid
-- Handles tile animation (water shimmer, hazard flicker)
+The tile manager holds the tile grid for the current run and provides:
+- Tile lookup by coordinate: returns a tile's type and properties at a given position
+- Tile mutation for runtime changes: updates a tile type when bodies are placed, doors open, etc.
+- Tilemap rendering: wraps Phaser's Tilemap API to render the generated grid to the screen
+- Tile animation for water shimmer and hazard flicker effects
 
 ### Collision Layer
 
-**`packages/game-engine/src/world/collision-layer.ts`**:
+The collision layer is computed from the map grid at run start but stored separately as a boolean grid for performance. Separate from visual tiles, it only tracks passability.
 
-Separate from visual tiles — collision is computed from the grid but stored as a boolean grid for performance:
+Capabilities:
+- Impassability check: returns whether a given tile coordinate is blocked
+- Line-of-sight check: uses Bresenham's line algorithm to determine if a straight sightline is clear of walls
+- Dynamic update: can toggle a tile's blocked state when doors open, bodies are placed, etc.
+
+Line-of-sight is used by NPC perception (piece 06) and evidence rendering.
+
+### Spawn Manager
+
+Wraps the spawn points from the generated map. Converts tile coordinates to world pixel coordinates. Provides access to:
+- Player spawn position
+- NPC spawn positions (with optional count limit)
+- Item spawn positions (filterable by rarity tier)
+- Killer target starting positions
+- Valid exit point locations
+
+### Camera Controller
+
+Wraps Phaser's main camera with game-specific behavior:
+- Sets world bounds to the map's full pixel dimensions on initialization
+- Smooth-follow mode: tracks a game object with configurable lerp (0.15 for smooth camera movement)
+- Zoom control: default zoom is 1.5 (zoomed in because maps are large); zoom out available via hold-key for overview
+- Camera shake: for dramatic moments
+
+### Pathfinding
+
+A* pathfinding on the collision grid for NPC navigation. Custom implementation (approximately 50 lines) — no external library needed. A* with Manhattan distance heuristic is fast enough for 20–40 NPCs at 12 Hz AI tick rate.
+
+Capabilities:
+- Path finding: finds a path between two tile positions; returns the path as an array of tile coordinates, or null if unreachable
+- Grid update: synchronizes with the collision layer when a cell's walkability changes
+
+### Zone Manager
+
+Manages the zone list from the generated map. Capabilities:
+- Zone lookup by coordinate: returns all zones containing a given tile position (a tile can be in multiple zones)
+- Zone lookup by ID: retrieves a specific zone
+- Zone lookup by type: returns all zones of a given type (used by the NPC system for patrol zone assignment)
+
+Zone transitions emit map events (zone-entered, zone-exited) when tracked entities cross zone boundaries.
+
+### Map Scene
+
+The main gameplay scene. Orchestrates all map subsystems:
+
+On initialization: receives a seed and biome ID from the run manager (piece 07). During development, hardcoded defaults are used.
+
+On preload: loads biome-specific (deferred tier) assets — the tilesheet for this biome, NPC sprites, etc.
+
+On create: generates the map, instantiates all subsystems (tile manager, collision layer, pathfinding grid, spawn manager, zone manager, camera controller), then emits the map-loaded event with the biome ID, map dimensions, and a zone summary.
+
+On update: detects zone transitions by checking tracked entities against zone boundaries. Player entity integration is stubbed until piece 07.
+
+The map scene is added to the game config's scene array as the third entry after Boot and Preload.
+
+### Minimap Data
+
+The minimap data bridge exports a simplified map representation to the React state layer for the minimap HUD component (piece 07). The minimap data includes:
+- Map dimensions (width and height in tiles)
+- Explored tiles: a boolean grid tracking fog-of-war (which tiles the player has seen)
+- Zone name and bounds list (for the minimap overlay)
+- Exit point positions
+
+An export function is called from the map scene's update loop as the player reveals new areas. Fog-of-war starts as all unexplored — tiles within a radius of the player are marked as the player moves. Tracked client-side only (not server-validated).
+
+### Map State (React Layer)
+
+React-side state for the current map, readable by HUD components. Tracks:
+- Current biome ID and display name — set when the map-loaded event fires
+- Map loaded flag — boolean for HUD to know when to render map-related UI
+- Minimap data — the simplified map representation written by the map scene
+- Current zone name — updated as the player moves through zone boundaries
+
+### Edge Cases
+
+- **Seed management for multiplayer**: The multiplayer host generates the seed (piece 14). For singleplayer (and during this piece's development), generate a random seed at run start using Phaser's built-in random data generator. The seed must be a string.
+- **Passability validation**: The generator MUST verify that player spawn and all exit points are reachable via pathfinding. If not, regenerate with a modified seed (append a retry suffix). After 3 failures, fallback to a guaranteed-valid hardcoded seed.
+- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during polish (piece 15).
+- **Map size scaling**: Large maps (concert festival at 180×150 = 27,000 tiles) can be memory-intensive. Use lazy rendering — only process tiles near the camera. Phaser's tilemap layer supports culling for this purpose.
+- **Collision layer dynamic updates**: When a body is placed on a tile or a door opens, both the collision layer and the pathfinding grid must be updated together to keep them in sync.
+- **Fog of war**: The explored tiles grid starts as all-false. As the player moves, tiles within a radius are marked explored. The minimap shows only explored tiles. Unexplored tiles render as black on the minimap. This is tracked client-side only (not server-validated for performance).
+
+----
+
+## /speckit.plan Prompt
+
+> **Usage**: Copy everything between the `----` markers below, then paste after
+> typing `/speckit.plan ` (note the trailing space).
+
+----
+
+### Architecture Approach
+
+Build the map generator first with a simple test biome (use rural farmland — it's the simplest layout). Validate the grid, zones, and spawn points render correctly before building the full biome catalog. Add the collision layer and pathfinding once the tile system renders. Add the zone manager last, verified by EventBus zone events firing correctly.
+
+Define all 14 biome `BiomeConfig` objects even if only 4 are playable at launch. The config catalog costs almost nothing to define — implementation effort is in the structure templates and tilesheets, which can be placeholder initially.
+
+### Tile and Zone Types — `packages/shared/src/types/tiles.ts`
+
+```typescript
+export type TileType = 'floor' | 'wall' | 'door' | 'water' | 'interactable' | 'hazard' | 'exit' | 'void'
+
+export interface TileProperties {
+  type: TileType
+  passable: boolean
+  transparent: boolean    // blocks line-of-sight
+  tilesheetIndex: number  // index into the biome's tilesheet
+}
+
+export interface MapGrid {
+  width: number
+  height: number
+  tiles: TileProperties[][]  // [row][col]
+}
+
+export type ZoneType = 'indoor' | 'outdoor' | 'restricted' | 'crowd' | 'isolated' | 'transit' | 'surveillance'
+
+export interface Zone {
+  id: string
+  name: string
+  bounds: { x: number; y: number; width: number; height: number }  // tile coordinates
+  zoneType: ZoneType
+}
+
+export interface SpawnPoints {
+  playerSpawn: { x: number; y: number }
+  npcSpawns: Array<{ x: number; y: number; role?: string }>
+  itemSpawns: Array<{ x: number; y: number; tier: 'common' | 'uncommon' | 'rare' }>
+  targetSpawns: Array<{ x: number; y: number }>
+  exitPoints: Array<{ x: number; y: number }>
+}
+
+export interface GeneratedMap {
+  grid: MapGrid
+  zones: Zone[]
+  spawns: SpawnPoints
+  biome: string
+  seed: string
+}
+```
+
+### Biome Types — `packages/shared/src/types/biome.ts`
+
+```typescript
+export interface BiomeDifficulty {
+  killerDifficulty: 1 | 2 | 3 | 4 | 5
+  fedDifficulty: 1 | 2 | 3 | 4 | 5
+  rationale: string
+}
+
+export interface BiomeUnlockRequirement {
+  type: 'default' | 'runs_completed' | 'achievement' | 'purchased'
+  value?: number | string
+}
+
+export interface BiomeConfig {
+  id: string
+  name: string
+  description: string
+  width: number
+  height: number
+  difficulty: BiomeDifficulty
+  npcDensity: 'sparse' | 'moderate' | 'dense' | 'massive'
+  lightingLevel: 'dark' | 'dim' | 'normal' | 'bright'
+  hasIndoors: boolean
+  hasSurveillance: boolean
+  hasRestrictedZones: boolean
+  ambientSound: string
+  tilesheetKey: string
+  structureTemplates: string[]
+  structureDensity: number     // 0.0–1.0
+  objectDensity: number        // 0.0–1.0
+  unlockRequirement: BiomeUnlockRequirement
+}
+```
+
+### Biome Catalog — `packages/shared/src/constants/biomes.ts`
+
+```typescript
+import type { BiomeConfig } from '../types/biome'
+
+// One file per biome in packages/game-engine/src/world/biomes/
+// Import and register each here:
+export const BIOME_CATALOG: Record<string, BiomeConfig> = {
+  'rural-farmland': ruralFarmlandConfig,
+  'city-streets': cityStreetsConfig,
+  'office-building': officeBuildingConfig,
+  'cruise-ship': cruiseShipConfig,
+  'amusement-park': amusementParkConfig,
+  'shopping-mall': shoppingMallConfig,
+  'airport-terminal': airportTerminalConfig,
+  'abandoned-asylum': abandonedAsylumConfig,
+  'remote-island': remoteIslandConfig,
+  'ghost-town': ghostTownConfig,
+  'concert-festival': concertFestivalConfig,
+  'subway-network': subwayNetworkConfig,
+  'casino-floor': casinoFloorConfig,
+  'university-campus': universityCampusConfig,
+} as const
+
+export const DEFAULT_BIOMES = ['rural-farmland', 'city-streets'] as const
+export const BIOME_IDS = Object.keys(BIOME_CATALOG) as Array<keyof typeof BIOME_CATALOG>
+```
+
+### MapGenerator Class Signature — `packages/game-engine/src/world/map-generator.ts`
+
+```typescript
+import Phaser from 'phaser'
+import type { MapGrid, GeneratedMap, SpawnPoints, Zone } from '@repo/shared/types/tiles'
+import type { BiomeConfig } from '@repo/shared/types/biome'
+
+export class MapGenerator {
+  private rng: Phaser.Math.RandomDataGenerator
+
+  constructor(seed: string) {
+    this.rng = new Phaser.Math.RandomDataGenerator([seed])
+  }
+
+  generate(biomeConfig: BiomeConfig): GeneratedMap {
+    const grid = this.initializeGrid(biomeConfig.width, biomeConfig.height)
+    this.placeStructures(grid, biomeConfig)
+    this.connectStructures(grid, biomeConfig)
+    const zones = this.assignZones(grid, biomeConfig)
+    const spawns = this.placeSpawnPoints(grid, biomeConfig, zones)
+    this.validatePassability(grid, spawns)
+    return { grid, zones, spawns, biome: biomeConfig.id, seed: this.rng.state() }
+  }
+
+  private initializeGrid(width: number, height: number): MapGrid { ... }
+  private placeStructures(grid: MapGrid, config: BiomeConfig): void { ... }
+  private connectStructures(grid: MapGrid, config: BiomeConfig): void { ... }
+  private assignZones(grid: MapGrid, config: BiomeConfig): Zone[] { ... }
+  private placeSpawnPoints(grid: MapGrid, config: BiomeConfig, zones: Zone[]): SpawnPoints { ... }
+  private validatePassability(grid: MapGrid, spawns: SpawnPoints): void { ... } // throws on failure
+}
+```
+
+### CollisionLayer — `packages/game-engine/src/world/collision-layer.ts`
 
 ```typescript
 export class CollisionLayer {
   private grid: boolean[][]  // true = blocked
 
   constructor(mapGrid: MapGrid) {
-    // Build collision grid from tile passability
-    this.grid = mapGrid.tiles.map(row =>
-      row.map(tile => !tile.passable)
-    )
+    this.grid = mapGrid.tiles.map(row => row.map(tile => !tile.passable))
   }
 
   isBlocked(tileX: number, tileY: number): boolean { ... }
-
-  // Line-of-sight calculation (Bresenham's algorithm)
-  hasLineOfSight(from: {x: number, y: number}, to: {x: number, y: number}): boolean { ... }
-
-  // Dynamic updates (doors opening, bodies placed)
+  hasLineOfSight(from: {x: number; y: number}, to: {x: number; y: number}): boolean { ... } // Bresenham's
   setBlocked(tileX: number, tileY: number, blocked: boolean): void { ... }
 }
 ```
 
-Line-of-sight is used by NPC perception (piece 06) and evidence rendering.
+### PathfindingGrid — `packages/game-engine/src/world/pathfinding.ts`
 
-### Spawn Manager
+```typescript
+export class PathfindingGrid {
+  private grid: boolean[][]
+  private width: number
+  private height: number
 
-**`packages/game-engine/src/world/spawn-manager.ts`**:
+  constructor(collisionLayer: CollisionLayer, width: number, height: number) { ... }
 
-Manages the `SpawnPoints` from the generated map:
+  findPath(
+    start: {x: number; y: number},
+    end: {x: number; y: number}
+  ): Array<{x: number; y: number}> | null { ... }  // null = unreachable
 
-- `getPlayerSpawn(): {x: number, y: number}` — returns world pixel coordinates (tile × TILE_SIZE)
-- `getNpcSpawns(count: number): Array<{x: number, y: number}>` — returns NPC spawn positions
-- `getItemSpawns(tier: 'common' | 'uncommon' | 'rare'): Array<{x: number, y: number}>`
-- `getTargetSpawns(): Array<{x: number, y: number}>`
-- `getExitPoints(): Array<{x: number, y: number}>`
+  updateCell(tileX: number, tileY: number, walkable: boolean): void { ... }
+}
+```
 
-### Camera Controller
-
-**`packages/game-engine/src/world/camera-controller.ts`**:
+### CameraController — `packages/game-engine/src/world/camera-controller.ts`
 
 ```typescript
 export class CameraController {
@@ -618,166 +692,45 @@ export class CameraController {
 
   constructor(scene: Phaser.Scene, mapWidth: number, mapHeight: number) {
     this.camera = scene.cameras.main
-    // Set camera world bounds to map dimensions
     this.camera.setBounds(0, 0, mapWidth * GAME_CONFIG.TILE_SIZE, mapHeight * GAME_CONFIG.TILE_SIZE)
   }
 
   followTarget(target: Phaser.GameObjects.GameObject): void {
-    this.camera.startFollow(target, true, 0.15, 0.15) // lerp for smooth follow
+    this.camera.startFollow(target, true, 0.15, 0.15)
   }
 
-  setZoom(zoom: number): void {
-    this.camera.setZoom(zoom) // 1.0 = default, 1.5 = zoomed in
-  }
-
-  shake(duration: number, intensity: number): void {
-    this.camera.shake(duration, intensity)
-  }
+  setZoom(zoom: number): void { this.camera.setZoom(zoom) }
+  shake(duration: number, intensity: number): void { this.camera.shake(duration, intensity) }
 }
 ```
 
-Default zoom: 1.5 (maps are large; zoom in makes the game feel intimate and tense). Zoom out is available via hold-key for overview.
+Default zoom: 1.5.
 
-### Pathfinding
-
-**`packages/game-engine/src/world/pathfinding.ts`**:
-
-Implements A* pathfinding on the collision grid for NPC navigation:
-
-```typescript
-export class PathfindingGrid {
-  private grid: boolean[][]  // from CollisionLayer
-  private width: number
-  private height: number
-
-  constructor(collisionLayer: CollisionLayer, width: number, height: number) { ... }
-
-  // Find path from start to end in TILE coordinates
-  // Returns array of tile positions, or null if unreachable
-  findPath(
-    start: {x: number, y: number},
-    end: {x: number, y: number}
-  ): Array<{x: number, y: number}> | null { ... }
-
-  // Update when collision changes (door opens, body blocks path)
-  updateCell(tileX: number, tileY: number, walkable: boolean): void { ... }
-}
-```
-
-A* is the correct algorithm. Dijkstra would be too slow for per-frame NPC navigation. WaveFront or flow-field algorithms are overkill for this piece count. A* with a simple heuristic (Manhattan distance) is fast enough for 20–40 NPCs at 12 Hz AI tick rate.
-
-### Zone Manager
-
-**`packages/game-engine/src/world/zone-manager.ts`**:
+### ZoneManager — `packages/game-engine/src/world/zone-manager.ts`
 
 ```typescript
 export class ZoneManager {
-  private zones: Zone[]
+  constructor(private zones: Zone[]) {}
 
-  constructor(zones: Zone[]) {
-    this.zones = zones
-  }
-
-  // Returns all zones containing the given tile coordinate
   getZonesAt(tileX: number, tileY: number): Zone[] { ... }
-
-  // Returns zone by ID
   getZone(zoneId: string): Zone | undefined { ... }
-
-  // NPC zone assignment — which zone should this NPC patrol?
   getZonesOfType(type: ZoneType): Zone[] { ... }
 }
 ```
 
-Zone transitions emit EventBus events (`GAME_EVENTS.ZONE_ENTERED`, `GAME_EVENTS.ZONE_EXITED`) when tracked entities cross zone boundaries. Used by piece 09 (evidence system) for zone-based evidence context and piece 06 (NPC system) for assigning NPCs to patrol zones.
-
-### Map Scene
-
-**`packages/game-engine/src/scenes/map-scene.ts`**:
-
-The main gameplay scene:
+### MinimapData — `packages/game-engine/src/world/minimap-data.ts`
 
 ```typescript
-export class MapScene extends Phaser.Scene {
-  private mapGenerator!: MapGenerator
-  private tileManager!: TileManager
-  private collisionLayer!: CollisionLayer
-  private pathfindingGrid!: PathfindingGrid
-  private spawnManager!: SpawnManager
-  private cameraController!: CameraController
-  private zoneManager!: ZoneManager
+import type { MapGrid, Zone, SpawnPoints } from '@repo/shared/types/tiles'
 
-  constructor() {
-    super({ key: SceneKey.MAP })
-  }
-
-  init(data: { seed: string; biomeId: string }) {
-    // Receive seed and biome from run manager (piece 07)
-    // OR from development defaults during this piece's testing
-    this.mapSeed = data.seed
-    this.biomeId = data.biomeId
-  }
-
-  preload() {
-    // Load deferred (biome-specific) assets
-    const biomeConfig = BIOME_CATALOG[this.biomeId]
-    // Load tilesheet for this biome, NPC sprites, etc.
-  }
-
-  create() {
-    const biomeConfig = BIOME_CATALOG[this.biomeId]
-    this.mapGenerator = new MapGenerator(this.mapSeed)
-    const generatedMap = this.mapGenerator.generate(biomeConfig)
-
-    this.tileManager = new TileManager(this, generatedMap.grid)
-    this.collisionLayer = new CollisionLayer(generatedMap.grid)
-    this.pathfindingGrid = new PathfindingGrid(
-      this.collisionLayer,
-      generatedMap.grid.width,
-      generatedMap.grid.height
-    )
-    this.spawnManager = new SpawnManager(generatedMap.spawns)
-    this.zoneManager = new ZoneManager(generatedMap.zones)
-    this.cameraController = new CameraController(
-      this,
-      generatedMap.grid.width,
-      generatedMap.grid.height
-    )
-
-    // Emit map-loaded event for React to update UI
-    eventBus.emit(GAME_EVENTS.MAP_LOADED, {
-      biomeId: this.biomeId,
-      mapWidth: generatedMap.grid.width,
-      mapHeight: generatedMap.grid.height,
-      zoneSummary: generatedMap.zones.map(z => ({ id: z.id, name: z.name })),
-    })
-  }
-
-  update() {
-    // Zone transition detection — check player position against zones
-    // Player entity is added in piece 07; stub this out for now
-  }
-}
-```
-
-The MapScene is added to `createGameConfig`'s scene array: `scene: [BootScene, PreloadScene, MapScene]`.
-
-### Minimap Data
-
-**`packages/game-engine/src/world/minimap-data.ts`**:
-
-Exports a simplified representation of the map to Zustand for the React minimap component (HUD, piece 07):
-
-```typescript
 export interface MinimapData {
   width: number
   height: number
-  exploredTiles: boolean[][]  // fog of war — which tiles the player has seen
+  exploredTiles: boolean[][]
   zones: Array<{ name: string; bounds: Zone['bounds'] }>
   exitPoints: Array<{ x: number; y: number }>
 }
 
-// Called from MapScene.update() as player reveals new areas
 export function exportMinimapData(
   grid: MapGrid,
   exploredTiles: boolean[][],
@@ -786,11 +739,7 @@ export function exportMinimapData(
 ): MinimapData { ... }
 ```
 
-The minimap data is written to `useMapStore` (Zustand) and read by the React `Minimap.tsx` HUD component.
-
-### Zustand Map Store
-
-**`apps/web/src/stores/map.ts`**:
+### Zustand Map Store — `apps/web/src/stores/map.ts`
 
 ```typescript
 'use client'
@@ -811,11 +760,7 @@ interface MapStore {
 }
 
 export const useMapStore = create<MapStore>((set) => ({
-  biomeId: null,
-  biomeName: null,
-  mapLoaded: false,
-  minimapData: null,
-  currentZone: null,
+  biomeId: null, biomeName: null, mapLoaded: false, minimapData: null, currentZone: null,
   setBiomeId: (biomeId) => set({ biomeId }),
   setBiomeName: (biomeName) => set({ biomeName }),
   setMapLoaded: (mapLoaded) => set({ mapLoaded }),
@@ -824,29 +769,14 @@ export const useMapStore = create<MapStore>((set) => ({
 }))
 ```
 
-### Edge Cases
+### Updated Event Constants
 
-- **Seed management for multiplayer**: The multiplayer host generates the seed (piece 14). For singleplayer (and during this piece's development), generate a random seed at run start using `Phaser.Math.RandomDataGenerator.uuid()`. The seed must be a string.
-- **Passability validation**: The generator MUST verify that player spawn and all exit points are reachable via pathfinding. If not, regenerate with a modified seed (append `-retry-1`, `-retry-2`). After 3 failures, fallback to a guaranteed-valid hardcoded seed.
-- **Biome-specific assets**: Each biome requires its own tilesheet. For this piece, a placeholder tilesheet (basic colored tiles) can substitute. Real art assets are added during polish (piece 15).
-- **Map size scaling**: Large maps (concert festival at 180×150 = 27,000 tiles) can be memory-intensive. Use lazy rendering — only process tiles near the camera. Phaser's tilemap layer handles this with `setCullPadding`.
-- **Collision layer dynamic updates**: When a body is placed on a tile or a door opens, `CollisionLayer.setBlocked()` and `PathfindingGrid.updateCell()` must both be called to keep them in sync.
-- **Fog of war**: `exploredTiles` starts as all-false. As the player moves, tiles within a radius are marked explored. The minimap shows only explored tiles. Unexplored tiles render as black on the minimap. This is tracked client-side only (not server-validated for performance).
-
-----
-
-## /speckit.plan Prompt
-
-> **Usage**: Copy everything between the `----` markers below, then paste after
-> typing `/speckit.plan ` (note the trailing space).
-
-----
-
-### Architecture Approach
-
-Build the map generator first with a simple test biome (use rural farmland — it's the simplest layout). Validate the grid, zones, and spawn points render correctly before building the full biome catalog. Add the collision layer and pathfinding once the tile system renders. Add the zone manager last, verified by EventBus zone events firing correctly.
-
-Define all 14 biome `BiomeConfig` objects even if only 4 are playable at launch. The config catalog costs almost nothing to define — implementation effort is in the structure templates and tilesheets, which can be placeholder initially.
+Add to `packages/shared/src/constants/events.ts`:
+```typescript
+MAP_LOADED: 'game:map-loaded',
+ZONE_ENTERED: 'game:zone-entered',
+ZONE_EXITED: 'game:zone-exited',
+```
 
 ### Key Library Versions
 

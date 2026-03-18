@@ -49,711 +49,129 @@ last_aligned: never
 
 Build the real-time combat system shared by both roles. Combat in this game supports two contexts: regular encounters (player vs NPC guards, hostile NPCs) that occur in the map scene without scene transitions, and structured encounters (killer confronting a target that fights back, or fed directly confronting the killer) that use a more deliberate pacing. The system must emit enough detail in its events that the evidence system (piece 09) can generate appropriate forensic traces from combat actions.
 
-The combat system is built on a data-driven content architecture. All status effects, damage types, and abilities are defined as typed data objects in `packages/shared/src/data/` and registered in content registries at boot. The engine processes effects generically through the universal Effect type — adding new damage types, status effects, or abilities requires only a new data file entry, not code changes.
+The combat system is built on a data-driven content architecture. All status effects, damage types, and abilities are defined as typed data objects and registered in content registries at boot. The engine processes effects generically — adding new damage types, status effects, or abilities requires only a new data file entry, not code changes.
 
 ### Dependency Context (Inline)
 
-This piece depends on outputs from earlier pieces. These are reproduced here in full so this document is self-contained:
+This piece depends on several earlier systems. These are described here so this document is self-contained.
 
-**From project-scaffold**:
-```
-packages/shared/src/utils/result.ts:
-  - ok<T>(value: T): Ok<T, never>
-  - err<E>(error: E): Err<never, E>
-  - type AppError = { code: string; message: string }
-apps/web/src/lib/logger/pino.ts — Pino singleton
-```
+**Project scaffold** provides the shared Result type for fallible operations and a Pino logger singleton.
 
-**From game-engine-bootstrap**:
-```typescript
-// packages/game-engine/src/events/event-bus.ts
-eventBus.emit<K>(event: K, payload: GameEvents[K]): void
-eventBus.on<K>(event: K, handler: (payload: GameEvents[K]) => void): void
+**Game engine bootstrap** provides the EventBus (emit and subscribe typed events), the physics tick rate constant, and the game Zustand store.
 
-// packages/shared/src/constants/game.ts
-TICK_RATE: number
-// packages/game-engine/src/scenes/scene-keys.ts — SceneKey enum
-// apps/web/src/stores/game.ts — { isRunning, isPaused, currentScene }
-```
+**Entity and NPC system** provides the base entity class (which has health values and damage/heal methods the combat system calls), the perception system (for registering suspicious events caused by combat), and the entity type definitions.
 
-**From entity-and-npc-system**:
-```typescript
-// packages/game-engine/src/entities/base-entity.ts
-abstract class BaseEntity {
-  id: string; pos: Vec2; velocity: Vec2
-  health: number | null; maxHealth: number | null
-  entityType: EntityType
-  takeDamage(amount: number, source: string): void
-  heal(amount: number): void
-  setAnimation(key: AnimationKey, direction: Direction): void
-}
-// packages/game-engine/src/ai/perception.ts
-perceptionSystem.registerSuspiciousEvent(event: SuspiciousEvent): void
-// packages/shared/src/types/entity.ts — Entity, EntityType, EntityState
-```
+**Player and roles** provides the player controller (extends base entity), player action types, the inventory class (combat can trigger item use), the run manager (for querying current run state), player types (role, ability, role config), inventory item types, and the player and HUD Zustand stores.
 
-**From player-and-roles**:
-```typescript
-// packages/game-engine/src/player/player-controller.ts
-class PlayerController extends BaseEntity {
-  role: PlayerRole
-  movementMode: MovementMode
-  stamina: number
-  inventory: Inventory
-  useAbility(abilityId: string): boolean
-  performAction(action: PlayerAction): void
-}
-// packages/game-engine/src/player/player-actions.ts — PlayerAction, PlayerActionType
-// packages/game-engine/src/player/inventory.ts — Inventory.useItem()
-// packages/game-engine/src/run/run-manager.ts — RunManager.getCurrentState()
-// packages/shared/src/types/player.ts — PlayerRole, PlayerAbility, RoleConfig
-// packages/shared/src/types/inventory.ts — InventoryItem, ItemEffect
-// apps/web/src/stores/player.ts — player Zustand store
-// apps/web/src/stores/hud.ts — HUDStore.addNotification()
-```
+### Combat Overview
 
-### Combat System Overview
+Combat is real-time action with no turn-based mode. The player attacks using input-bound ability slots and movement. Enemies use combat AI to select and execute attacks. The system integrates seamlessly into the open map scene for regular encounters and supports more deliberate structured encounters for boss moments.
 
-Combat is **real-time action**, Hades-style. There is no turn-based mode. The player attacks using their input-bound ability slots and movement. Enemies use the combat AI to pick attacks and abilities. The system is designed for integration with both the open map scene (no transition for regular encounters) and more deliberate confrontation scenes for role-specific boss moments.
-
-Combat produces detailed EventBus events so the evidence system can reconstruct what happened: who attacked whom, with what weapon, where, and who was nearby as a witness.
+Combat emits detailed EventBus events so the evidence system can reconstruct what happened: who attacked whom, with what weapon, at what position, and who was nearby as a witness. The combat system does not generate evidence directly — it provides the raw data that the evidence system acts on.
 
 ### Data-Driven Content Architecture
 
-All combat content (status effects, damage types, abilities) follows the **ContentRegistry pattern**. The engine never hardcodes specific effect IDs in switch statements — it processes definitions generically through their `effects` arrays.
+All combat content (status effects, damage types, abilities) is defined in typed data objects and registered in a generic content registry at game boot. The engine never hardcodes specific effect IDs in switch statements — it looks up definitions by ID at runtime. This means:
 
-**File**: `packages/shared/src/registry/content-registry.ts`
+- Adding a new status effect requires only a new entry in the status effects data file and zero code changes (if using standard effect types)
+- Adding a new damage type works the same way
+- Adding new abilities follows the same pattern
+- Novel mechanics that cannot be expressed by standard effect types use a custom handler registration pattern — one handler function registered once covers any number of abilities that share that mechanic
 
-```typescript
-/**
- * Generic content registry. Stores typed definitions keyed by string ID.
- * All game content registers here at module load time. The engine looks up
- * definitions by ID at runtime.
- *
- * ADDING NEW CONTENT: Create a new entry in the appropriate data file
- * (e.g., packages/shared/src/data/status-effects.ts). The registry
- * validates the entry against its Zod schema at registration time.
- * No other code changes needed for standard effect types.
- */
-export class ContentRegistry<T extends { id: string }> {
-  private entries = new Map<string, T>();
-  private schema: ZodSchema<T>;
-  private name: string;
+The content registry is a generic class parameterized on the content type. It stores typed definitions keyed by string ID, validates entries against a Zod schema at registration time, rejects duplicate IDs, and provides fail-fast lookup (throws on unknown ID). A single boot registration function imports all data files and registers them with their respective registries before any gameplay begins.
 
-  constructor(name: string, schema: ZodSchema<T>) { ... }
+Each content type has its own registry instance: status effects, damage types, abilities, items, weapons, trophies, and skills.
 
-  register(entry: T): void          // validates via Zod, throws on duplicate
-  registerAll(entries: T[]): void
-  get(id: string): T | undefined
-  getOrThrow(id: string): T         // throws on unknown ID (fail fast)
-  has(id: string): boolean
-  getAll(): T[]
-  getByFilter(predicate: (entry: T) => boolean): T[]
-}
-```
-
-**File**: `packages/shared/src/registry/registries.ts`
-
-One registry instance per content type:
-
-```typescript
-export const statusEffectRegistry = new ContentRegistry('StatusEffect', statusEffectDefSchema);
-export const damageTypeRegistry   = new ContentRegistry('DamageType', damageTypeDefSchema);
-export const abilityRegistry      = new ContentRegistry('Ability', abilityDefSchema);
-export const itemRegistry         = new ContentRegistry('Item', itemDefSchema);
-export const weaponRegistry       = new ContentRegistry('Weapon', weaponDefSchema);
-export const trophyRegistry       = new ContentRegistry('Trophy', trophyDefSchema);
-export const skillRegistry        = new ContentRegistry('Skill', skillDefSchema);
-```
-
-**Boot registration**: `packages/shared/src/data/_register-all.ts` exports a `registerAllContent()` function that imports all data files and calls `registry.registerAll()` for each content type. Called once in `packages/game-engine/src/game-init.ts` before any gameplay begins.
-
-**Type evolution**: The hardcoded `type DamageType = 'MELEE' | 'RANGED' | ...` union is replaced by `type DamageTypeId = string` (validated against the registry at runtime). Compile-time exhaustiveness checking is traded for runtime validation via `getOrThrow()` and Zod schemas at registration.
+The hardcoded damage type union is replaced by a string ID that is validated against the damage type registry at runtime. This trades compile-time exhaustiveness checking for runtime validation and unlimited content extensibility.
 
 ### Universal Effect System
 
-Every game mechanic that modifies state is expressed as an `Effect`. Skills, abilities, trophies, weapons, status effects, and crafting modifications all produce Effects.
+Every game mechanic that modifies state is expressed as an Effect. Skills, abilities, trophies, weapons, status effects, and crafting modifications all produce arrays of Effects. The EffectProcessor applies Effect arrays to the appropriate game systems without knowing about specific content IDs.
 
-**File**: `packages/shared/src/effects/effect-types.ts`
+The Effect union covers: stat modifications (flat or percent), damage, damage per tick, healing, applying or removing status effects, cleansing a status category, knockback, teleport, preventing movement or attacks, ability unlock and cooldown modification, evidence reduction and generation, heat modification, item granting, and a custom escape hatch for novel mechanics.
 
-```typescript
-export type Effect =
-  // Stat modifications
-  | { type: 'STAT_MOD'; stat: StatId; value: number; modType: 'FLAT' | 'PERCENT' }
-  // Damage effects
-  | { type: 'DAMAGE'; damageTypeId: string; value: number }
-  | { type: 'DAMAGE_PER_TICK'; value: number }
-  | { type: 'HEAL'; value: number }
-  // Status effect application
-  | { type: 'APPLY_STATUS'; statusId: string; durationMs?: number; magnitude?: number }
-  | { type: 'REMOVE_STATUS'; statusId: string }
-  | { type: 'CLEANSE_CATEGORY'; category: string }
-  // Movement effects
-  | { type: 'KNOCKBACK'; force: number; directionFromSource: boolean }
-  | { type: 'TELEPORT'; distance: number; direction: 'FORWARD' | 'BACKWARD' | 'RANDOM' }
-  | { type: 'PREVENT_MOVEMENT' }
-  | { type: 'PREVENT_ATTACK' }
-  // Ability effects
-  | { type: 'ABILITY_UNLOCK'; abilityId: string }
-  | { type: 'COOLDOWN_REDUCTION'; abilityId: string; percent: number }
-  | { type: 'COOLDOWN_REDUCTION_ALL'; percent: number }
-  // Evidence effects (killer)
-  | { type: 'EVIDENCE_REDUCTION'; evidenceTypeId: string | null; percent: number }
-  | { type: 'GENERATE_EVIDENCE'; evidenceType: string; quality: string; probability: number }
-  | { type: 'DESTROY_EVIDENCE'; radius: number; maxCount: number }
-  // Investigation effects (fed)
-  | { type: 'SCAN_RADIUS_MOD'; percent: number }
-  | { type: 'DISCOVERY_SPEED_MOD'; multiplier: number }
-  | { type: 'FALSE_EVIDENCE_DETECTION_MOD'; percent: number }
-  | { type: 'ARREST_VIABILITY_MOD'; flat: number }
-  // Heat effects
-  | { type: 'HEAT_GENERATION_MOD'; percent: number }
-  | { type: 'HEAT_DECAY_MOD'; percent: number }
-  | { type: 'HEAT_COST_MOD'; percent: number }
-  | { type: 'HEAT_CAP_MOD'; flat: number }
-  // Item effects
-  | { type: 'START_WITH_ITEM'; itemId: string }
-  | { type: 'ITEM_STACK_MOD'; itemId: string; amount: number }
-  // Meta effects
-  | { type: 'MATERIAL_DROP_MOD'; percent: number }
-  | { type: 'DURATION_MOD'; targetEffectId: string; percent: number }
-  // Custom escape hatch for truly novel mechanics
-  | { type: 'CUSTOM'; handler: string; params: Record<string, number | string | boolean> };
+Stats that can be modified are identified by string IDs (not a closed union) for extensibility: movement speed, max health, melee damage, ranged damage, attack speed, dodge chance, block reduction, stamina regen rate, detection radius, noise generation, footprint rate, kill animation speed, disposal speed, carry speed, scan radius, interview reliability, evidence quality modifier, evidence decay rate, and others added by future content.
 
-export type StatId =
-  | 'moveSpeed' | 'maxHealth' | 'meleeDamage' | 'rangedDamage' | 'attackSpeed'
-  | 'dodgeChance' | 'blockReduction' | 'staminaRegenRate'
-  | 'detectionRadius' | 'noiseGeneration' | 'footprintRate'
-  | 'killAnimSpeed' | 'disposalSpeed' | 'carrySpeed'
-  | 'scanRadius' | 'interviewReliability' | 'evidenceQualityMod' | 'evidenceDecayRate'
-  | string;  // extensible — new stats added as strings, no code changes
-```
+The EffectProcessor receives an array of Effects and a source/target entity pair, then delegates to the appropriate subsystem: health system for damage and healing, status effect system for status application, stat modifier system for stat changes, evidence manager for evidence effects, and ability system for ability-related effects. The custom handler type receives a named handler lookup — if no handler is found for a given name, the processor logs a warning rather than throwing (forward compatibility).
 
-**File**: `packages/game-engine/src/effects/effect-processor.ts`
+Custom handlers are registered once in the game initialization file and referenced by name string in ability and item data entries. This means adding a new ability that shares an existing mechanic requires zero code — just the data entry.
 
-```typescript
-/**
- * Processes an array of Effects against a target entity.
- * The processor is generic — it does not know about specific content IDs.
- * It interprets effect types and applies them to the appropriate systems.
- */
-export class EffectProcessor {
-  constructor(
-    private healthSystem: HealthSystem,
-    private statusEffectSystem: StatusEffectSystem,
-    private statModifierSystem: StatModifierSystem,
-    private evidenceManager: EvidenceManager,
-    private abilitySystem: AbilitySystem,
-  ) {}
+### Status Effects
 
-  applyEffects(effects: Effect[], sourceId: string, targetId: string, context: EffectContext): void
-  registerCustomHandler(name: string, handler: CustomEffectHandler): void
-  // Registered handlers are called for Effect objects with type: 'CUSTOM'
-}
+The game has 25 status effects across four categories, all defined as data objects registered at boot.
 
-type EffectContext = {
-  pos: Vec2;
-  scene: Phaser.Scene;
-  evidenceManager: EvidenceManager;
-  statModifierSystem: StatModifierSystem;
-  entityManager: EntityManager;
-  surveillanceSystem: SurveillanceSystem;
-  healthSystem: HealthSystem;
-};
-```
+**Combat effects (9):** Poison (damage over time, stacks up to 3), Bleeding (damage over time, stacks up to 5, stops on healing), Burning (damage over time with a chance to generate evidence each tick, stacks up to 2), Electrocution (damage over time plus movement and attack prevention, does not stack), Stun (no movement or attacks for a duration, refreshes on re-application), Slow (reduced movement speed multiplier), Knockback (forced displacement in a single pulse), Disoriented (reversed controls), and Exposed (increased damage taken, stacks up to 2).
 
-The `CUSTOM` effect type is the escape hatch for novel mechanics (e.g., boss item kill zones, NPC lure abilities). Custom handlers are registered in `game-init.ts` and kept in dedicated files (`boss-item-handlers.ts`, `crafting-handlers.ts`). Standard effect types (STAT_MOD, APPLY_STATUS, DAMAGE, etc.) require zero code changes when adding new content.
+**Movement and stealth effects (6):** Stealthed (reduced detection radius until the player takes an action), Invisible (NPCs completely ignore the player, very short duration, broken by attacking), Speed Boost, Haste (faster attack speed and cooldown reduction), Snared (cannot move but can still attack), and Crippled (reduced movement speed with no sprinting).
 
-### Shared Types
+**Stat modifier effects (5):** Damage Up (stackable damage bonus), Defense Up (stackable damage reduction), Focused (cooldown reduction), Weakened (stackable damage penalty), and Vulnerable (no dodging or blocking).
 
-**File**: `packages/shared/src/types/combat.ts`
+**Investigation and evidence effects (5, non-combat):** Heightened Awareness (evidence discovery radius increase for fed), Tunnel Vision (discovery radius reduction from overusing interrogation tactics), Panicked (heat generation increase for killer spotted by many NPCs), Composed (heat generation reduction from successful disposal), and Forensic Focus (instant evidence quality upgrade for fed at crime scenes).
 
-```typescript
-// DamageType is now a string ID validated against damageTypeRegistry
-type DamageTypeId = string
+Stacking rules: same-ID effects stack up to their configured maximum, with each stack adding the full magnitude. Different-ID effects in the same category stack independently. Crowd control effects do not stack with each other — the most recent replaces the current. Opposing buff and debuff effects on the same stat cancel partially. Applying an effect that is already active refreshes its duration.
 
-type Attack = {
-  id: string
-  attackerId: string
-  defenderId: string
-  damageTypeId: DamageTypeId
-  rawDamage: number
-  finalDamage: number     // after reductions applied
-  weaponId: string | null
-  pos: Vec2               // impact position (for evidence spawning)
-  timestamp: number
-}
+### Stat Modifier System with Hard Caps
 
-type CombatResult = {
-  winner: string | null   // entity ID, null if combat abandoned
-  loser: string | null
-  durationMs: number
-  attacks: Attack[]
-  isLethal: boolean
-  lootDropped: InventoryItem[]
-}
+All stat modifications from all sources (skills, equipment, trophies, crafting, status effects) flow through a single stat modifier system. The system accumulates all modifiers for a given stat and clamps the total result against per-stat hard caps. This prevents any combination of upgrades from crossing design boundaries.
 
-type StatusEffect = {
-  id: string
-  name: string
-  statusDefId: string     // ID in statusEffectRegistry
-  durationMs: number
-  remainingMs: number
-  magnitude: number       // damage per tick, speed reduction %, etc.
-  sourceId: string        // entity that applied this effect
-  stackIndex: number      // 0 for first stack, 1 for second, etc.
-}
+Hard cap values: movement speed bonus is capped at 15% increase; footprint generation cannot be reduced below 15% of the base rate; NPC detection radius cannot be reduced below 50%; noise generation cannot be reduced below 50%; total melee damage is capped; total ranged damage is capped; fed scan radius bonus is capped at 40% increase; witness reliability improvement is capped at 15%; heat cost reduction is capped at 40%; false evidence passive detection chance is capped at 50%.
 
-type CombatState = {
-  isInCombat: boolean
-  currentTargetId: string | null
-  activeEffects: StatusEffect[]
-  lastAttackMs: number
-  combatStartMs: number
-}
-
-type AbilityEffect = {
-  type: 'DAMAGE' | 'HEAL' | 'APPLY_STATUS' | 'REMOVE_STATUS' | 'KNOCKBACK' | 'TELEPORT'
-  value: number
-  statusType?: string
-  durationMs?: number
-  radius?: number         // AoE radius in pixels
-}
-
-type Ability = {
-  id: string
-  name: string
-  description: string
-  cooldownMs: number
-  currentCooldownMs: number
-  resourceCost: number
-  effects: AbilityEffect[]
-  range: number           // pixels; 0 = self-cast
-  animKey: string
-  role: PlayerRole | 'ANY'
-  tier: number
-}
-```
-
-**File**: `packages/shared/src/constants/combat.ts`
-
-```typescript
-const BASE_MELEE_DAMAGE = 25
-const BASE_RANGED_DAMAGE = 18
-const DODGE_CHANCE_BASE = 0.10        // 10% base dodge
-const BLOCK_DAMAGE_REDUCTION = 0.40  // 40% reduction when blocking
-const INVINCIBILITY_FRAMES_MS = 500  // after taking damage
-const POISON_TICK_MS = 1000
-const BLEED_TICK_MS = 750
-const STUN_DURATION_MS = 2000
-const SLOW_MOVEMENT_MULTIPLIER = 0.40
-const STEALTH_DETECTION_MULTIPLIER = 0.20  // while stealthed, detection radius 20% of normal
-const MAX_STATUS_EFFECTS = 5
-const BOSS_HEALTH_MULTIPLIER = Record<BiomeDifficulty, number>  // scales boss HP per biome
-const COMBAT_ESCAPE_DISTANCE_PX = 512  // distance to auto-resolve as "fled"
-```
-
-### Expanded Status Effects Catalog
-
-All 25 status effects are defined as data objects in `packages/shared/src/data/status-effects.ts` and registered in `statusEffectRegistry` at boot. The `StatusEffectSystem` looks up definitions by ID — no hardcoded switch statements.
-
-#### Combat Status Effects
-
-| ID | Name | Category | Duration | Tick Rate | Effect | Stacks? | Max Stacks | Counter |
-|----|------|----------|----------|-----------|--------|---------|------------|---------|
-| POISON | Poison | DOT | 8s | 1000ms | 4 damage/tick | Yes | 3 (12 dmg/tick max) | ANTIDOTE item, CLEANSE ability |
-| BLEED | Bleeding | DOT | 6s | 750ms | 3 damage/tick | Yes | 5 (15 dmg/tick max) | BANDAGE item, stops on heal |
-| BURN | Burning | DOT | 5s | 1000ms | 5 damage/tick, leaves SCORCH_MARK evidence (30% probability per tick) | Yes | 2 (10 dmg/tick max) | WATER interaction, roll action |
-| ELECTROCUTION | Electrocution | CC_DOT | 3s | 500ms | 2 damage/tick + cannot move or attack | No | 1 | Wears off, INSULATED_EQUIPMENT |
-| STUN | Stunned | CC | 2s | — | Cannot move or attack | No | 1 (refreshes duration) | STUN_RESIST skill |
-| SLOW | Slowed | DEBUFF | 4s | — | Movement speed x0.40 | No | 1 (refreshes duration) | SPEED_BOOST cancels |
-| KNOCKBACK | Knocked Back | CC | 0.5s | — | Forced movement 128px from source | No | 1 | Cannot be resisted |
-| DISORIENTED | Disoriented | DEBUFF | 3s | — | Controls reversed (left=right, up=down) | No | 1 | Wears off only |
-| EXPOSED | Exposed | DEBUFF | 6s | — | Damage taken +20% | Yes | 2 (+40% max) | Wears off |
-
-#### Movement/Stealth Status Effects
-
-| ID | Name | Category | Duration | Effect | Stacks? | Counter |
-|----|------|----------|----------|--------|---------|---------|
-| STEALTH | Stealthed | BUFF | Until action | Detection radius 20% of normal | No | NPC ALARMED breaks stealth |
-| INVISIBILITY | Invisible | BUFF | 15s (from Perfect Shadow skill) | NPCs completely ignore, detection radius 0% | No | Attacking breaks invisibility |
-| SPEED_BOOST | Speed Boost | BUFF | 10s | Movement speed x1.30 | No | — |
-| HASTE | Haste | BUFF | 8s | Attack speed +20%, ability cooldowns tick 20% faster | No | — |
-| SNARED | Snared | CC | 3s | Cannot move, can still attack | No | Wears off |
-| CRIPPLED | Crippled | DEBUFF | 10s | Movement speed x0.60, cannot sprint | No | HEAL removes |
-
-#### Stat Modifier Status Effects
-
-| ID | Name | Category | Duration | Effect | Stacks? | Max |
-|----|------|----------|----------|--------|---------|-----|
-| DAMAGE_BOOST | Damage Up | BUFF | 10s | Damage dealt +15% | Yes | 3 (+45%) |
-| DEFENSE_BOOST | Defense Up | BUFF | 10s | Damage taken -15% | Yes | 3 (-45%) |
-| FOCUS | Focused | BUFF | 15s | Ability cooldowns -20% | No | 1 |
-| WEAKENED | Weakened | DEBUFF | 8s | Damage dealt -15% | Yes | 2 (-30%) |
-| VULNERABLE | Vulnerable | DEBUFF | 6s | Cannot dodge or block | No | 1 |
-
-#### Investigation/Evidence Status Effects (non-combat)
-
-| ID | Name | Category | Duration | Effect | Applied To |
-|----|------|----------|----------|--------|------------|
-| HEIGHTENED_AWARENESS | Heightened Awareness | BUFF | 20s | Evidence discovery radius +30% | Fed only |
-| TUNNEL_VISION | Tunnel Vision | DEBUFF | 10s | Evidence discovery radius -30% | Fed (rough interrogation overuse) |
-| PANIC | Panicked | DEBUFF | 15s | Heat generation +50% | Killer (spotted by multiple NPCs) |
-| COMPOSED | Composed | BUFF | 20s | Heat generation -30% | Killer (successful disposal) |
-| FORENSIC_FOCUS | Forensic Focus | BUFF | 30s | Evidence quality upgrade instant | Fed (crime scene analysis) |
-
-#### Stacking Rules (Universal)
-
-1. Effects of the **same ID** stack according to their `maxStacks` value. Each stack adds the full effect magnitude.
-2. Effects of **different IDs** in the same category always stack (e.g., POISON + BLEED both do DOT simultaneously).
-3. **CC effects** (STUN, KNOCKBACK, ELECTROCUTION, SNARED) do NOT stack with each other — the most recent replaces the current. Duration does not extend.
-4. **BUFF + DEBUFF** of the same stat cancel partially: if DAMAGE_BOOST (+15%) and WEAKENED (-15%) are both active, net is 0%.
-5. **Duration refresh**: applying the same effect while active refreshes duration to full. Stacks refresh independently.
-
-### StatModifierSystem with Hard Caps
-
-**File**: `packages/shared/src/constants/balance.ts`
-
-```typescript
-export const STAT_CAPS: Record<string, { maxPercent?: number; maxFlat?: number }> = {
-  moveSpeed:            { maxPercent: 0.15 },   // max +15% from all sources
-  footprintRate:        { maxPercent: -0.85 },  // cannot reduce below 15% of base
-  detectionRadius:      { maxPercent: -0.50 },  // NPCs always detect within 50% of base radius
-  noiseGeneration:      { maxPercent: -0.50 },  // min 50% noise
-  meleeDamage:          { maxFlat: 80 },         // total melee damage (base 25 + max 55)
-  rangedDamage:         { maxFlat: 60 },
-  scanRadius:           { maxPercent: 0.40 },   // max +40% fed scan radius
-  interviewReliability: { maxPercent: 0.15 },   // max +15% witness reliability
-  heatCostReduction:    { maxPercent: -0.40 },  // counter-play heat costs min 60% of base
-  falseEvidenceDetection: { maxPercent: 0.50 }, // max 50% passive detection
-};
-```
-
-**File**: `packages/game-engine/src/combat/stat-modifier-system.ts`
-
-```typescript
-class StatModifierSystem {
-  addModifier(entityId: string, stat: StatId, value: number, modType: 'FLAT' | 'PERCENT'): void
-  addTemporaryModifier(entityId: string, stat: StatId, value: number, modType: 'FLAT' | 'PERCENT', durationMs: number, maxStacks?: number): void
-  removeModifier(entityId: string, modifierId: string): void
-  getEffectiveStat(entityId: string, stat: StatId, baseValue: number): number
-  // Enforces STAT_CAPS: percent bonuses clamped, flat bonuses capped
-  update(delta: number): void  // ticks temporary modifier durations
-}
-```
-
-The `getEffectiveStat` method accumulates all flat and percent modifiers for an entity's stat, then clamps against the relevant `STAT_CAPS` entry. Skills, equipment, trophies, and crafting modifications all flow through this system — caps apply to total across ALL sources.
+Modifiers can be permanent for a run or temporary with a duration. Temporary modifiers support stack limits.
 
 ### Health System
 
-**File**: `packages/game-engine/src/combat/health-system.ts`
-
-Manages HP, invincibility frames, death/knockout. Both players and NPC entities use this:
-
-```typescript
-class HealthSystem {
-  // Applies damage to entity, respecting armor, invincibility frames
-  applyDamage(entity: BaseEntity, attack: Attack, modifiers: DamageModifiers): DamageResult
-  // Heals entity, capped at maxHealth
-  applyHeal(entity: BaseEntity, amount: number, sourceId: string): number
-  // Returns true if entity is in invincibility window
-  isInvincible(entityId: string): boolean
-  // Starts invincibility frames for entity
-  startInvincibility(entityId: string, durationMs: number): void
-  // Handles entity death — triggers ENTITY_DIED event, loot drops, NPC reactions
-  handleDeath(entity: BaseEntity, killedBy: Attack): void
-  // Handles knockout (for non-lethal encounters) — entity is incapacitated, not dead
-  handleKnockout(entity: BaseEntity, durationMs: number): void
-  // Registers a callback fired whenever this entity takes damage (used by boss items)
-  registerDamageCallback(entityId: string, callback: () => void): void
-  update(delta: number): void  // ticks invincibility windows
-}
-
-type DamageModifiers = {
-  armorReduction: number   // 0-1 flat reduction
-  dodgeChance: number      // 0-1 probability
-  damageMultiplier: number // from status effects / skills
-}
-
-type DamageResult = {
-  finalDamage: number
-  wasDodged: boolean
-  wasBlocked: boolean
-  remainingHealth: number
-  isDead: boolean
-}
-```
+Both player and NPC entities use the same health system. It applies damage with modifiers (armor reduction, dodge chance, damage multiplier), applies healing capped at max health, manages invincibility windows (entities cannot be hit again for a short period after taking damage), handles death (triggers the ENTITY_DIED event, drops loot, triggers NPC reactions), and handles knockout for non-lethal encounters. Damage callbacks can be registered for boss item effects that trigger on any damage received.
 
 ### Attack System
 
-**File**: `packages/game-engine/src/combat/attack-system.ts`
+The attack system executes melee sweeps and fires projectiles using Phaser Arcade physics hitboxes. Melee attacks define a damage value, damage type ID, range in pixels, arc angle, cooldown, optional weapon ID, and knockback force. Ranged attacks define a damage value, damage type ID, projectile speed and maximum range, accuracy, optional weapon ID, and a projectile sprite key.
 
-Handles melee and ranged attack execution using Phaser Arcade physics hitboxes:
-
-```typescript
-class AttackSystem {
-  // Execute a melee attack arc around attacker
-  meleeSweep(attacker: BaseEntity, config: MeleeConfig): Attack[]
-  // Fire a projectile toward target position
-  fireProjectile(attacker: BaseEntity, targetPos: Vec2, config: RangedConfig): void
-  // Check if attacker's hitbox overlaps defender — called each frame during attack animation
-  checkHitbox(attacker: BaseEntity, defender: BaseEntity, hitbox: Phaser.Geom.Rectangle): boolean
-  update(scene: Phaser.Scene, delta: number): void
-}
-
-type MeleeConfig = {
-  damage: number
-  damageTypeId: string    // registry ID, not hardcoded union
-  range: number           // pixels from attacker center
-  arc: number             // degrees — 90 = frontal quarter-circle, 360 = all directions
-  cooldownMs: number
-  weaponId: string | null
-  knockbackForce: number
-}
-
-type RangedConfig = {
-  damage: number
-  damageTypeId: string    // registry ID
-  speed: number           // projectile pixels/second
-  range: number           // max travel distance before despawn
-  accuracy: number        // 0-1: 1.0 = perfect aim, lower = angular spread
-  weaponId: string | null
-  spriteKey: string       // projectile sprite
-}
-```
+Hitboxes for melee attacks are created as invisible physics bodies at attack start and destroyed at attack end — this is simpler and more performant than geometric arc intersection math.
 
 ### Ability System
 
-**File**: `packages/game-engine/src/combat/ability-system.ts`
+Abilities are defined in data files and registered in the ability registry at boot. The ability system tracks registered abilities per entity, evaluates cooldown and resource cost before allowing use, delegates effect application to the EffectProcessor, ticks cooldown timers, and provides current cooldown state for the HUD. Standard abilities need no code — their Effects are data. Novel abilities use the custom handler pattern.
 
-```typescript
-class AbilitySystem {
-  // Register abilities for an entity (called when role is set or loadout applied)
-  registerAbilities(entityId: string, abilities: Ability[]): void
-  // Attempt to use an ability — checks cooldown, resource cost
-  useAbility(entityId: string, abilityId: string, targetPos: Vec2): Result<AbilityEffect[], 'ON_COOLDOWN' | 'INSUFFICIENT_RESOURCE'>
-  // Apply effects to target entity — delegates to EffectProcessor
-  applyEffects(effects: AbilityEffect[], caster: BaseEntity, target: BaseEntity | null, targetPos: Vec2): void
-  // Tick cooldowns
-  update(delta: number): void
-  // Get current cooldown state for HUD
-  getAbilityCooldowns(entityId: string): Record<string, number>
-}
-```
+### Status Effect System
 
-Abilities are defined in data files (`packages/shared/src/data/abilities/`) and registered in `abilityRegistry` at boot. The ability system reads definitions from the registry to resolve effects — no hardcoded ability logic for standard effect types. Novel abilities (lure NPC, area reveal) use the `CUSTOM` effect handler pattern.
-
-### Status Effects System
-
-**File**: `packages/game-engine/src/combat/status-effects.ts`
-
-```typescript
-class StatusEffectSystem {
-  applyEffect(entityId: string, effect: StatusEffect): void
-  applyFromDefinition(entityId: string, def: StatusEffectDef, durationMs?: number, magnitude?: number): void
-  removeEffect(entityId: string, effectId: string): void
-  getEffects(entityId: string): StatusEffect[]
-  hasEffect(entityId: string, statusDefId: string): boolean
-  // Process per-tick effects (poison damage, bleed damage) and tick down durations
-  update(entities: BaseEntity[], delta: number): void
-  // Returns current movement speed multiplier for entity
-  getSpeedMultiplier(entityId: string): number
-  // Returns current damage multiplier for entity
-  getDamageMultiplier(entityId: string): number
-  // Returns detection radius multiplier for entity (accounts for STEALTH, INVISIBILITY)
-  getDetectionMultiplier(entityId: string): number
-}
-```
-
-Status effect behavior is driven by the definition object retrieved from `statusEffectRegistry`. The system processes effects generically: DOT effects deal `DAMAGE_PER_TICK`, CC effects set movement/attack flags, BUFF/DEBUFF effects delegate to `StatModifierSystem`. The `GENERATE_EVIDENCE` effect type (used by BURN) calls `evidenceManager.addEvidence()`.
-
-### Extensibility: Adding New Content
-
-**Adding a new status effect** (e.g., BURN — already in catalog):
-1. Add definition to `packages/shared/src/data/status-effects.ts`
-2. If using only standard effect types (DAMAGE_PER_TICK, GENERATE_EVIDENCE, STAT_MOD): zero code changes. Redeploy.
-3. If the effect requires novel behavior not covered by existing effect types: add a new `type` discriminant to the `Effect` union in `effect-types.ts` and a handler in `EffectProcessor`. This is the only code change needed.
-
-**Adding a new damage type** (e.g., FIRE):
-1. Add definition to `packages/shared/src/data/damage-types.ts`
-2. Define `onHitEffects` (e.g., APPLY_STATUS for BURN) using existing effect types
-3. Zero code changes if effects are standard. Redeploy.
-
-**CUSTOM effect handler pattern** for novel mechanics:
-```typescript
-// One-time registration in game-init.ts:
-effectProcessor.registerCustomHandler('lure_npc', (params, sourceId, targetId, context) => {
-  const npcsInRadius = npcSpawner.getNPCsInRadius(context.pos, params.radius as number);
-  const targets = npcsInRadius.slice(0, params.maxTargets as number);
-  for (const npc of targets) {
-    npc.setLureTarget(context.pos, params.duration as number * 1000);
-  }
-});
-// After this handler exists, any future "lure" ability references it:
-// { type: 'CUSTOM', handler: 'lure_npc', params: { radius: 128, duration: 10, maxTargets: 1 } }
-```
+The status effect system applies effects by looking up their definition from the status effect registry, evaluates stacking and CC rules, processes per-tick effects (damage over time) and ticks down remaining durations, and exposes composite multipliers for movement speed, damage output, and detection radius that other systems query each frame.
 
 ### Combat AI
 
-**File**: `packages/game-engine/src/combat/combat-ai.ts`
-
-NPC and boss combat behavior. Uses a simpler decision tree than the full behavior tree (optimized for combat cadence):
-
-```typescript
-class CombatAI {
-  // Initialize combat AI for a target entity (NPC or boss)
-  setupCombatant(entity: BaseEntity, config: CombatAIConfig): void
-  // Run one AI decision cycle for entity
-  tick(entity: BaseEntity, player: PlayerController, delta: number): void
-}
-
-type CombatAIConfig = {
-  attackPattern: AttackPattern[]  // ordered or weighted list of attacks to use
-  aggressionLevel: number         // 0-1: how often AI attacks vs waits
-  fleeThresholdHp: number | null  // null = never flees; otherwise % HP to flee at
-  difficultyMultiplier: number    // scales damage and reaction speed
-}
-
-type AttackPattern = {
-  attackId: string
-  weight: number        // probability weight in pool
-  minRange: number      // only use this attack within this range
-  maxRange: number
-  cooldownMs: number
-}
-```
+NPC and boss combat uses a simpler decision tree optimized for combat cadence rather than the full behavior tree. Combat AI is configured with an attack pattern (a weighted list of attacks with range requirements and cooldowns), an aggression level, an optional flee threshold by HP percentage, and a difficulty multiplier that scales damage and reaction speed.
 
 ### Boss Framework
 
-**File**: `packages/game-engine/src/combat/boss-manager.ts`
+Boss encounters are structured confrontations with multiple phases triggered by HP thresholds. Each phase defines different attack patterns, special ability unlocks, and a speed multiplier. Boss configurations are data-driven JSON files so content can be added without code changes. The boss manager initializes an encounter, monitors HP for phase transitions (transition animations play to completion before resuming combat), and resolves the encounter with a win, loss, or flee outcome.
 
-```typescript
-class BossManager {
-  // Create a boss encounter for a specific entity
-  initBossEncounter(bossConfig: BossConfig, player: PlayerController, scene: Phaser.Scene): void
-  // Check for phase transitions based on boss HP
-  update(bossEntity: BaseEntity, delta: number): void
-  // End boss encounter
-  endEncounter(result: 'PLAYER_WIN' | 'PLAYER_LOSS' | 'PLAYER_FLED'): CombatResult
-}
-
-type BossConfig = {
-  id: string
-  entityId: string
-  displayName: string
-  phases: BossPhase[]
-  lootTable: BossLoot[]
-}
-
-type BossPhase = {
-  phaseNumber: number
-  triggerHpPercent: number    // triggers when HP drops below this %
-  attackPatterns: AttackPattern[]
-  specialAbilities: string[]  // ability IDs unlocked in this phase
-  speedMultiplier: number
-  onPhaseStart?: string       // animation/event key
-}
-
-type BossLoot = {
-  itemId: string
-  dropChance: number          // 0-1
-  quantity: [number, number]  // min, max
-}
-```
-
-Boss configs are data-driven JSON files in `packages/game-engine/src/combat/boss-configs/`:
-- `target-boss.json` — used when a killer target fights back
-- `fed-boss.json` — used when fed directly confronts the killer (vigilante mode)
+Two boss configs exist: one for when a killer target fights back, one for when the fed directly confronts the killer.
 
 ### Combat HUD
 
-**File**: `apps/web/src/components/app/game/hud/CombatHUD.tsx`
+A React client component reads from the combat Zustand store and displays: the current enemy's name and health percentage, the player's ability slots with cooldown overlay indicators, active status effect icons with remaining duration, and a flee hint when the player is far enough from the enemy.
 
-React component, "use client", reads from `combatStore` Zustand:
-- Enemy health bar (name + HP percentage)
-- Player ability slots with cooldown overlay (1-4 slots, key hints)
-- Damage numbers: floating text animations above hit entities (spawned by Phaser, not React — use Phaser's DynamicBitmapText or similar)
-- Active status effect icons (with remaining duration tick-down)
-- Combat flee hint (shows when player is far enough from enemy)
+Floating damage numbers are Phaser text objects (not React), pooled for performance.
 
-**File**: `apps/web/src/stores/combat.ts`
-
-```typescript
-type CombatStore = {
-  isInCombat: boolean
-  enemyId: string | null
-  enemyName: string | null
-  enemyHealth: number
-  enemyMaxHealth: number
-  playerAbilities: Ability[]  // with current cooldowns
-  playerEffects: StatusEffect[]
-  enemyEffects: StatusEffect[]
-  canFlee: boolean
-  // Actions
-  setCombatTarget: (id: string, name: string, maxHp: number) => void
-  updateEnemyHealth: (health: number) => void
-  updateAbilityCooldown: (abilityId: string, cooldownMs: number) => void
-  addEffect: (effect: StatusEffect, target: 'player' | 'enemy') => void
-  removeEffect: (effectId: string, target: 'player' | 'enemy') => void
-  clearCombat: () => void
-}
-```
+The combat Zustand store tracks: whether combat is active, the current enemy's ID, name, and health, the player's active abilities with cooldowns, active status effects on both player and enemy, and whether the player can flee.
 
 ### Combat Animations
 
-**File**: `packages/game-engine/src/combat/combat-animations.ts`
+A combat animations class manages attack animation playback on entity sprites, a brief red flash on the sprite when the entity takes a hit, death and knockout animations, hit particles at the impact position, and floating damage number text objects spawned in the Phaser scene.
 
-Manages attack animation triggers, hit flash effects, and death animations within the Phaser scene:
+### Evidence Integration
 
-```typescript
-class CombatAnimations {
-  // Play attack animation on entity sprite
-  playAttack(entity: BaseEntity, attackKey: string): void
-  // Flash entity sprite red briefly on hit
-  playHitFlash(entity: BaseEntity): void
-  // Play death/knockout animation
-  playDeath(entity: BaseEntity, isKnockout: boolean): void
-  // Spawn hit particle at position
-  spawnHitParticle(scene: Phaser.Scene, pos: Vec2, damageTypeId: string): void
-  // Floating damage number (Phaser text object, not React)
-  spawnDamageNumber(scene: Phaser.Scene, pos: Vec2, amount: number, isCritical: boolean): void
-}
-```
-
-### EventBus Integration
-
-New events added to GameEvents:
-
-```typescript
-COMBAT_STARTED: { attackerId: string; defenderId: string; pos: Vec2 }
-DAMAGE_DEALT: {
-  attack: Attack
-  finalDamage: number
-  wasDodged: boolean
-  defenderRemainingHealth: number
-  witnesses: string[]  // NPC IDs with line-of-sight to impact pos — for evidence system
-}
-ENTITY_DIED: { entityId: string; killedById: string; weapon: string | null; pos: Vec2; isPlayer: boolean }
-ENTITY_KNOCKED_OUT: { entityId: string; knockedOutById: string; pos: Vec2 }
-COMBAT_ENDED: { result: CombatResult }
-STATUS_EFFECT_APPLIED: { entityId: string; effect: StatusEffect }
-STATUS_EFFECT_REMOVED: { entityId: string; effectId: string }
-BOSS_PHASE_CHANGED: { bossId: string; newPhase: number }
-ABILITY_USED_IN_COMBAT: { entityId: string; abilityId: string; targetId: string | null; pos: Vec2 }
-```
-
-The `DAMAGE_DEALT` event includes `witnesses: string[]` — this is the NPC IDs that had line-of-sight to the attack impact. The evidence system (piece 09) uses this to mark those NPCs as witnesses to violence, without the combat system needing to know about evidence mechanics directly.
+The DAMAGE_DEALT event includes the IDs of all NPCs that had line-of-sight to the attack impact position. This is the sole coupling between the combat system and the evidence system — the combat system provides witness IDs, and the evidence system subscribes to that event and creates appropriate forensic traces. The combat system knows nothing about evidence mechanics.
 
 ### Edge Cases
 
-- Invincibility frames prevent damage stacking during combo attacks — 500ms window
-- Dodge is calculated per-attack, not per-frame — a missed dodge can be followed by another dodge opportunity
-- Boss phase transitions are not interrupted by player attacks — the transition animation plays to completion before resuming combat
-- If both player and target reach 0 HP simultaneously, the player is treated as winner (they delivered the killing blow)
-- Status effects from trophies (piece 13) must be applied before combat starts — not mid-combat
-- Combat AI must not pathfind through walls when chasing player — use pathfinding grid, not direct-line movement
-- Floating damage numbers must be pooled (not instantiated fresh each hit) for performance
-- Registry boot validation: if any data file entry fails Zod schema validation, `registerAllContent()` throws. This is caught in CI integration tests before reaching production.
+- Invincibility frames prevent damage stacking during combo attacks
+- Dodge is calculated per attack, not per frame — a failed dodge on one attack does not affect the next
+- Boss phase transitions are not interrupted by player attacks — the transition animation completes before combat resumes
+- If both player and target reach zero HP simultaneously, the player is treated as the winner (they delivered the killing blow)
+- Status effects from trophies must be applied before combat starts, not mid-combat
+- Combat AI must use pathfinding when chasing the player, not direct-line movement
+- Floating damage numbers must be object-pooled, not instantiated fresh on each hit
+- If any data file entry fails schema validation at boot, the registration function throws — this is caught in CI before reaching production
 
 ----
 
@@ -769,6 +187,475 @@ The `DAMAGE_DEALT` event includes `witnesses: string[]` — this is the NPC IDs 
 All combat logic lives in `packages/game-engine/src/combat/`. The combat controller is the orchestrator. The attack, health, ability, stat modifier, and status effect systems are components the controller coordinates. The boss manager is a higher-level coordinator for structured encounters. The EffectProcessor is the universal translation layer between Effect data objects and system calls.
 
 The damage pipeline flows through: `AttackSystem (hitbox check)` → `HealthSystem.applyDamage (modifiers)` → `EventBus DAMAGE_DEALT (evidence system gets witnesses)` → `CombatAnimations.playHitFlash` → Zustand `combatStore` update → `CombatHUD` re-renders.
+
+### Shared Types
+
+**File**: `packages/shared/src/types/combat.ts`
+
+```typescript
+type DamageTypeId = string  // validated against damageTypeRegistry at runtime
+
+type Attack = {
+  id: string
+  attackerId: string
+  defenderId: string
+  damageTypeId: DamageTypeId
+  rawDamage: number
+  finalDamage: number
+  weaponId: string | null
+  pos: Vec2
+  timestamp: number
+}
+
+type CombatResult = {
+  winner: string | null
+  loser: string | null
+  durationMs: number
+  attacks: Attack[]
+  isLethal: boolean
+  lootDropped: InventoryItem[]
+}
+
+type StatusEffect = {
+  id: string
+  name: string
+  statusDefId: string     // ID in statusEffectRegistry
+  durationMs: number
+  remainingMs: number
+  magnitude: number
+  sourceId: string
+  stackIndex: number
+}
+
+type CombatState = {
+  isInCombat: boolean
+  currentTargetId: string | null
+  activeEffects: StatusEffect[]
+  lastAttackMs: number
+  combatStartMs: number
+}
+
+type AbilityEffect = {
+  type: 'DAMAGE' | 'HEAL' | 'APPLY_STATUS' | 'REMOVE_STATUS' | 'KNOCKBACK' | 'TELEPORT'
+  value: number
+  statusType?: string
+  durationMs?: number
+  radius?: number
+}
+
+type Ability = {
+  id: string
+  name: string
+  description: string
+  cooldownMs: number
+  currentCooldownMs: number
+  resourceCost: number
+  effects: AbilityEffect[]
+  range: number
+  animKey: string
+  role: PlayerRole | 'ANY'
+  tier: number
+}
+```
+
+**File**: `packages/shared/src/constants/combat.ts`
+
+```typescript
+const BASE_MELEE_DAMAGE = 25
+const BASE_RANGED_DAMAGE = 18
+const DODGE_CHANCE_BASE = 0.10
+const BLOCK_DAMAGE_REDUCTION = 0.40
+const INVINCIBILITY_FRAMES_MS = 500
+const POISON_TICK_MS = 1000
+const BLEED_TICK_MS = 750
+const STUN_DURATION_MS = 2000
+const SLOW_MOVEMENT_MULTIPLIER = 0.40
+const STEALTH_DETECTION_MULTIPLIER = 0.20
+const MAX_STATUS_EFFECTS = 5
+const BOSS_HEALTH_MULTIPLIER: Record<BiomeDifficulty, number>
+const COMBAT_ESCAPE_DISTANCE_PX = 512
+```
+
+### Universal Effect Type
+
+**File**: `packages/shared/src/effects/effect-types.ts`
+
+```typescript
+export type Effect =
+  | { type: 'STAT_MOD'; stat: StatId; value: number; modType: 'FLAT' | 'PERCENT' }
+  | { type: 'DAMAGE'; damageTypeId: string; value: number }
+  | { type: 'DAMAGE_PER_TICK'; value: number }
+  | { type: 'HEAL'; value: number }
+  | { type: 'APPLY_STATUS'; statusId: string; durationMs?: number; magnitude?: number }
+  | { type: 'REMOVE_STATUS'; statusId: string }
+  | { type: 'CLEANSE_CATEGORY'; category: string }
+  | { type: 'KNOCKBACK'; force: number; directionFromSource: boolean }
+  | { type: 'TELEPORT'; distance: number; direction: 'FORWARD' | 'BACKWARD' | 'RANDOM' }
+  | { type: 'PREVENT_MOVEMENT' }
+  | { type: 'PREVENT_ATTACK' }
+  | { type: 'ABILITY_UNLOCK'; abilityId: string }
+  | { type: 'COOLDOWN_REDUCTION'; abilityId: string; percent: number }
+  | { type: 'COOLDOWN_REDUCTION_ALL'; percent: number }
+  | { type: 'EVIDENCE_REDUCTION'; evidenceTypeId: string | null; percent: number }
+  | { type: 'GENERATE_EVIDENCE'; evidenceType: string; quality: string; probability: number }
+  | { type: 'DESTROY_EVIDENCE'; radius: number; maxCount: number }
+  | { type: 'SCAN_RADIUS_MOD'; percent: number }
+  | { type: 'DISCOVERY_SPEED_MOD'; multiplier: number }
+  | { type: 'FALSE_EVIDENCE_DETECTION_MOD'; percent: number }
+  | { type: 'ARREST_VIABILITY_MOD'; flat: number }
+  | { type: 'HEAT_GENERATION_MOD'; percent: number }
+  | { type: 'HEAT_DECAY_MOD'; percent: number }
+  | { type: 'HEAT_COST_MOD'; percent: number }
+  | { type: 'HEAT_CAP_MOD'; flat: number }
+  | { type: 'START_WITH_ITEM'; itemId: string }
+  | { type: 'ITEM_STACK_MOD'; itemId: string; amount: number }
+  | { type: 'MATERIAL_DROP_MOD'; percent: number }
+  | { type: 'DURATION_MOD'; targetEffectId: string; percent: number }
+  | { type: 'CUSTOM'; handler: string; params: Record<string, number | string | boolean> };
+
+export type StatId =
+  | 'moveSpeed' | 'maxHealth' | 'meleeDamage' | 'rangedDamage' | 'attackSpeed'
+  | 'dodgeChance' | 'blockReduction' | 'staminaRegenRate'
+  | 'detectionRadius' | 'noiseGeneration' | 'footprintRate'
+  | 'killAnimSpeed' | 'disposalSpeed' | 'carrySpeed'
+  | 'scanRadius' | 'interviewReliability' | 'evidenceQualityMod' | 'evidenceDecayRate'
+  | string;
+```
+
+### ContentRegistry Signature
+
+**File**: `packages/shared/src/registry/content-registry.ts`
+
+```typescript
+export class ContentRegistry<T extends { id: string }> {
+  constructor(name: string, schema: ZodSchema<T>) {}
+  register(entry: T): void          // validates via Zod, throws on duplicate
+  registerAll(entries: T[]): void
+  get(id: string): T | undefined
+  getOrThrow(id: string): T
+  has(id: string): boolean
+  getAll(): T[]
+  getByFilter(predicate: (entry: T) => boolean): T[]
+}
+```
+
+**File**: `packages/shared/src/registry/registries.ts`
+
+```typescript
+export const statusEffectRegistry = new ContentRegistry('StatusEffect', statusEffectDefSchema);
+export const damageTypeRegistry   = new ContentRegistry('DamageType', damageTypeDefSchema);
+export const abilityRegistry      = new ContentRegistry('Ability', abilityDefSchema);
+export const itemRegistry         = new ContentRegistry('Item', itemDefSchema);
+export const weaponRegistry       = new ContentRegistry('Weapon', weaponDefSchema);
+export const trophyRegistry       = new ContentRegistry('Trophy', trophyDefSchema);
+export const skillRegistry        = new ContentRegistry('Skill', skillDefSchema);
+```
+
+### EffectProcessor Signature
+
+**File**: `packages/game-engine/src/effects/effect-processor.ts`
+
+```typescript
+export class EffectProcessor {
+  constructor(
+    private healthSystem: HealthSystem,
+    private statusEffectSystem: StatusEffectSystem,
+    private statModifierSystem: StatModifierSystem,
+    private evidenceManager: EvidenceManager,
+    private abilitySystem: AbilitySystem,
+  ) {}
+
+  applyEffects(effects: Effect[], sourceId: string, targetId: string, context: EffectContext): void
+  registerCustomHandler(name: string, handler: CustomEffectHandler): void
+}
+
+type EffectContext = {
+  pos: Vec2;
+  scene: Phaser.Scene;
+  evidenceManager: EvidenceManager;
+  statModifierSystem: StatModifierSystem;
+  entityManager: EntityManager;
+  surveillanceSystem: SurveillanceSystem;
+  healthSystem: HealthSystem;
+};
+```
+
+### StatModifierSystem with Hard Caps
+
+**File**: `packages/shared/src/constants/balance.ts`
+
+```typescript
+export const STAT_CAPS: Record<string, { maxPercent?: number; maxFlat?: number }> = {
+  moveSpeed:            { maxPercent: 0.15 },
+  footprintRate:        { maxPercent: -0.85 },
+  detectionRadius:      { maxPercent: -0.50 },
+  noiseGeneration:      { maxPercent: -0.50 },
+  meleeDamage:          { maxFlat: 80 },
+  rangedDamage:         { maxFlat: 60 },
+  scanRadius:           { maxPercent: 0.40 },
+  interviewReliability: { maxPercent: 0.15 },
+  heatCostReduction:    { maxPercent: -0.40 },
+  falseEvidenceDetection: { maxPercent: 0.50 },
+};
+```
+
+**File**: `packages/game-engine/src/combat/stat-modifier-system.ts`
+
+```typescript
+class StatModifierSystem {
+  addModifier(entityId: string, stat: StatId, value: number, modType: 'FLAT' | 'PERCENT'): void
+  addTemporaryModifier(entityId: string, stat: StatId, value: number, modType: 'FLAT' | 'PERCENT', durationMs: number, maxStacks?: number): void
+  removeModifier(entityId: string, modifierId: string): void
+  getEffectiveStat(entityId: string, stat: StatId, baseValue: number): number
+  update(delta: number): void
+}
+```
+
+### Health System Signature
+
+**File**: `packages/game-engine/src/combat/health-system.ts`
+
+```typescript
+class HealthSystem {
+  applyDamage(entity: BaseEntity, attack: Attack, modifiers: DamageModifiers): DamageResult
+  applyHeal(entity: BaseEntity, amount: number, sourceId: string): number
+  isInvincible(entityId: string): boolean
+  startInvincibility(entityId: string, durationMs: number): void
+  handleDeath(entity: BaseEntity, killedBy: Attack): void
+  handleKnockout(entity: BaseEntity, durationMs: number): void
+  registerDamageCallback(entityId: string, callback: () => void): void
+  update(delta: number): void
+}
+
+type DamageModifiers = {
+  armorReduction: number
+  dodgeChance: number
+  damageMultiplier: number
+}
+
+type DamageResult = {
+  finalDamage: number
+  wasDodged: boolean
+  wasBlocked: boolean
+  remainingHealth: number
+  isDead: boolean
+}
+```
+
+### Attack System Signature
+
+**File**: `packages/game-engine/src/combat/attack-system.ts`
+
+```typescript
+class AttackSystem {
+  meleeSweep(attacker: BaseEntity, config: MeleeConfig): Attack[]
+  fireProjectile(attacker: BaseEntity, targetPos: Vec2, config: RangedConfig): void
+  checkHitbox(attacker: BaseEntity, defender: BaseEntity, hitbox: Phaser.Geom.Rectangle): boolean
+  update(scene: Phaser.Scene, delta: number): void
+}
+
+type MeleeConfig = {
+  damage: number
+  damageTypeId: string
+  range: number
+  arc: number
+  cooldownMs: number
+  weaponId: string | null
+  knockbackForce: number
+}
+
+type RangedConfig = {
+  damage: number
+  damageTypeId: string
+  speed: number
+  range: number
+  accuracy: number
+  weaponId: string | null
+  spriteKey: string
+}
+```
+
+### Ability System Signature
+
+**File**: `packages/game-engine/src/combat/ability-system.ts`
+
+```typescript
+class AbilitySystem {
+  registerAbilities(entityId: string, abilities: Ability[]): void
+  useAbility(entityId: string, abilityId: string, targetPos: Vec2): Result<AbilityEffect[], 'ON_COOLDOWN' | 'INSUFFICIENT_RESOURCE'>
+  applyEffects(effects: AbilityEffect[], caster: BaseEntity, target: BaseEntity | null, targetPos: Vec2): void
+  update(delta: number): void
+  getAbilityCooldowns(entityId: string): Record<string, number>
+}
+```
+
+### Status Effect System Signature
+
+**File**: `packages/game-engine/src/combat/status-effects.ts`
+
+```typescript
+class StatusEffectSystem {
+  applyEffect(entityId: string, effect: StatusEffect): void
+  applyFromDefinition(entityId: string, def: StatusEffectDef, durationMs?: number, magnitude?: number): void
+  removeEffect(entityId: string, effectId: string): void
+  getEffects(entityId: string): StatusEffect[]
+  hasEffect(entityId: string, statusDefId: string): boolean
+  update(entities: BaseEntity[], delta: number): void
+  getSpeedMultiplier(entityId: string): number
+  getDamageMultiplier(entityId: string): number
+  getDetectionMultiplier(entityId: string): number
+}
+```
+
+### Status Effects Catalog (Data File)
+
+All 25 status effects defined in `packages/shared/src/data/status-effects.ts` and registered at boot:
+
+**Combat (9):** POISON (8s, 1000ms tick, 4 dmg/tick, stacks 3), BLEED (6s, 750ms tick, 3 dmg/tick, stacks 5), BURN (5s, 1000ms tick, 5 dmg/tick + evidence generation, stacks 2), ELECTROCUTION (3s, 500ms tick, 2 dmg/tick + no move/attack, no stack), STUN (2s, no move/attack, refreshes), SLOW (4s, speed x0.40), KNOCKBACK (0.5s, 128px force), DISORIENTED (3s, reversed controls), EXPOSED (6s, dmg taken +20%, stacks 2).
+
+**Movement/Stealth (6):** STEALTH (until action, detection 20%), INVISIBILITY (15s, detection 0%, broken by attack), SPEED_BOOST (10s, x1.30), HASTE (8s, attack speed +20% + cooldowns tick 20% faster), SNARED (3s, no move), CRIPPLED (10s, x0.60, no sprint).
+
+**Stat modifiers (5):** DAMAGE_BOOST (10s, +15% dmg, stacks 3), DEFENSE_BOOST (10s, -15% dmg taken, stacks 3), FOCUS (15s, cooldowns -20%), WEAKENED (8s, -15% dmg, stacks 2), VULNERABLE (6s, no dodge/block).
+
+**Investigation/evidence (5):** HEIGHTENED_AWARENESS (20s, scan +30%, fed only), TUNNEL_VISION (10s, scan -30%, fed), PANIC (15s, heat gen +50%, killer), COMPOSED (20s, heat gen -30%, killer), FORENSIC_FOCUS (30s, instant evidence quality upgrade, fed).
+
+### Combat AI Signature
+
+**File**: `packages/game-engine/src/combat/combat-ai.ts`
+
+```typescript
+class CombatAI {
+  setupCombatant(entity: BaseEntity, config: CombatAIConfig): void
+  tick(entity: BaseEntity, player: PlayerController, delta: number): void
+}
+
+type CombatAIConfig = {
+  attackPattern: AttackPattern[]
+  aggressionLevel: number
+  fleeThresholdHp: number | null
+  difficultyMultiplier: number
+}
+
+type AttackPattern = {
+  attackId: string
+  weight: number
+  minRange: number
+  maxRange: number
+  cooldownMs: number
+}
+```
+
+### Boss Framework Signature
+
+**File**: `packages/game-engine/src/combat/boss-manager.ts`
+
+```typescript
+class BossManager {
+  initBossEncounter(bossConfig: BossConfig, player: PlayerController, scene: Phaser.Scene): void
+  update(bossEntity: BaseEntity, delta: number): void
+  endEncounter(result: 'PLAYER_WIN' | 'PLAYER_LOSS' | 'PLAYER_FLED'): CombatResult
+}
+
+type BossConfig = {
+  id: string
+  entityId: string
+  displayName: string
+  phases: BossPhase[]
+  lootTable: BossLoot[]
+}
+
+type BossPhase = {
+  phaseNumber: number
+  triggerHpPercent: number
+  attackPatterns: AttackPattern[]
+  specialAbilities: string[]
+  speedMultiplier: number
+  onPhaseStart?: string
+}
+
+type BossLoot = {
+  itemId: string
+  dropChance: number
+  quantity: [number, number]
+}
+```
+
+Boss config JSON files: `packages/game-engine/src/combat/boss-configs/target-boss.json` and `fed-boss.json`.
+
+### Combat Animations Signature
+
+**File**: `packages/game-engine/src/combat/combat-animations.ts`
+
+```typescript
+class CombatAnimations {
+  playAttack(entity: BaseEntity, attackKey: string): void
+  playHitFlash(entity: BaseEntity): void
+  playDeath(entity: BaseEntity, isKnockout: boolean): void
+  spawnHitParticle(scene: Phaser.Scene, pos: Vec2, damageTypeId: string): void
+  spawnDamageNumber(scene: Phaser.Scene, pos: Vec2, amount: number, isCritical: boolean): void
+}
+```
+
+### Combat Zustand Store
+
+**File**: `apps/web/src/stores/combat.ts`
+
+```typescript
+type CombatStore = {
+  isInCombat: boolean
+  enemyId: string | null
+  enemyName: string | null
+  enemyHealth: number
+  enemyMaxHealth: number
+  playerAbilities: Ability[]
+  playerEffects: StatusEffect[]
+  enemyEffects: StatusEffect[]
+  canFlee: boolean
+  setCombatTarget: (id: string, name: string, maxHp: number) => void
+  updateEnemyHealth: (health: number) => void
+  updateAbilityCooldown: (abilityId: string, cooldownMs: number) => void
+  addEffect: (effect: StatusEffect, target: 'player' | 'enemy') => void
+  removeEffect: (effectId: string, target: 'player' | 'enemy') => void
+  clearCombat: () => void
+}
+```
+
+### EventBus Event Types
+
+Added to `packages/shared/src/types/events.ts`:
+
+```typescript
+COMBAT_STARTED: { attackerId: string; defenderId: string; pos: Vec2 }
+DAMAGE_DEALT: {
+  attack: Attack
+  finalDamage: number
+  wasDodged: boolean
+  defenderRemainingHealth: number
+  witnesses: string[]  // NPC IDs with line-of-sight to impact — for evidence system
+}
+ENTITY_DIED: { entityId: string; killedById: string; weapon: string | null; pos: Vec2; isPlayer: boolean }
+ENTITY_KNOCKED_OUT: { entityId: string; knockedOutById: string; pos: Vec2 }
+COMBAT_ENDED: { result: CombatResult }
+STATUS_EFFECT_APPLIED: { entityId: string; effect: StatusEffect }
+STATUS_EFFECT_REMOVED: { entityId: string; effectId: string }
+BOSS_PHASE_CHANGED: { bossId: string; newPhase: number }
+ABILITY_USED_IN_COMBAT: { entityId: string; abilityId: string; targetId: string | null; pos: Vec2 }
+```
+
+### Custom Effect Handler Pattern
+
+```typescript
+// One-time registration in game-init.ts:
+effectProcessor.registerCustomHandler('lure_npc', (params, sourceId, targetId, context) => {
+  const npcsInRadius = npcSpawner.getNPCsInRadius(context.pos, params.radius as number);
+  const targets = npcsInRadius.slice(0, params.maxTargets as number);
+  for (const npc of targets) {
+    npc.setLureTarget(context.pos, params.duration as number * 1000);
+  }
+});
+// Future ability uses it by reference:
+// { type: 'CUSTOM', handler: 'lure_npc', params: { radius: 128, duration: 10, maxTargets: 1 } }
+```
 
 ### Registry Pattern Implementation
 
