@@ -80,12 +80,35 @@ The project scaffold has no database tables. The data model consists of shared T
 - `posthog.key` -- PostHog API key (optional, string)
 - `posthog.host` -- PostHog host URL (optional, URL format)
 - `azure.blobStorageUrl` -- Azure Blob Storage base URL (optional, URL format)
+- `logLevel` -- Log level for Pino logger (optional string, default: `'info'` in production, `'debug'` in development); sourced from `LOG_LEVEL` env var; all Pino log level access MUST go through this config field, never `process.env.LOG_LEVEL` directly (Constitution II)
 
 ### Rate Limit Configuration Shape (`apps/web/src/config/security/rate-limits.ts`)
 - `auth` -- 5 points / 900s duration / 1800s block
 - `api` -- 30 points / 60s duration / 60s block
 - `actions` -- 20 points / 60s duration / 60s block
 - `authenticated` -- 60 points / 60s duration / 30s block
+
+### CSP Policy Configuration (`apps/web/src/proxy.ts`)
+The Content Security Policy is built per-request in proxy.ts. The nonce is generated at runtime (`Buffer.from(crypto.randomUUID()).toString('base64')`) and is not stored — it exists only for the duration of one request/response cycle. The directive policy and allowed domains are static constants embedded in proxy.ts:
+
+| Directive | Production Value | Development Addition | Rationale |
+|-----------|-----------------|---------------------|-----------|
+| `default-src` | `'self'` | — | Restrictive fallback |
+| `script-src` | `'self' 'nonce-{nonce}' 'strict-dynamic'` | `'unsafe-eval'` | Nonce gates inline scripts; strict-dynamic propagates trust to dynamic imports; unsafe-eval needed for React dev error tooling |
+| `style-src` | `'self' 'nonce-{nonce}'` | `'unsafe-inline'` | Nonce for Next.js inline styles; unsafe-inline needed for hot reload |
+| `img-src` | `'self' blob: data:` | — | Game assets may use blob URLs; data URIs for small images |
+| `font-src` | `'self'` | — | Fonts served from application origin |
+| `connect-src` | `'self' https://*.supabase.co wss://*.supabase.co https://*.posthog.com https://*.ingest.sentry.io` | — | Supabase REST + WebSocket, PostHog analytics, Sentry error/replay upload |
+| `worker-src` | `'self' blob:` | — | Sentry Session Replay + PostHog Session Replay web workers (blob URL requirement) |
+| `object-src` | `'none'` | — | No plugins |
+| `base-uri` | `'self'` | — | Prevent base tag hijacking |
+| `form-action` | `'self'` | — | Server Actions submit to same origin only |
+| `frame-ancestors` | `'none'` | — | Prevent clickjacking |
+| `upgrade-insecure-requests` | (flag) | — | Force HTTPS for all subresources |
+
+- Nonce propagation: Next.js 16 reads the nonce from the `x-nonce` request header and automatically applies it to all framework-generated scripts during SSR. Server Components can read the nonce from the `x-nonce` request header via `headers()` API to attach it to third-party `<Script>` components if needed.
+- PostHog and Sentry SDKs are npm-bundled (not loaded from CDN), so no `script-src` entries are required for them — only `connect-src` and `worker-src`.
+- Static pages are incompatible with per-request nonces. For this project that is acceptable because game pages are inherently dynamic (authenticated sessions, real-time state).
 
 ## Relationships
 

@@ -112,7 +112,7 @@ All project artifacts -- local development, Docker images, CI/CD, and Azure App 
 | **Dockerfile** | `FROM` base image | `node:24-alpine` |
 | **GitHub Actions** | `actions/setup-node` | `node-version: '24'` |
 | **Azure App Service** | Runtime stack | `NODE\|24-lts` |
-| **.nvmrc** | Version file | `24` |
+| **.nvmrc** | Version file | `24.14.0` |
 | **.node-version** | Version file (alt) | `24.14.0` |
 
 ### Version to Avoid
@@ -281,7 +281,7 @@ No React 20 yet -- 19.2.x is the current stable line.
 | **package.json** | `"engines": { "node": ">=24.0.0" }`, exact dependency versions in `dependencies`/`devDependencies` |
 | **package.json scripts** | Remove any `--turbopack` flags (default in Next.js 16) |
 | **Dockerfile** | `FROM node:24-alpine` |
-| **.nvmrc** | `24` |
+| **.nvmrc** | `24.14.0` |
 | **.node-version** | `24.14.0` |
 | **GitHub Actions** | `actions/setup-node@v4` with `node-version: '24'` |
 | **next.config.ts** | `output: 'standalone'`, `reactCompiler: true` |

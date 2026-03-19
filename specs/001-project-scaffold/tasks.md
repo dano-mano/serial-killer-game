@@ -23,6 +23,7 @@
 - [ ] T002 [P] Create turbo.json with `tasks` config: build (^build, outputs, NEXT_PUBLIC_* env), lint (^build), test (^build, inputs), type-check, dev (persistent), test:watch (persistent) in turbo.json
 - [ ] T003 [P] Create root tsconfig.json with strict mode, moduleResolution bundler, target ES2022, base config for all packages to extend in tsconfig.json
 - [ ] T004 [P] Create version pinning files: .nvmrc (24.14.0) and .node-version (24.14.0)
+- [ ] T004b [P] Create .gitignore excluding node_modules/, .next/, .turbo/, dist/, .env.local, .env*.local, *.tsbuildinfo, .DS_Store
 - [ ] T005 [P] Create vitest.shared.mts with shared test configuration (globals: false, restoreMocks: true, passWithNoTests: true) in vitest.shared.mts
 
 ---
@@ -76,9 +77,10 @@
 
 - [ ] T025 [US2] Implement centralized Zod-validated environment config exporting typed env object; fail-fast with clear error on missing/invalid required vars; graceful handling of optional vars in apps/web/src/config/env.ts
 - [ ] T026 [US1] Create next.config.ts with standalone output, serverExternalPackages (pino, pino-pretty), withSentryConfig wrapper for automatic source map upload during build (FR-010), tunnelRoute /monitoring in apps/web/next.config.ts
-- [ ] T027 [US1] Create root layout.tsx with html/body tags, metadata export, children prop in apps/web/src/app/layout.tsx
+- [ ] T027 [US1] Create root layout.tsx with html/body tags, metadata export, children prop, importing globals.css in apps/web/src/app/layout.tsx
+- [ ] T027b [P] [US1] Create globals.css with `@import "tailwindcss"`, `@theme inline { }` directive (NOT `@theme { }`) importing design tokens from @repo/ui-theme, dark mode class-based switching setup in apps/web/src/app/globals.css
 - [ ] T028 [US1] Create minimal home page with project name heading in apps/web/src/app/page.tsx
-- [ ] T029 [US2] Create .env.example with all required and optional variable stubs and descriptions in .env.example
+- [ ] T029 [US2] Create .env.example with all required and optional variable stubs and descriptions: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SENTRY_DSN, NEXT_PUBLIC_POSTHOG_KEY, NEXT_PUBLIC_POSTHOG_HOST, AZURE_BLOB_STORAGE_URL, LOG_LEVEL (optional, default info/debug) in .env.example
 - [ ] T030 [US2] Write env validation tests: valid config passes, missing required var fails with clear message, invalid format fails, empty string treated as missing, optional vars gracefully absent in apps/web/tests/config/env.test.ts
 
 **Checkpoint**: `npm run dev` starts the app and renders the home page. Removing NEXT_PUBLIC_SUPABASE_URL causes immediate failure with a clear error message.
@@ -127,7 +129,7 @@
 
 ### Implementation
 
-- [ ] T039 [US7] Implement eslint.config.mjs: import eslint-config-next (core-web-vitals + typescript), react-compiler plugin, noBarrelFiles.flat, n plugin with no-process-env error; file-level override disabling barrel rule for packages/*/src/index.ts; file-level override disabling process-env for **/config/**; no-restricted-imports for vendor direct access; no-console; globalIgnores; prettier in eslint.config.mjs
+- [ ] T039 [US7] Implement eslint.config.mjs: import eslint-config-next (core-web-vitals + typescript), react-compiler plugin, eslint-plugin-neverthrow with must-use-result error rule, noBarrelFiles.flat, n plugin with no-process-env error; file-level override disabling barrel rule for packages/*/src/index.ts; file-level override disabling process-env for **/config/**; no-restricted-imports for vendor direct access; no-console; globalIgnores; prettier; install eslint-plugin-neverthrow as devDependency in eslint.config.mjs
 - [ ] T040 [US7] Add lint scripts to root package.json and apps/web/package.json; verify `npx turbo lint` passes with zero violations on all scaffold code
 
 **Checkpoint**: `npx turbo lint` passes. A barrel file in apps/web/ triggers a violation. Direct process.env in apps/web/src/app/ triggers a violation. packages/shared/src/index.ts does NOT trigger.
@@ -162,7 +164,33 @@
 ### Implementation
 
 - [ ] T047 [US8] Implement rate limit configuration: auth (5/15min/30min block), api (30/min/1min block), actions (20/min/1min block), authenticated (60/min/30s block) in apps/web/src/config/security/rate-limits.ts
-- [ ] T048 [US8] Implement proxy.ts: import RateLimiterMemory from rate-limiter-flexible; create module-scope singleton limiter instances from config; getClientIp with x-forwarded-for fallback; route-based limiter selection; 429 + Retry-After on exceeded; CSP headers (script-src, style-src, img-src, connect-src with wss://*.supabase.co, frame-ancestors); X-Content-Type-Options nosniff; X-Frame-Options DENY; matcher excluding _next/static, _next/image, favicon.ico, monitoring in apps/web/src/proxy.ts
+- [ ] T048 [US8] Implement proxy.ts in apps/web/src/proxy.ts:
+  1. Import RateLimiterMemory from rate-limiter-flexible; create module-scope singleton limiter instances from config (apps/web/src/config/security/rate-limits.ts)
+  2. getClientIp with x-forwarded-for fallback; route-based limiter selection; 429 + Retry-After on limit exceeded
+  3. Generate per-request nonce: `Buffer.from(crypto.randomUUID()).toString('base64')`
+  4. Build CSP header string with NODE_ENV check for dev-mode exceptions:
+     - `default-src 'self'`
+     - `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'` + `'unsafe-eval'` in development only
+     - `style-src 'self' 'nonce-${nonce}'` + `'unsafe-inline'` in development only
+     - `img-src 'self' blob: data:`
+     - `font-src 'self'`
+     - `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.posthog.com https://*.ingest.sentry.io`
+     - `worker-src 'self' blob:`
+     - `object-src 'none'`
+     - `base-uri 'self'`
+     - `form-action 'self'`
+     - `frame-ancestors 'none'`
+     - `upgrade-insecure-requests`
+  5. Set `x-nonce` request header so Server Components can read it via `headers()` API
+  6. Set `Content-Security-Policy` on BOTH request headers (for downstream reading) AND response headers (for browser enforcement)
+  7. Set additional security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+  8. Matcher config excluding `_next/static`, `_next/image`, `favicon.ico`, and prefetch requests (next-router-prefetch header, purpose=prefetch header)
+  - Note: PostHog and Sentry SDKs are npm-bundled — they appear in the application JS bundle and inherit the nonce from Next.js framework scripts. Only `connect-src` and `worker-src` are needed for them (no `script-src` entries required).
+  - Note: Next.js automatically applies the nonce to all framework-generated scripts during SSR — no manual nonce attachment needed in layout.tsx or page components.
+  - Note: `'strict-dynamic'` propagates trust from nonced bootstrap scripts to dynamically loaded scripts, enabling code splitting without additional `script-src` entries.
+  - Note: `worker-src 'self' blob:` is required for Sentry Session Replay and PostHog Session Replay, which use web workers loaded from blob URLs.
+  - Note: CSP violation reporting via `report-uri` directive pointing to Sentry security endpoint is OPTIONAL for scaffold; add when Sentry project ID is configured.
+  - Note: Do NOT enable `cacheComponents: true` in next.config.ts without addressing the nonce/`headers()` incompatibility (vercel/next.js#89754 — not relevant for scaffold defaults).
 
 **Checkpoint**: Start the app, send rapid requests to /api/ — get 429 after 30 requests. Response headers include Content-Security-Policy.
 
