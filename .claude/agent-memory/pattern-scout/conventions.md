@@ -4,7 +4,7 @@ description: Naming conventions, directory patterns, import rules, and file dire
 type: project
 ---
 
-All conventions are derived from `.specify/memory/constitution.md` v1.1.0.
+All conventions are derived from `.specify/memory/constitution.md` v1.2.0.
 
 **Why:** Constitution is the governing authority — conventions are non-negotiable without an amendment.
 
