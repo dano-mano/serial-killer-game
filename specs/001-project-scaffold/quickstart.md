@@ -17,8 +17,8 @@ cd serial-killer-game
 npm install
 
 # Copy environment template and fill in values
-cp .env.example .env.local
-# Edit .env.local with your Supabase and Sentry credentials
+cp apps/web/.env.example apps/web/.env.local
+# Edit apps/web/.env.local with your Supabase and Sentry credentials
 ```
 
 ## Development

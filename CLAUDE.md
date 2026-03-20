@@ -28,7 +28,7 @@ Governance principles are in `.specify/memory/constitution.md`. See `.bytedragon
 | Layer | Technology | Version | Role/Why |
 |-------|-----------|---------|----------|
 | Runtime | Node.js | 24.14.0 LTS | Active LTS until Oct 2026 |
-| Framework | Next.js | 16.1.6 | Turbopack, React 19.2, App Router |
+| Framework | Next.js | 16.2.0 | Turbopack, React 19.2, App Router |
 | UI Framework | React | 19.2.4 | View Transitions, React Compiler |
 | Language | TypeScript | 5.9.3 | Staying on 5.9.x until 6.0 stability confirmed |
 | Styling | Tailwind CSS | 4.2.1 | CSS-first config, Oxide engine |
@@ -163,8 +163,8 @@ Speckit commands are at `.claude/commands/speckit.*.md` and skills at `.claude/s
 - **Game design**: No gameplay mechanics, database tables, or routes have been defined yet. The architecture and constitution are intentionally generic to support any game design.
 
 ## Active Technologies
-- TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.1.6, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest) (001-project-scaffold)
+- TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.2.0, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest) (001-project-scaffold)
 - Supabase Cloud (PostgreSQL) -- no database tables in scaffold, connection config only (001-project-scaffold)
 
 ## Recent Changes
-- 001-project-scaffold: Added TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.1.6, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)
+- 001-project-scaffold: Added TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.2.0, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)

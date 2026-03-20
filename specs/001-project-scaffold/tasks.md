@@ -19,12 +19,12 @@
 
 **Purpose**: Create the Turborepo monorepo skeleton — root configs, version pinning, workspace definitions. No application code yet.
 
-- [ ] T001 Create root package.json with npm workspaces (`"workspaces": ["apps/*", "packages/*"]`), engine field (`"node": ">=24.14.0"`), and root scripts (build, dev, lint, test, type-check) in package.json
-- [ ] T002 [P] Create turbo.json with `tasks` config: build (^build, outputs, NEXT_PUBLIC_* env), lint (^build), test (^build, inputs), type-check, dev (persistent), test:watch (persistent) in turbo.json
-- [ ] T003 [P] Create root tsconfig.json with strict mode, moduleResolution bundler, target ES2022, base config for all packages to extend in tsconfig.json
-- [ ] T004 [P] Create version pinning files: .nvmrc (24.14.0) and .node-version (24.14.0)
-- [ ] T004b [P] Create .gitignore excluding node_modules/, .next/, .turbo/, dist/, .env.local, .env*.local, *.tsbuildinfo, .DS_Store
-- [ ] T005 [P] Create vitest.shared.mts with shared test configuration (globals: false, restoreMocks: true, passWithNoTests: true) in vitest.shared.mts
+- [x] T001 Create root package.json with npm workspaces (`"workspaces": ["apps/*", "packages/*"]`), engine field (`"node": ">=24.14.0"`), and root scripts (build, dev, lint, test, type-check) in package.json
+- [x] T002 [P] Create turbo.json with `tasks` config: build (^build, outputs, NEXT_PUBLIC_* env), lint (^build), test (^build, inputs), type-check, dev (persistent), test:watch (persistent) in turbo.json
+- [x] T003 [P] Create root tsconfig.json with strict mode, moduleResolution bundler, target ES2022, base config for all packages to extend in tsconfig.json
+- [x] T004 [P] Create version pinning files: .nvmrc (24.14.0) and .node-version (24.14.0)
+- [x] T004b [P] Verified existing .gitignore — already complete with all required entries (node_modules/, .next/, .turbo/, dist/, .env*, *.tsbuildinfo, .DS_Store). No changes needed.
+- [x] T005 [P] Create vitest.shared.mts with shared test configuration (globals: false, restoreMocks: true, passWithNoTests: true) in vitest.shared.mts
 
 ---
 
@@ -34,34 +34,34 @@
 
 ### packages/shared (@repo/shared)
 
-- [ ] T006 Create packages/shared/package.json with name @repo/shared, exports field mapping subpaths (./types/common, ./schemas/common, ./constants/errors, ./utils/result) to source files in packages/shared/package.json
-- [ ] T007 [P] Create packages/shared/tsconfig.json extending root tsconfig with package-specific settings in packages/shared/tsconfig.json
-- [ ] T008 [P] Implement base types: ID (UUID string), Timestamp (ISO 8601 string), BaseDto interface in packages/shared/src/types/common.ts
-- [ ] T009 [P] Implement error category constants (VALIDATION, NOT_FOUND, UNAUTHORIZED, FORBIDDEN, DATABASE, INTERNAL) in packages/shared/src/constants/errors.ts
-- [ ] T010 Implement Zod validation schemas: idSchema (UUID), timestampSchema (ISO 8601), paginationSchema (limit/offset with defaults and bounds) in packages/shared/src/schemas/common.ts
-- [ ] T011 Implement neverthrow Result wrappers: ok(), err(), AppError class with category/message/code/cause, factory methods (AppError.validation, .notFound, .unauthorized, .forbidden, .database, .internal), re-export Result and ResultAsync types in packages/shared/src/utils/result.ts
-- [ ] T012 [P] Create packages/shared/vitest.config.mts with node environment, importing from vitest.shared.mts, include tests/**/*.test.ts in packages/shared/vitest.config.mts
+- [x] T006 Create packages/shared/package.json with name @repo/shared, exports field mapping subpaths (./types/common, ./schemas/common, ./constants/errors, ./utils/result) to source files in packages/shared/package.json
+- [x] T007 [P] Create packages/shared/tsconfig.json extending root tsconfig with package-specific settings in packages/shared/tsconfig.json
+- [x] T008 [P] Implement base types: ID (UUID string), Timestamp (ISO 8601 string), BaseDto interface in packages/shared/src/types/common.ts
+- [x] T009 [P] Implement error category constants (VALIDATION, NOT_FOUND, UNAUTHORIZED, FORBIDDEN, DATABASE, INTERNAL) in packages/shared/src/constants/errors.ts
+- [x] T010 Implement Zod validation schemas: idSchema (UUID), timestampSchema (ISO 8601), paginationSchema (limit/offset with defaults and bounds) in packages/shared/src/schemas/common.ts
+- [x] T011 Implement neverthrow Result wrappers: ok(), err(), AppError class with category/message/code/cause, factory methods (AppError.validation, .notFound, .unauthorized, .forbidden, .database, .internal), re-export Result and ResultAsync types in packages/shared/src/utils/result.ts
+- [x] T012 [P] Create packages/shared/vitest.config.mts with node environment, importing from vitest.shared.mts, include tests/**/*.test.ts in packages/shared/vitest.config.mts
 
 ### packages/game-engine (@repo/game-engine)
 
-- [ ] T013 [P] Create packages/game-engine/package.json with name @repo/game-engine, dependency on @repo/shared, NO React dependency in packages/game-engine/package.json
-- [ ] T014 [P] Create packages/game-engine/tsconfig.json extending root in packages/game-engine/tsconfig.json
-- [ ] T015 [P] Create packages/game-engine/src/index.ts as empty package entry point in packages/game-engine/src/index.ts
-- [ ] T016 [P] Create packages/game-engine/vitest.config.mts with node environment in packages/game-engine/vitest.config.mts
+- [x] T013 [P] Create packages/game-engine/package.json with name @repo/game-engine, dependency on @repo/shared, NO React dependency in packages/game-engine/package.json
+- [x] T014 [P] Create packages/game-engine/tsconfig.json extending root in packages/game-engine/tsconfig.json
+- [x] T015 [P] Create packages/game-engine/src/index.ts as empty package entry point in packages/game-engine/src/index.ts
+- [x] T016 [P] Create packages/game-engine/vitest.config.mts with node environment in packages/game-engine/vitest.config.mts
 
 ### packages/ui-theme (@repo/ui-theme)
 
-- [ ] T017 [P] Create packages/ui-theme/package.json with name @repo/ui-theme in packages/ui-theme/package.json
-- [ ] T018 [P] Create packages/ui-theme/tsconfig.json extending root in packages/ui-theme/tsconfig.json
-- [ ] T019 [P] Create empty scaffold files: packages/ui-theme/src/tokens/colors.ts and packages/ui-theme/src/brand/config.ts
-- [ ] T020 [P] Create packages/ui-theme/vitest.config.mts with node environment in packages/ui-theme/vitest.config.mts
+- [x] T017 [P] Create packages/ui-theme/package.json with name @repo/ui-theme in packages/ui-theme/package.json
+- [x] T018 [P] Create packages/ui-theme/tsconfig.json extending root in packages/ui-theme/tsconfig.json
+- [x] T019 [P] Create empty scaffold files: packages/ui-theme/src/tokens/colors.ts and packages/ui-theme/src/brand/config.ts
+- [x] T020 [P] Create packages/ui-theme/vitest.config.mts with node environment in packages/ui-theme/vitest.config.mts
 
 ### apps/web (Next.js application shell)
 
-- [ ] T021 Create apps/web/package.json with dependencies: next, react, react-dom, tailwindcss, zustand, pino, pino-pretty, neverthrow, next-safe-action, @sentry/nextjs, rate-limiter-flexible, zod; devDependencies: typescript, @types/react, vitest, @vitejs/plugin-react, vite-tsconfig-paths, @testing-library/react, @testing-library/jest-dom, playwright, eslint in apps/web/package.json
-- [ ] T022 [P] Create apps/web/tsconfig.json extending root with Next.js-specific settings, path aliases (@/ -> src/) in apps/web/tsconfig.json
-- [ ] T023 Create apps/web/vitest.config.mts with jsdom environment, React plugin, RTL setup file, tsconfigPaths plugin in apps/web/vitest.config.mts
-- [ ] T024 [P] Create apps/web/vitest.setup.ts importing @testing-library/jest-dom/vitest in apps/web/vitest.setup.ts
+- [x] T021 Create apps/web/package.json with dependencies: next, react, react-dom, tailwindcss, zustand, pino, pino-pretty, neverthrow, next-safe-action, @sentry/nextjs, rate-limiter-flexible, zod; devDependencies: typescript, @types/react, vitest, @vitejs/plugin-react, vite-tsconfig-paths, @testing-library/react, @testing-library/jest-dom, playwright, eslint in apps/web/package.json
+- [x] T022 [P] Create apps/web/tsconfig.json extending root with Next.js-specific settings, path aliases (@/ -> src/) in apps/web/tsconfig.json
+- [x] T023 Create apps/web/vitest.config.mts with jsdom environment, React plugin, RTL setup file, tsconfigPaths plugin in apps/web/vitest.config.mts
+- [x] T024 [P] Create apps/web/vitest.setup.ts importing @testing-library/jest-dom/vitest in apps/web/vitest.setup.ts
 
 **Checkpoint**: Run `npm install` — all dependencies resolve. Run `npx turbo build` on packages/shared — builds successfully. Package topology is correct.
 
@@ -75,13 +75,13 @@
 
 ### Implementation
 
-- [ ] T025 [US2] Implement centralized Zod-validated environment config exporting typed env object; fail-fast with clear error on missing/invalid required vars; graceful handling of optional vars in apps/web/src/config/env.ts
-- [ ] T026 [US1] Create next.config.ts with standalone output, serverExternalPackages (pino, pino-pretty), withSentryConfig wrapper for automatic source map upload during build (FR-010), tunnelRoute /monitoring in apps/web/next.config.ts
-- [ ] T027 [US1] Create root layout.tsx with html/body tags, metadata export, children prop, importing globals.css in apps/web/src/app/layout.tsx
-- [ ] T027b [P] [US1] Create globals.css with `@import "tailwindcss"`, `@theme inline { }` directive (NOT `@theme { }`) importing design tokens from @repo/ui-theme, dark mode class-based switching setup in apps/web/src/app/globals.css
-- [ ] T028 [US1] Create minimal home page with project name heading in apps/web/src/app/page.tsx
-- [ ] T029 [US2] Create .env.example with all required and optional variable stubs and descriptions: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SENTRY_DSN, NEXT_PUBLIC_POSTHOG_KEY, NEXT_PUBLIC_POSTHOG_HOST, AZURE_BLOB_STORAGE_URL, LOG_LEVEL (optional, default info/debug) in .env.example
-- [ ] T030 [US2] Write env validation tests: valid config passes, missing required var fails with clear message, invalid format fails, empty string treated as missing, optional vars gracefully absent in apps/web/tests/config/env.test.ts
+- [x] T025 [US2] Implement centralized Zod-validated environment config exporting typed env object; fail-fast with clear error on missing/invalid required vars; graceful handling of optional vars in apps/web/src/config/env.ts
+- [x] T026 [US1] Create next.config.ts with standalone output, serverExternalPackages (pino, pino-pretty), withSentryConfig wrapper for automatic source map upload during build (FR-010), tunnelRoute /monitoring in apps/web/next.config.ts
+- [x] T027 [US1] Create root layout.tsx with html/body tags, metadata export, children prop, importing globals.css in apps/web/src/app/layout.tsx
+- [x] T027b [P] [US1] Create globals.css with `@import "tailwindcss"`, `@theme inline { }` directive (NOT `@theme { }`) importing design tokens from @repo/ui-theme, dark mode class-based switching setup in apps/web/src/app/globals.css
+- [x] T028 [US1] Create minimal home page with project name heading in apps/web/src/app/page.tsx
+- [x] T029 [US2] Create .env.example with all required and optional variable stubs and descriptions: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SENTRY_DSN, NEXT_PUBLIC_POSTHOG_KEY, NEXT_PUBLIC_POSTHOG_HOST, AZURE_BLOB_STORAGE_URL, LOG_LEVEL (optional, default info/debug) in .env.example
+- [x] T030 [US2] Write env validation tests: valid config passes, missing required var fails with clear message, invalid format fails, empty string treated as missing, optional vars gracefully absent in apps/web/tests/config/env.test.ts
 
 **Checkpoint**: `npm run dev` starts the app and renders the home page. Removing NEXT_PUBLIC_SUPABASE_URL causes immediate failure with a clear error message.
 
@@ -95,12 +95,12 @@
 
 ### Implementation
 
-- [ ] T031 [US3] Implement singleton Pino logger: dev mode uses pino-pretty transport, production uses structured JSON; import 'server-only' guard; export typed logger instance in apps/web/src/lib/logger/pino.ts
-- [ ] T032 [US3] Implement Sentry server config with pinoIntegration (error levels: error/fatal, log levels: info/warn/error/fatal), enableLogs: true, tracesSampleRate in apps/web/src/sentry.server.config.ts
-- [ ] T033 [P] [US3] Implement Sentry server registration: register() imports sentry.server.config for nodejs runtime, export onRequestError from @sentry/nextjs in apps/web/src/instrumentation.ts
-- [ ] T034 [P] [US3] Implement Sentry client init: DSN from env, replayIntegration (maskAllText, maskAllInputs, blockAllMedia), enableLogs, export onRouterTransitionStart in apps/web/src/instrumentation-client.ts
-- [ ] T035 [US3] Implement root error boundary capturing errors to Sentry in apps/web/src/app/error.tsx
-- [ ] T036 [P] [US3] Implement global error boundary (catches layout errors) capturing to Sentry in apps/web/src/app/global-error.tsx
+- [x] T031 [US3] Implement singleton Pino logger: dev mode uses pino-pretty transport, production uses structured JSON; import 'server-only' guard; export typed logger instance in apps/web/src/lib/logger/pino.ts
+- [x] T032 [US3] Implement Sentry server config with pinoIntegration (error levels: error/fatal, log levels: info/warn/error/fatal), enableLogs: true, tracesSampleRate in apps/web/src/sentry.server.config.ts
+- [x] T033 [P] [US3] Implement Sentry server registration: register() imports sentry.server.config for nodejs runtime, export onRequestError from @sentry/nextjs in apps/web/src/instrumentation.ts
+- [x] T034 [P] [US3] Implement Sentry client init: DSN from env, replayIntegration (maskAllText, maskAllInputs, blockAllMedia), enableLogs, export onRouterTransitionStart in apps/web/src/instrumentation-client.ts
+- [x] T035 [US3] Implement root error boundary capturing errors to Sentry in apps/web/src/app/error.tsx
+- [x] T036 [P] [US3] Implement global error boundary (catches layout errors) capturing to Sentry in apps/web/src/app/global-error.tsx
 
 **Checkpoint**: Start the app, trigger a console log — see human-readable output. Set NODE_ENV=production — see structured JSON. Throw an error — verify Sentry captures it.
 
@@ -114,8 +114,8 @@
 
 ### Tests
 
-- [ ] T037 [US4] Write Result pattern tests: ok() returns success, err() returns failure with typed error, AppError factories produce correct categories, errors serialize correctly in packages/shared/tests/utils/result.test.ts
-- [ ] T038 [P] [US4] Write schema validation tests: idSchema accepts valid UUID and rejects invalid, timestampSchema accepts ISO 8601 and rejects malformed, paginationSchema applies defaults and rejects out-of-bounds in packages/shared/tests/schemas/common.test.ts
+- [x] T037 [US4] Write Result pattern tests: ok() returns success, err() returns failure with typed error, AppError factories produce correct categories, errors serialize correctly in packages/shared/tests/utils/result.test.ts
+- [x] T038 [P] [US4] Write schema validation tests: idSchema accepts valid UUID and rejects invalid, timestampSchema accepts ISO 8601 and rejects malformed, paginationSchema applies defaults and rejects out-of-bounds in packages/shared/tests/schemas/common.test.ts
 
 **Checkpoint**: `npx turbo test --filter=@repo/shared` passes all tests.
 
@@ -129,8 +129,8 @@
 
 ### Implementation
 
-- [ ] T039 [US7] Implement eslint.config.mjs: import eslint-config-next (core-web-vitals + typescript), react-compiler plugin, eslint-plugin-neverthrow with must-use-result error rule, noBarrelFiles.flat, n plugin with no-process-env error; file-level override disabling barrel rule for packages/*/src/index.ts; file-level override disabling process-env for **/config/**; no-restricted-imports for vendor direct access; no-console; globalIgnores; prettier; install eslint-plugin-neverthrow as devDependency in eslint.config.mjs
-- [ ] T040 [US7] Add lint scripts to root package.json and apps/web/package.json; verify `npx turbo lint` passes with zero violations on all scaffold code
+- [x] T039 [US7] Implement eslint.config.mjs: import eslint-config-next (core-web-vitals + typescript), react-compiler plugin, eslint-plugin-neverthrow with must-use-result error rule, noBarrelFiles.flat, n plugin with no-process-env error; file-level override disabling barrel rule for packages/*/src/index.ts; file-level override disabling process-env for **/config/**; no-restricted-imports for vendor direct access; no-console; globalIgnores; prettier; install eslint-plugin-neverthrow as devDependency in eslint.config.mjs
+- [x] T040 [US7] Add lint scripts to root package.json and apps/web/package.json; verify `npx turbo lint` passes with zero violations on all scaffold code
 
 **Checkpoint**: `npx turbo lint` passes. A barrel file in apps/web/ triggers a violation. Direct process.env in apps/web/src/app/ triggers a violation. packages/shared/src/index.ts does NOT trigger.
 
@@ -144,12 +144,12 @@
 
 ### Implementation
 
-- [ ] T041 [US9] Create Playwright config with chromium project, baseURL localhost:3000, webServer config for dev mode in apps/web/playwright.config.ts
-- [ ] T042 [P] [US9] Create Playwright E2E test that navigates to home page and verifies it loads with expected content in apps/web/e2e/home.spec.ts
-- [ ] T043 [P] [US9] Create home page smoke test using RTL: render page component, verify heading renders in apps/web/tests/app/page.test.tsx
-- [ ] T044 [P] [US9] Create game-engine package build verification test in packages/game-engine/tests/setup.test.ts
-- [ ] T045 [P] [US9] Create ui-theme package build verification test in packages/ui-theme/tests/setup.test.ts
-- [ ] T046 [US9] Verify `npx turbo test` runs all package tests and all pass; verify `npx playwright test` runs E2E test
+- [x] T041 [US9] Create Playwright config with chromium project, baseURL localhost:3000, webServer config for dev mode in apps/web/playwright.config.ts
+- [x] T042 [P] [US9] Create Playwright E2E test that navigates to home page and verifies it loads with expected content in apps/web/e2e/home.spec.ts
+- [x] T043 [P] [US9] Create home page smoke test using RTL: render page component, verify heading renders in apps/web/tests/app/page.test.tsx
+- [x] T044 [P] [US9] Create game-engine package build verification test in packages/game-engine/tests/setup.test.ts
+- [x] T045 [P] [US9] Create ui-theme package build verification test in packages/ui-theme/tests/setup.test.ts
+- [x] T046 [US9] Verify `npx turbo test` runs all package tests and all pass; verify `npx playwright test` runs E2E test
 
 **Checkpoint**: `npx turbo test` runs tests in shared, game-engine, ui-theme, and web — all pass. `npx playwright test` loads the home page.
 
@@ -163,8 +163,8 @@
 
 ### Implementation
 
-- [ ] T047 [US8] Implement rate limit configuration: auth (5/15min/30min block), api (30/min/1min block), actions (20/min/1min block), authenticated (60/min/30s block) in apps/web/src/config/security/rate-limits.ts
-- [ ] T048 [US8] Implement proxy.ts in apps/web/src/proxy.ts:
+- [x] T047 [US8] Implement rate limit configuration: auth (5/15min/30min block), api (30/min/1min block), actions (20/min/1min block), authenticated (60/min/30s block) in apps/web/src/config/security/rate-limits.ts
+- [x] T048 [US8] Implement proxy.ts in apps/web/src/proxy.ts:
   1. Import RateLimiterMemory from rate-limiter-flexible; create module-scope singleton limiter instances from config (apps/web/src/config/security/rate-limits.ts)
   2. getClientIp with x-forwarded-for fallback; route-based limiter selection; 429 + Retry-After on limit exceeded
   3. Generate per-request nonce: `Buffer.from(crypto.randomUUID()).toString('base64')`
@@ -204,10 +204,10 @@
 
 ### Implementation
 
-- [ ] T049 [P] [US5] Create CI workflow: trigger on PR, setup-node@v4 pinned to 24.14.0, npm cache, npm ci, turbo lint, turbo test, turbo build, npm audit --audit-level=high, node version verification in .github/workflows/ci.yml
-- [ ] T050 [P] [US6] Create multi-stage Dockerfile: deps stage (node:24-alpine, copy package*.json + turbo.json + per-package package.json, npm ci), builder stage (copy all, NEXT_PUBLIC_* build args, turbo build --filter=web), runner stage (node:24-alpine, copy standalone + static + public, CMD node apps/web/server.js) in Dockerfile
-- [ ] T051 [P] [US6] Create .dockerignore excluding node_modules, .next, .git, .bytedragon, specs, .env*, .claude in .dockerignore
-- [ ] T052 [US6] Create deploy workflow: trigger on push to main, run CI checks, docker build with build-args, push to ghcr.io, deploy to Azure App Service via azure/webapps-deploy action in .github/workflows/deploy.yml
+- [x] T049 [P] [US5] Create CI workflow: trigger on PR, setup-node@v4 pinned to 24.14.0, npm cache, npm ci, turbo lint, turbo test, turbo build, npm audit --audit-level=high, node version verification in .github/workflows/ci.yml
+- [x] T050 [P] [US6] Create multi-stage Dockerfile: deps stage (node:24-alpine, copy package*.json + turbo.json + per-package package.json, npm ci), builder stage (copy all, NEXT_PUBLIC_* build args, turbo build --filter=web), runner stage (node:24-alpine, copy standalone + static + public, CMD node apps/web/server.js) in Dockerfile
+- [x] T051 [P] [US6] Create .dockerignore excluding node_modules, .next, .git, .bytedragon, specs, .env*, .claude in .dockerignore
+- [x] T052 [US6] Create deploy workflow: trigger on push to main, run CI checks, docker build with build-args, push to ghcr.io, deploy to Azure App Service via azure/webapps-deploy action in .github/workflows/deploy.yml
 
 **Checkpoint**: Docker image builds locally. `docker run -p 3000:3000` serves the home page. CI and deploy workflow files pass YAML validation.
 
@@ -217,9 +217,9 @@
 
 **Purpose**: Final verification, empty directory scaffolds, and cleanup.
 
-- [ ] T053 Create empty scaffold directories: apps/web/src/dal/, apps/web/src/stores/, apps/web/src/app/actions/, apps/web/src/components/vendor/shadcn/, apps/web/src/components/vendor/magic-ui/, apps/web/src/components/app/common/, apps/web/public/assets/, apps/web/public/branding/, supabase/migrations/, supabase/functions/ (use .gitkeep files)
-- [ ] T054 [P] Verify all success criteria from spec.md: SC-001 through SC-010
-- [ ] T055 Run quickstart.md validation: follow setup steps from scratch, verify all commands work
+- [x] T053 Create empty scaffold directories: apps/web/src/dal/, apps/web/src/stores/, apps/web/src/app/actions/, apps/web/src/components/vendor/shadcn/, apps/web/src/components/vendor/magic-ui/, apps/web/src/components/app/common/, apps/web/public/assets/, apps/web/public/branding/, supabase/migrations/, supabase/functions/ (use .gitkeep files)
+- [x] T054 [P] Verify all success criteria from spec.md: SC-001 through SC-010
+- [x] T055 Run quickstart.md validation: follow setup steps from scratch, verify all commands work
 
 ---
 

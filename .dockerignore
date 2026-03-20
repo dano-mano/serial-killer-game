@@ -1,0 +1,54 @@
+# ------------------- #
+# Build artifacts
+# ------------------- #
+node_modules/
+.next/
+dist/
+.turbo/
+
+# ------------------- #
+# Version control
+# ------------------- #
+.git/
+.gitignore
+
+# ------------------- #
+# Environment secrets — NEVER bake into image
+# ------------------- #
+.env
+.env.*
+!.env.example
+
+# ------------------- #
+# Developer tooling and AI artifacts
+# ------------------- #
+.bytedragon/
+specs/
+.claude/
+.specify/
+.primer/
+
+# ------------------- #
+# CI/CD (not needed in image)
+# ------------------- #
+.github/
+
+# ------------------- #
+# Test artifacts
+# ------------------- #
+coverage/
+test-results/
+playwright-report/
+e2e/
+
+# ------------------- #
+# Documentation
+# ------------------- #
+*.md
+!README.md
+
+# ------------------- #
+# OS artifacts
+# ------------------- #
+.DS_Store
+*.log

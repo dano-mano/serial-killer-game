@@ -44,7 +44,7 @@
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | **Runtime** | Node.js 24 LTS (24.14.0) | Active LTS until Oct 2026, maintenance until April 2028 |
-| **App Shell** | Next.js 16.1.6 | Turbopack default, React 19.2, Cache Components, full SSR |
+| **App Shell** | Next.js 16.2.0 | Turbopack default, React 19.2, Cache Components, full SSR |
 | **UI Framework** | React 19.2.4 + React DOM 19.2.4 | View Transitions, useEffectEvent, Activity, React Compiler |
 | **Language** | TypeScript 5.9.3 | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
 | **Styling** | Tailwind CSS 4.2.1 | CSS-first config, Oxide engine (5x faster), no config file needed |
@@ -96,7 +96,7 @@ All project artifacts -- local development, Docker images, CI/CD, and Azure App 
 
 | Technology | Node 24 Compatible? | Details |
 |-----------|---------------------|---------|
-| **Next.js 16.1.6** | Yes | Minimum Node.js 20.9 required. Node 24 exceeds this. |
+| **Next.js 16.2.0** | Yes | Minimum Node.js 20.9 required. Node 24 exceeds this. |
 | **Phaser 3.90.0** | Yes | Client-side library. Any modern Node version works for build tooling. |
 | **Supabase JS SDK** | Yes | Requires Active or Maintenance LTS. Node 24 is fully supported. |
 | **Azure App Service Linux** | Yes | Node.js 24 LTS available via runtime stack `NODE\|24-lts`. |
@@ -131,7 +131,7 @@ All versions verified compatible with each other and Node.js 24 LTS as of March 
 
 | Technology | Version | Notes |
 |-----------|---------|-------|
-| **Next.js** | `16.1.6` | Turbopack default, React Compiler support, Cache Components |
+| **Next.js** | `16.2.0` | Turbopack default, React Compiler support, Cache Components |
 | **React** | `19.2.4` | View Transitions, useEffectEvent, Activity |
 | **React DOM** | `19.2.4` | Matches React version |
 | **TypeScript** | `5.9.3` | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
@@ -143,7 +143,7 @@ All versions verified compatible with each other and Node.js 24 LTS as of March 
 
 ### Next.js 16
 
-**Latest stable**: `16.1.6` (February 2026)
+**Latest stable**: `16.2.0` (February 2026)
 
 **Key features**:
 - **Turbopack is default** -- no more `--turbopack` flag for `next dev` and `next build`
@@ -564,7 +564,7 @@ Client A (Phaser + React)          Supabase            Client B (Phaser + React)
 
 ## Testing Infrastructure
 
-All testing tooling versions verified compatible with Node.js 24, TypeScript 5.9.3/6.0, React 19.2, Next.js 16.1.6, and Turborepo as of March 2026.
+All testing tooling versions verified compatible with Node.js 24, TypeScript 5.9.3/6.0, React 19.2, Next.js 16.2.0, and Turborepo as of March 2026.
 
 ### Vitest 4.1.0 (Unit + Integration Testing)
 

@@ -37,10 +37,12 @@ dist/
 !.env.example
 
 # ------------------- #
-# Test Coverage
+# Test Coverage + Test Artifacts
 # ------------------- #
 
 coverage/
+test-results/
+playwright-report/
 
 # ------------------- #
 # Deployment Tooling

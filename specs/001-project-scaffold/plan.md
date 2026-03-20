@@ -10,7 +10,7 @@ Bootstrap the complete Turborepo monorepo with four packages (web app, game engi
 ## Technical Context
 
 **Language/Version**: TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed)
-**Primary Dependencies**: Next.js 16.1.6, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)
+**Primary Dependencies**: Next.js 16.2.0, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)
 **Storage**: Supabase Cloud (PostgreSQL) -- no database tables in scaffold, connection config only
 **Testing**: Vitest 4.1.0, React Testing Library 16.3.2, Playwright 1.58.2
 **Target Platform**: Browser (desktop + mobile), deployed as Docker container on Azure App Service B1 Linux
@@ -70,7 +70,7 @@ specs/001-project-scaffold/
 ```text
 /
 ├── apps/
-│   └── web/                          # Next.js 16.1.6 application
+│   └── web/                          # Next.js 16.2.0 application
 │       ├── src/
 │       │   ├── app/
 │       │   │   ├── layout.tsx        # Root layout (Sentry client init, metadata)
