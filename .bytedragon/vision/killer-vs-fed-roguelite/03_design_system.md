@@ -19,7 +19,7 @@ produces:
   - "Font configuration apps/web/src/app/fonts.ts"
   - "shadcn CLI config apps/web/components.json"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 03: Design System
@@ -485,7 +485,7 @@ When this piece is fully implemented, it should produce:
 All of the following are produced by piece 01 and must be in place:
 
 - **Turborepo workspace** — `turbo.json`, `package.json` workspaces
-- **`packages/ui-theme/` scaffold** — empty package with `package.json`, `tsconfig.json`, `src/tokens/`, `src/brand/` directories
+- **`packages/ui-theme/` scaffold** — populated package with `package.json`, `tsconfig.json`, `src/tokens/` (color tokens), and `src/brand/` (brand config) directories; the scaffold is NOT empty — color tokens and brand config are already defined
 - **`apps/web/src/components/` directory structure** — `vendor/shadcn/`, `vendor/magic-ui/`, `app/common/` directories already exist as scaffolds
 - **Tailwind CSS 4.2.1 dependency** — installed in `apps/web/package.json`
 

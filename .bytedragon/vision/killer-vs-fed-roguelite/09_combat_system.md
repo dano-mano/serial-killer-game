@@ -27,7 +27,7 @@ produces:
   - "Combat constants at packages/shared/src/constants/combat.ts — base damage, dodge chance, invincibility windows, max status effects"
   - "Combat EventBus event constants at packages/shared/src/constants/events/combat.ts — COMBAT_STARTED, DAMAGE_DEALT, ENTITY_DIED, etc."
 created: 2026-03-18
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 09: Combat System

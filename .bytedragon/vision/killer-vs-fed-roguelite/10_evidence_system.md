@@ -28,7 +28,7 @@ produces:
   - "Server-side evidence validation DAL"
   - "Counter-play abilities: killer fake evidence and fed off-the-books tactics"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 10: Evidence System

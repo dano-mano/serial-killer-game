@@ -47,7 +47,7 @@ produces:
   - "apps/web/src/dal/settings/user-settings.ts — getSettings, updateSettings"
   - "apps/web/src/app/actions/settings/save-settings.ts — validated settings save server action"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 19: Polish and Onboarding
@@ -72,7 +72,7 @@ Polish does not change gameplay logic — it augments feedback, smooths flow, an
 
 ### Dependencies (Inline — Do Not Reference Other Documents)
 
-From piece 01: string UUID identifiers and ISO 8601 timestamps; database error and not-found error types; structured logger; environment config.
+From piece 01: string UUID identifiers and ISO 8601 timestamps; error types via `AppError` class with static factory methods (`.database()`, `.notFound()`, and others) at `packages/shared/src/utils/result.ts`; `ErrorCategory` constants at `packages/shared/src/constants/errors.ts`; structured logger at `apps/web/src/lib/logger/pino.ts`; environment config.
 
 From piece 02: browser-side and server-side Supabase clients.
 
