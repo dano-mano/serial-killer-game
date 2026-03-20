@@ -6,48 +6,47 @@ type: project
 
 Greenfield browser-based asymmetric roguelite game — "Serial Killer vs. Fed". One player hunts targets while evading detection; the other investigates crime scenes to identify and arrest the killer. Both players disguised among NPCs.
 
-**Why:** Foundation-first approach — governance and architecture ratified before game design. Game design vision (19 pieces) completed 2026-03-18.
+**Why:** Foundation-first approach — governance and architecture ratified before game design. Game design vision (19 pieces) completed 2026-03-18. 001-project-scaffold completed 2026-03-20.
 
-**How to apply:** No application code exists yet. First implementation is piece 01 (project-scaffold). Constitution v1.2.0 and TECH_RESEARCH.md are the authorities for all architecture decisions.
+**How to apply:** No game logic exists yet. All scaffold directories are ready but empty (DAL, stores, actions, components). First game implementation piece is 02+.
 
-## What Exists (governance + vision artifacts only)
-- `.specify/memory/constitution.md` — 33-principle governance document (v1.2.0, updated 2026-03-18)
-- `.bytedragon/TECH_RESEARCH.md` — Full technology research including visual rendering pipeline section (updated 2026-03-18)
-- `CLAUDE.md` — Project instructions with architecture overview
-- `.specify/` — Full speckit toolchain (v0.3.0)
-- `.claude/commands/` — 9 speckit commands
-- `.bytedragon/session-notes/` — architectural decision notes
-- `.bytedragon/vision/killer-vs-fed-roguelite/` — 19 vision documents (01-19) + art-style-guide.md reference doc, all status: pending
-- `.bytedragon/agent-outputs/pattern-scout.md` — Full pattern discovery output (2026-03-18)
+## What Exists (as of 2026-03-20)
+- `.specify/memory/constitution.md` — 33-principle governance document (v1.2.0)
+- `.bytedragon/TECH_RESEARCH.md` — Full technology research
+- `apps/web/` — Complete Next.js 16.2.0 scaffold (55 tasks done)
+  - config/env.ts, config/security/rate-limits.ts
+  - lib/logger/pino.ts
+  - proxy.ts (rate limiting + CSP + security headers)
+  - instrumentation.ts, instrumentation-client.ts, sentry.server.config.ts
+  - app/layout.tsx, app/page.tsx (placeholder), app/error.tsx, app/global-error.tsx
+  - app/globals.css (Tailwind v4 @theme inline tokens)
+  - tests/ with env.test.ts and page.test.tsx
+  - e2e/ with home.spec.ts
+- `packages/shared/` — types, schemas, constants, result utils (fully tested)
+- `packages/game-engine/` — EMPTY scaffold (src/index.ts is a comment-only placeholder)
+- `packages/ui-theme/` — color tokens + brand config
+- `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` — complete CI/CD
 
-## What Does NOT Exist
-- No package.json, no node_modules
-- No apps/web/, packages/, supabase/
-- No source code, no tests
-- No turbo.json, Dockerfile, CI/CD workflows
+## What Does NOT Exist Yet
+- No game scenes, Phaser code, or rendering logic
+- No Zustand stores (apps/web/src/stores/ is .gitkeep only)
+- No DAL modules (apps/web/src/dal/ is .gitkeep only)
+- No Server Actions (apps/web/src/app/actions/ is .gitkeep only)
+- No app/common/ or app/[domain]/ components
+- No shadcn/ui or Magic UI components installed
+- No Supabase database tables
+- No auth implementation
 
-## What NOW Exists (as of 2026-03-20)
-- `specs/001-project-scaffold/` — complete spec, plan, tasks, data-model, contracts, quickstart, checklists
-- `.bytedragon/agent-outputs/pattern-scout.md` — comprehensive pattern discovery (2026-03-19)
-- `apps/web/` — Next.js 16.2.0 scaffold complete (all 55 tasks done as of 2026-03-20)
-- `packages/shared/`, `packages/game-engine/`, `packages/ui-theme/` — all scaffold packages complete
-- `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` — CI/CD infrastructure complete
-
-## 001-project-scaffold Status (2026-03-20)
-COMPLETE. 55 tasks done. Two actionable findings from compliance audit:
+## Known Issues from Compliance Audit
 1. CI workflow trigger is `workflow_dispatch` only — needs `pull_request` trigger (FR-019)
-2. Dockerfile uses `node:24-alpine` not `node:24.14.0-alpine` (Principle IX minor deviation)
+2. Dockerfile comment noted using node:24-alpine but actual file uses node:24.14.0-alpine (constitution-compliant)
 
-## Next Implementation Step
-Piece 02 or later features — scaffold foundation is solid.
-
-## Critical Warnings (from session context)
+## Critical Warnings
 - Piece 09 depends on 08 (evidence system consumes combat events) — NOT parallelizable
 - ContentRegistry<T> pattern (pieces 08+): use `DamageTypeId = string`, NOT hardcoded unions
 - Ghost token scarcity intentional — don't add GT sources without balance review
-- Boss item CUSTOM handlers require subsystem interfaces from earlier pieces
-- Art style guide is a reference document (not in the 19-piece sequence) — consumed by pieces 03, 04, 05, 06, 07, 09, 10, 11, 13, 18, 19
-- Constitution v1.2.0 adds 2 new principles: XXIX (Art Style Consistency) and XXXIII (Graceful Visual Degradation)
+- Art style guide: `.bytedragon/vision/killer-vs-fed-roguelite/art-style-guide.md`
+- Constitution v1.2.0 adds Principle XXIX (Art Style Consistency) and XXXIII (Graceful Visual Degradation)
 
 ## Verified
-2026-03-19 — re-verified against spec artifacts (spec.md, plan.md, tasks.md, data-model.md, contracts/shared-package.md, research.md). All patterns confirmed accurate.
+2026-03-20 — fully re-verified against actual scaffold source code (all files read directly)

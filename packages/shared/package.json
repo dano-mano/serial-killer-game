@@ -15,8 +15,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "neverthrow": "latest",
-    "zod": "latest"
+    "neverthrow": "^8.2.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "5.9.3",

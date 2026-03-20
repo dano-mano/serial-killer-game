@@ -75,6 +75,14 @@ const config = [
   ...nextCoreWebVitals,
   ...nextTypescript,
 
+  // Non-Next.js packages: disable rules that expect a pages/ directory
+  {
+    files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+    rules: {
+      '@next/next/no-html-link-for-pages': 'off',
+    },
+  },
+
   // Rules for all JavaScript and TypeScript files (non-type-aware)
   {
     plugins: {

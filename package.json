@@ -23,7 +23,7 @@
     "eslint-plugin-no-barrel-files": "^1.2.2",
     "eslint-plugin-react-compiler": "^19.1.0-rc.2",
     "jsdom": "^29.0.0",
-    "turbo": "latest",
+    "turbo": "^2.8.20",
     "typescript": "5.9.3"
   }
 }
