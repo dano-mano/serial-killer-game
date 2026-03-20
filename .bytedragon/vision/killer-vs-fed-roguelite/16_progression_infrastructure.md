@@ -32,7 +32,7 @@ produces:
   - "Progression effects engine at packages/game-engine/src/progression/progression-effects.ts — applies skills + trophies + equipment + crafting mods at run start"
   - "craftingRecipeRegistry instance — added to registries.ts"
 created: 2026-03-18
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 16: Progression Infrastructure

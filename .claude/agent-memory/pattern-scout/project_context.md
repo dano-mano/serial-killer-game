@@ -24,12 +24,22 @@ Greenfield browser-based asymmetric roguelite game — "Serial Killer vs. Fed". 
 - No package.json, no node_modules
 - No apps/web/, packages/, supabase/
 - No source code, no tests
-- No specs directory yet (speckit.specify not yet run)
 - No turbo.json, Dockerfile, CI/CD workflows
 
+## What NOW Exists (as of 2026-03-20)
+- `specs/001-project-scaffold/` — complete spec, plan, tasks, data-model, contracts, quickstart, checklists
+- `.bytedragon/agent-outputs/pattern-scout.md` — comprehensive pattern discovery (2026-03-19)
+- `apps/web/` — Next.js 16.2.0 scaffold complete (all 55 tasks done as of 2026-03-20)
+- `packages/shared/`, `packages/game-engine/`, `packages/ui-theme/` — all scaffold packages complete
+- `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` — CI/CD infrastructure complete
+
+## 001-project-scaffold Status (2026-03-20)
+COMPLETE. 55 tasks done. Two actionable findings from compliance audit:
+1. CI workflow trigger is `workflow_dispatch` only — needs `pull_request` trigger (FR-019)
+2. Dockerfile uses `node:24-alpine` not `node:24.14.0-alpine` (Principle IX minor deviation)
+
 ## Next Implementation Step
-Piece 01: project-scaffold. Vision document at `.bytedragon/vision/killer-vs-fed-roguelite/01_project_scaffold.md`.
-Subsequent pieces 02, 03, 04 can be parallelized after 01 completes.
+Piece 02 or later features — scaffold foundation is solid.
 
 ## Critical Warnings (from session context)
 - Piece 09 depends on 08 (evidence system consumes combat events) — NOT parallelizable
@@ -40,4 +50,4 @@ Subsequent pieces 02, 03, 04 can be parallelized after 01 completes.
 - Constitution v1.2.0 adds 2 new principles: XXIX (Art Style Consistency) and XXXIII (Graceful Visual Degradation)
 
 ## Verified
-2026-03-18 — full re-audit of all 19 vision pieces, constitution v1.2.0, art style guide. Memory entries updated.
+2026-03-19 — re-verified against spec artifacts (spec.md, plan.md, tasks.md, data-model.md, contracts/shared-package.md, research.md). All patterns confirmed accurate.

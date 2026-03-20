@@ -4,7 +4,7 @@ sequence: 01
 name: project-scaffold
 group: Foundation
 group_order: 1
-status: pending
+status: completed
 depends_on: []
 produces:
   - "Turborepo monorepo with apps/web, packages/game-engine, packages/shared, packages/ui-theme"
@@ -25,7 +25,7 @@ produces:
   - ".env.example with all required and optional environment variable stubs"
   - "rate-limiter-flexible v10.0.1 configured in proxy.ts with centralized rate limit config"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 01: Project Scaffold
@@ -287,7 +287,7 @@ interface BaseDto {
 | rate-limiter-flexible | 10.0.1 | Rate limiting in proxy.ts (in-memory MVP) |
 | next-safe-action | latest | Server Action validation (skeleton setup) |
 | Sentry | latest | @sentry/nextjs |
-| ESLint | 9.x | Flat config |
+| ESLint | 10.x | Flat config (eslintrc fully removed) |
 
 ### Testing Strategy
 

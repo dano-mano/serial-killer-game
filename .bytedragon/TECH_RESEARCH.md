@@ -9,6 +9,8 @@
 
 > Updated: 2026-03-18 — TypeScript 6.0 released; staying on 5.9.x until stability confirmed. Added Rate Limiting section (rate-limiter-flexible v10.0.1).
 
+> Updated: 2026-03-18 — ESLint version updated from 9.x to 10 (released February 2026)
+
 ---
 
 ## Table of Contents
@@ -42,7 +44,7 @@
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | **Runtime** | Node.js 24 LTS (24.14.0) | Active LTS until Oct 2026, maintenance until April 2028 |
-| **App Shell** | Next.js 16.1.6 | Turbopack default, React 19.2, Cache Components, full SSR |
+| **App Shell** | Next.js 16.2.0 | Turbopack default, React 19.2, Cache Components, full SSR |
 | **UI Framework** | React 19.2.4 + React DOM 19.2.4 | View Transitions, useEffectEvent, Activity, React Compiler |
 | **Language** | TypeScript 5.9.3 | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
 | **Styling** | Tailwind CSS 4.2.1 | CSS-first config, Oxide engine (5x faster), no config file needed |
@@ -64,7 +66,7 @@
 | **Testing (Unit)** | Vitest 4.1.0 | ESM-native, Turborepo-compatible, fast |
 | **Testing (Component)** | React Testing Library 16.3.2 | Behavior-focused, React 19.2 compatible |
 | **Testing (E2E)** | Playwright 1.58.2 | Multi-browser, WebSocket support, multi-tab |
-| **Linting** | ESLint (flat config) with eslint-config-next | Constitution principle enforcement |
+| **Linting** | ESLint 10 (flat config) with eslint-config-next | Constitution principle enforcement, eslintrc fully removed |
 | **Logging** | Pino 10.x | Structured JSON, 5-10x faster than Winston, Sentry integration |
 | **Error Handling** | neverthrow (Result type) + next-safe-action | Type-safe errors across Phaser, React, and Server Actions |
 | **Rate Limiting** | rate-limiter-flexible v10.0.1 | In-memory MVP, PostgreSQL/Redis upgrade path, zero dependencies, ISC license |
@@ -94,7 +96,7 @@ All project artifacts -- local development, Docker images, CI/CD, and Azure App 
 
 | Technology | Node 24 Compatible? | Details |
 |-----------|---------------------|---------|
-| **Next.js 16.1.6** | Yes | Minimum Node.js 20.9 required. Node 24 exceeds this. |
+| **Next.js 16.2.0** | Yes | Minimum Node.js 20.9 required. Node 24 exceeds this. |
 | **Phaser 3.90.0** | Yes | Client-side library. Any modern Node version works for build tooling. |
 | **Supabase JS SDK** | Yes | Requires Active or Maintenance LTS. Node 24 is fully supported. |
 | **Azure App Service Linux** | Yes | Node.js 24 LTS available via runtime stack `NODE\|24-lts`. |
@@ -110,7 +112,7 @@ All project artifacts -- local development, Docker images, CI/CD, and Azure App 
 | **Dockerfile** | `FROM` base image | `node:24-alpine` |
 | **GitHub Actions** | `actions/setup-node` | `node-version: '24'` |
 | **Azure App Service** | Runtime stack | `NODE\|24-lts` |
-| **.nvmrc** | Version file | `24` |
+| **.nvmrc** | Version file | `24.14.0` |
 | **.node-version** | Version file (alt) | `24.14.0` |
 
 ### Version to Avoid
@@ -129,7 +131,7 @@ All versions verified compatible with each other and Node.js 24 LTS as of March 
 
 | Technology | Version | Notes |
 |-----------|---------|-------|
-| **Next.js** | `16.1.6` | Turbopack default, React Compiler support, Cache Components |
+| **Next.js** | `16.2.0` | Turbopack default, React Compiler support, Cache Components |
 | **React** | `19.2.4` | View Transitions, useEffectEvent, Activity |
 | **React DOM** | `19.2.4` | Matches React version |
 | **TypeScript** | `5.9.3` | 6.0 released March 17, 2026 — staying on 5.9.x until stability confirmed |
@@ -141,7 +143,7 @@ All versions verified compatible with each other and Node.js 24 LTS as of March 
 
 ### Next.js 16
 
-**Latest stable**: `16.1.6` (February 2026)
+**Latest stable**: `16.2.0` (February 2026)
 
 **Key features**:
 - **Turbopack is default** -- no more `--turbopack` flag for `next dev` and `next build`
@@ -279,7 +281,7 @@ No React 20 yet -- 19.2.x is the current stable line.
 | **package.json** | `"engines": { "node": ">=24.0.0" }`, exact dependency versions in `dependencies`/`devDependencies` |
 | **package.json scripts** | Remove any `--turbopack` flags (default in Next.js 16) |
 | **Dockerfile** | `FROM node:24-alpine` |
-| **.nvmrc** | `24` |
+| **.nvmrc** | `24.14.0` |
 | **.node-version** | `24.14.0` |
 | **GitHub Actions** | `actions/setup-node@v4` with `node-version: '24'` |
 | **next.config.ts** | `output: 'standalone'`, `reactCompiler: true` |
@@ -562,7 +564,7 @@ Client A (Phaser + React)          Supabase            Client B (Phaser + React)
 
 ## Testing Infrastructure
 
-All testing tooling versions verified compatible with Node.js 24, TypeScript 5.9.3/6.0, React 19.2, Next.js 16.1.6, and Turborepo as of March 2026.
+All testing tooling versions verified compatible with Node.js 24, TypeScript 5.9.3/6.0, React 19.2, Next.js 16.2.0, and Turborepo as of March 2026.
 
 ### Vitest 4.1.0 (Unit + Integration Testing)
 
@@ -783,7 +785,7 @@ npx playwright install --with-deps chromium
 
 ### ESLint Flat Config
 
-Next.js 16 completely removed the `next lint` command and the `eslint` option in `next.config.mjs`. ESLint must be run independently via npm scripts. The `eslint-config-next` package supports ESLint flat config natively (ESLint 9+).
+Next.js 16 completely removed the `next lint` command and the `eslint` option in `next.config.mjs`. ESLint must be run independently via npm scripts. The `eslint-config-next` package supports ESLint flat config natively. ESLint 10 (released February 2026) makes flat config the only option — eslintrc support is fully removed.
 
 **Plugin List**:
 
@@ -818,6 +820,15 @@ const eslintConfig = defineConfig([
 
   reactCompiler.configs.recommended,
   noBarrelFiles.flat,
+
+  // Exception: package entry points ARE barrel files by design
+  // These are the public API surface referenced by package.json "exports"
+  {
+    files: ['packages/*/src/index.ts'],
+    rules: {
+      'no-barrel-files/no-barrel-files': 'off',
+    },
+  },
 
   {
     plugins: { n },

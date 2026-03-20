@@ -21,7 +21,7 @@ produces:
   - "Status effect data entries at packages/shared/src/data/status-effects/ — 25 status effect definitions"
   - "Damage type data entries at packages/shared/src/data/damage-types/ — all damage type definitions"
 created: 2026-03-18
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 08: Content Architecture
@@ -420,8 +420,8 @@ effectProcessor.registerCustomHandler('lure_npc', (params, sourceId, targetId, c
 ### Dependencies (Consumed from Earlier Pieces)
 
 **From piece 01 (Project Scaffold)**:
-- `Result<T, E>` type for fallible operations: `type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }`
-- Pino logger singleton: `import { logger } from 'packages/shared/src/lib/logger'`
+- `Result<T, E>` pattern via neverthrow: `ok`/`err` from neverthrow, `AppError` class with static factory methods (`.validation()`, `.notFound()`, `.unauthorized()`, `.forbidden()`, `.database()`, `.internal()`) at `packages/shared/src/utils/result.ts`; `ErrorCategory` constants at `packages/shared/src/constants/errors.ts`
+- Pino logger singleton: `import { logger } from 'apps/web/src/lib/logger/pino'` (server-only; lives in `apps/web`, not `packages/shared`)
 - Shared UUID string type alias and ISO 8601 timestamp type
 
 **From piece 04 (Game Engine Bootstrap)**:

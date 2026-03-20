@@ -22,7 +22,7 @@ produces:
   - "Asset loader utility packages/game-engine/src/utils/asset-loader.ts"
   - "Game constants packages/shared/src/constants/game.ts"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 04: Game Engine Bootstrap
@@ -554,7 +554,7 @@ When this piece is fully implemented, it should produce:
 
 All of the following are produced by piece 01 and must be in place:
 
-- **`packages/game-engine/` scaffold** — `package.json` with Phaser 3.90.0 listed, `tsconfig.json`, `src/` directory
+- **`packages/game-engine/` scaffold** — `package.json` with Phaser 3.90.0 listed, `tsconfig.json`, `vitest.config.mts` (per-package vitest config that extends from `vitest.shared.mts` at the monorepo root), `src/` directory
 - **`packages/shared/src/types/` and `constants/` directories** — scaffold exists, ready to populate
 - **Zustand** — listed in `apps/web/package.json` dependencies
 - **`packages/shared/src/utils/result.ts`** — neverthrow utilities (not directly used in this piece but downstream pieces need them)

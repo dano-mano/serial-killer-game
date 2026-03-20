@@ -1,0 +1,40 @@
+{
+  "name": "@repo/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev --turbopack",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/shared": "*",
+    "@repo/ui-theme": "*",
+    "@sentry/nextjs": "latest",
+    "neverthrow": "latest",
+    "next": "16.2.0",
+    "next-safe-action": "latest",
+    "pino": "^10.0.0",
+    "pino-pretty": "latest",
+    "rate-limiter-flexible": "10.0.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwindcss": "4.2.1",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "eslint": "latest",
+    "playwright": "1.58.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

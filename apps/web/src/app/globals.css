@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/**
+ * Design tokens via @theme inline — MUST use `inline` keyword.
+ *
+ * `@theme inline { }` keeps CSS custom properties dynamic at runtime,
+ * enabling class-based dark mode switching to work correctly.
+ * `@theme { }` (without inline) resolves at build time and breaks dark mode.
+ */
+@theme inline {
+  /* Base palette — sourced from art style guide (cell-shaded comic-book) */
+  --color-background: #0a0a0f;
+  --color-accent: #c41e3a;
+  --color-fed: #1e5ba8;
+  --color-impact-yellow: #FFD700;
+
+  /* Neutral scale */
+  --color-surface: #12121a;
+  --color-surface-elevated: #1a1a26;
+  --color-border: #2a2a3a;
+
+  /* Text */
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: #9090a0;
+  --color-text-muted: #50505f;
+}
+
+/* Dark mode: class-based switching on <html> element */
+.dark {
+  color-scheme: dark;
+}

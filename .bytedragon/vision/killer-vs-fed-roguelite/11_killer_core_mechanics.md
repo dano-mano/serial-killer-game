@@ -28,7 +28,7 @@ produces:
   - "Killer EventBus event constants at packages/shared/src/constants/events/killer.ts — KILL_EXECUTED, BODY_DISPOSED, HEAT_CHANGED, etc."
   - "Core killer abilities (KA-1 through KA-7) — 5 default abilities and 2 skill-tree-unlocked abilities defined as code-backed systems"
 created: 2026-03-18
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 11: Killer Core Mechanics

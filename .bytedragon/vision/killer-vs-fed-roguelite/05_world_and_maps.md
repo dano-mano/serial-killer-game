@@ -24,7 +24,7 @@ produces:
   - "Minimap data bridge packages/game-engine/src/world/minimap-data.ts"
   - "Zustand map store apps/web/src/stores/map.ts"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 05: World and Maps

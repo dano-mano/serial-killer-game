@@ -1,0 +1,19 @@
+{
+  "name": "@repo/ui-theme",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./tokens/colors": "./src/tokens/colors.ts",
+    "./brand/config": "./src/brand/config.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

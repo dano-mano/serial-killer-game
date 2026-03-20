@@ -28,7 +28,7 @@ produces:
   - "HUD components: HealthBar, Minimap, InventoryPanel, InteractionPrompt, ObjectiveTracker"
   - "Role selection page at /game/select-role"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 07: Player and Roles

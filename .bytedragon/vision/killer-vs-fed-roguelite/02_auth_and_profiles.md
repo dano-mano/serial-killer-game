@@ -20,7 +20,7 @@ produces:
   - "Auth config apps/web/src/config/auth/supabase.ts"
   - "Auth provider component apps/web/src/components/app/auth/auth-provider.tsx"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 02: Auth and Profiles
@@ -494,7 +494,7 @@ All of the following are produced by piece 01 and must be in place before this p
 
 - **Turborepo workspace** — `turbo.json`, `package.json` workspaces
 - **Centralized env config** — `apps/web/src/config/env.ts` (Zod-validated, with SUPABASE_URL and SUPABASE_ANON_KEY)
-- **neverthrow Result utilities** — `packages/shared/src/utils/result.ts` (exports `ok`, `err`, `AppError`, `DatabaseError`, `NotFoundError`, `UnauthorizedError`)
+- **neverthrow Result utilities** — `packages/shared/src/utils/result.ts` (exports `ok`, `err`, and the `AppError` class with static factory methods: `.validation()`, `.notFound()`, `.unauthorized()`, `.forbidden()`, `.database()`, `.internal()`; `ErrorCategory` constants live in `packages/shared/src/constants/errors.ts`)
 - **Pino logger singleton** — `apps/web/src/lib/logger/pino.ts` (used in DAL for error logging)
 - **Shared types scaffold** — `packages/shared/src/types/common.ts` (provides `ID`, `Timestamp`)
 - **`packages/shared/src/schemas/common.ts`** — base Zod schemas (`idSchema`, `timestampSchema`)

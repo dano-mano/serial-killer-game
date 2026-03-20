@@ -29,7 +29,7 @@ produces:
   - "Fed EventBus event constants at packages/shared/src/constants/events/fed.ts — FED_ARREST_ATTEMPTED, SUSPECT_IDENTIFIED, etc."
   - "Core fed abilities (FA-1 through FA-7) — 7 default investigation abilities defined as code-backed systems"
 created: 2026-03-18
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 13: Fed Core Mechanics

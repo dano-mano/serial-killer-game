@@ -43,7 +43,7 @@ produces:
   - "supabase/functions/validate-game-event/index.ts — Edge Function for server-side event validation"
   - "apps/web/src/stores/multiplayer.ts — connection state, opponent presence, lobby state"
 created: 2026-03-17
-last_aligned: v1.2.0
+last_aligned: 2026-03-20
 ---
 
 # Vision Piece 18: Multiplayer Sync
@@ -72,7 +72,7 @@ Position data is only shared after an in-game reveal condition fires — for exa
 
 This piece depends on all prior pieces being complete:
 
-- **Common identifiers (piece 01)**: String UUID identifiers and ISO 8601 timestamps. Error types for database, not-found, and unauthorized errors.
+- **Common identifiers (piece 01)**: String UUID identifiers and ISO 8601 timestamps. Error types via `AppError` class with static factory methods (`.database()`, `.notFound()`, `.unauthorized()`, and others) at `packages/shared/src/utils/result.ts`; `ErrorCategory` constants at `packages/shared/src/constants/errors.ts`.
 - **Supabase clients (piece 02)**: Browser-side Supabase client for Realtime subscriptions in lobby and game. Server-side client for DAL and Server Actions.
 - **User and profile (piece 02)**: Authenticated user ID and display name used in lobby presence and player slot display.
 - **Design system (piece 03)**: Standard UI components for lobby and matchmaking screens.
