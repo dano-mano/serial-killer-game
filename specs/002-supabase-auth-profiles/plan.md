@@ -76,7 +76,7 @@ supabase/
 
 packages/shared/src/
 ├── types/
-│   ├── auth.ts                        # UserProfile, AuthSession, UserProfileRow
+│   ├── auth.ts                        # UserProfile, AuthUser, UserProfileRow
 │   └── database.ts                    # Generated Supabase types (npm run db:types)
 ├── schemas/
 │   └── auth.ts                        # displayNameSchema, updateProfileSchema, loginSchema, signupSchema
@@ -105,6 +105,9 @@ apps/web/src/
 │   │   ├── layout.tsx                 # Auth layout (centered, minimal)
 │   │   ├── login/page.tsx             # Login page
 │   │   └── signup/page.tsx            # Signup page
+│   ├── profile/
+│   │   ├── page.tsx                   # Own profile edit (authenticated)
+│   │   └── [id]/page.tsx              # View any player's profile (read-only)
 │   ├── auth/callback/route.ts         # OAuth/magic-link callback handler
 │   └── actions/auth/
 │       └── update-profile.ts          # updateProfileAction (Server Action)

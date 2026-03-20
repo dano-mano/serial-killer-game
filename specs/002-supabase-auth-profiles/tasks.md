@@ -40,7 +40,7 @@
 - [ ] T010 Create safe-action client with auth middleware in apps/web/src/lib/safe-action/client.ts (actionClient base + authActionClient with .use() middleware calling getUser(), passing { ctx: { user, supabase } })
 - [ ] T011 Create DAL module in apps/web/src/dal/auth/profiles.ts ('server-only', getProfile and updateProfile returning Result<UserProfile, AppError> using AppError.notFound() and AppError.database() factory methods)
 - [ ] T012 Create Zustand auth store in apps/web/src/stores/auth.ts (userId, displayName, setAuth, clearAuth — readable by Phaser via getState() without React)
-- [ ] T013 Create AuthProvider component in apps/web/src/components/app/auth/auth-provider.tsx ('use client', creates browser client, subscribes to onAuthStateChange, exposes user/session/isLoading/signOut via context, writes userId+displayName to Zustand store, does NOT expose raw Supabase client)
+- [ ] T013 Create AuthProvider component in apps/web/src/components/app/auth/auth-provider.tsx ('use client', creates browser client, subscribes to onAuthStateChange, exposes user/session/isLoading/signOut via context, reads displayName from session.user.user_metadata.display_name and writes userId+displayName to Zustand auth store via setAuth(), clears store on sign out via clearAuth(), does NOT expose raw Supabase client)
 - [ ] T014 Wrap root layout with AuthProvider in apps/web/src/app/layout.tsx
 
 **Checkpoint**: Auth infrastructure complete — all clients, stores, DAL, and context ready for page implementation
@@ -93,11 +93,13 @@
 
 ### Implementation for US4
 
-- [ ] T024 [US4] Create update profile Server Action in apps/web/src/app/actions/auth/update-profile.ts ('use server', authActionClient.inputSchema(updateProfileSchema).action(), calls DAL updateProfile, returns updated profile)
+- [ ] T024 [US4] Create update profile Server Action in apps/web/src/app/actions/auth/update-profile.ts ('use server', authActionClient.inputSchema(updateProfileSchema).action(), calls DAL updateProfile, then calls ctx.supabase.auth.updateUser({ data: { display_name: parsedInput.displayName } }) to keep auth metadata in sync with profile DB, calls revalidatePath('/profile') per Constitution XIII, returns updated profile)
 - [ ] T025 [P] [US4] Create profile edit component in apps/web/src/components/app/auth/profile-form.tsx ('use client', displays current profile, form for displayName + avatarUrl, uses useAction hook from next-safe-action/hooks to call updateProfileAction, validates with updateProfileSchema)
-- [ ] T026 [US4] Create profile page in apps/web/src/app/(auth)/profile/page.tsx (server component, calls getProfile from DAL, renders ProfileForm with current data, shows not-found message if profile missing)
+- [ ] T026 [US4] Create own profile page in apps/web/src/app/profile/page.tsx (server component, calls getProfile with authenticated user's ID from DAL, renders ProfileForm with current data, shows not-found message if profile missing)
 
-**Checkpoint**: Players can view and update their own profile. RLS prevents cross-user modification.
+- [ ] T027 [P] [US4] Create read-only profile view page in apps/web/src/app/profile/[id]/page.tsx (server component, calls getProfile with URL param userId from DAL, displays displayName + avatar read-only, shows not-found for invalid IDs — satisfies FR-010: any authenticated player can view any profile)
+
+**Checkpoint**: Players can view and update their own profile, and view other players' profiles read-only. RLS prevents cross-user modification.
 
 ---
 
@@ -109,8 +111,8 @@
 
 ### Implementation for US5
 
-- [ ] T027 [US5] Add forgot password flow to login page: create password reset form in apps/web/src/components/app/auth/forgot-password-form.tsx ('use client', email field, calls supabase.auth.resetPasswordForEmail, shows confirmation message regardless of email existence — prevents info leakage)
-- [ ] T028 [US5] Integrate forgot password form into login page in apps/web/src/app/(auth)/login/page.tsx (show/hide toggle or modal for forgot password form, link from login form)
+- [ ] T028 [US5] Add forgot password flow to login page: create password reset form in apps/web/src/components/app/auth/forgot-password-form.tsx ('use client', email field, calls supabase.auth.resetPasswordForEmail, shows confirmation message regardless of email existence — prevents info leakage)
+- [ ] T029 [US5] Integrate forgot password form into login page in apps/web/src/app/(auth)/login/page.tsx (show/hide toggle or modal for forgot password form, link from login form)
 
 **Checkpoint**: Password recovery flow functional. Email delivery depends on Supabase project email settings.
 
@@ -124,8 +126,7 @@
 
 ### Implementation for US6
 
-- [ ] T029 [US6] Verify AuthProvider writes to Zustand store on auth state change — ensure auth-provider.tsx fetches profile via getProfile DAL and writes displayName to auth store (may require updating T013 implementation if not already included)
-- [ ] T030 [P] [US6] Create AuthProvider component test in apps/web/tests/components/app/auth/auth-provider.test.tsx (renders children, provides auth context with mock Supabase, calls signOut correctly, writes to Zustand store on auth state change)
+- [ ] T030 [P] [US6] Create AuthProvider component test in apps/web/tests/components/app/auth/auth-provider.test.tsx (renders children, provides auth context with mock Supabase, calls signOut correctly, verifies setAuth() called with userId+displayName on auth state change, verifies clearAuth() called on sign out)
 
 **Checkpoint**: Game engine can read player identity from Zustand store without React dependency.
 
@@ -139,7 +140,7 @@
 
 ### Implementation for US7
 
-- [ ] T031 [US7] Add sign-out UI element — create a sign-out button/link accessible from the app layout or navigation that calls signOut() from AuthProvider context, ensures Zustand auth store is cleared, and redirects to `/`
+- [ ] T031 [US7] Add sign-out UI element — create a sign-out button/link accessible from the app layout or navigation that calls signOut() from AuthProvider context (which clears Zustand auth store via clearAuth()), and redirects to `/`
 
 **Checkpoint**: Complete auth lifecycle: signup → login → use app → sign out.
 
@@ -151,7 +152,8 @@
 
 - [ ] T032 [P] Create safe-action client test in apps/web/tests/lib/safe-action/client.test.ts (test authActionClient middleware rejects unauthenticated requests, passes user in ctx)
 - [ ] T033 [P] Create Supabase server client test in apps/web/tests/lib/supabase/server.test.ts (test factory creates client with correct cookie handling)
-- [ ] T034 Run full test suite: npm test (via Turborepo) — verify all new and existing tests pass, type-check clean, lint clean
+- [ ] T034 [P] Create E2E auth tests in apps/web/tests/e2e/auth.test.ts (Playwright: signup with valid credentials, login with valid credentials, protected route redirects to login, sign out clears session — requires running Supabase instance)
+- [ ] T035 Run full test suite: npm test (via Turborepo) — verify all new and existing tests pass, type-check clean, lint clean
 
 ---
 
@@ -159,8 +161,8 @@
 
 **Purpose**: Final verification and cleanup
 
-- [ ] T035 Update apps/web/.env.example with any new environment variables or documentation notes for auth setup
-- [ ] T036 Verify constitution compliance: no barrel files, no direct process.env, no ephemeral references, server-only guards on all server modules, 'use client' on all client components
+- [ ] T036 Update apps/web/.env.example with any new environment variables or documentation notes for auth setup
+- [ ] T037 Verify constitution compliance: no barrel files, no direct process.env, no ephemeral references, server-only guards on all server modules, 'use client' on all client components, revalidatePath after all mutations
 
 ---
 
@@ -202,7 +204,8 @@
 - T015–T016 (tests for US1+US2) — different packages, fully parallel
 - T017–T019 (auth layout, signup form, login form) — different files, parallel
 - T025 (profile form) parallel with other story phases
-- T032–T033 (test tasks) parallel with each other
+- T027 (profile view page) parallel with other US4 tasks
+- T032–T034 (test tasks) parallel with each other
 - Phases 3, 4, 5, 6, 7 can all start after Phase 2 (except US5 needs US2's login page)
 
 ---

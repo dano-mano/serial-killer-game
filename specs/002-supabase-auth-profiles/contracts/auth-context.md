@@ -22,8 +22,8 @@ interface AuthContextValue {
 
 1. Creates a Supabase browser client on mount
 2. Subscribes to `onAuthStateChange` events
-3. On auth state change: updates `user` and `session`, writes `userId` + `displayName` to Zustand auth store
-4. On sign out: clears Zustand auth store, redirects to `/`
+3. On auth state change: updates `user` and `session`, reads `displayName` from `session.user.user_metadata.display_name`, writes `userId` + `displayName` to Zustand auth store via `setAuth()`
+4. On sign out: clears Zustand auth store via `clearAuth()`, redirects to `/`
 5. Does NOT expose the raw Supabase client — only typed convenience values
 
 ### Zustand Auth Store Bridge
@@ -39,9 +39,10 @@ interface AuthStore {
 }
 ```
 
-- Written by AuthProvider on auth state changes
+- Written by AuthProvider on auth state changes (displayName sourced from `session.user.user_metadata.display_name`)
 - Read by Phaser game engine via `useAuthStore.getState()` (no React import needed)
 - Cleared on sign out
+- Kept in sync: `updateProfileAction` updates both `user_profiles` table AND auth metadata via `supabase.auth.updateUser({ data: { display_name } })`, so the next `onAuthStateChange` event picks up the new displayName
 
 ## DAL Contract
 

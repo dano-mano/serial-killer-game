@@ -7,6 +7,7 @@
 **File**: `apps/web/src/app/actions/auth/update-profile.ts`
 **Auth**: Required (via `authActionClient` middleware)
 **Validation**: `updateProfileSchema` via `.inputSchema()`
+**Side effects**: Updates `user_profiles` table via DAL, syncs `display_name` to auth metadata via `supabase.auth.updateUser()`, calls `revalidatePath('/profile')` per Constitution XIII
 
 ### Input
 

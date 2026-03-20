@@ -160,20 +160,21 @@ An authenticated player can sign out of their account. After signing out, they a
 - **FR-006**: System MUST maintain persistent sessions across page refreshes and browser tabs
 - **FR-007**: System MUST redirect unauthenticated visitors away from protected areas (game pages, profile pages) to the login page, preserving the originally requested URL so the player can be returned there after login (fallback: `/game/select-role`)
 - **FR-008**: System MUST allow public access to landing, login, signup, and auth callback pages without authentication
-- **FR-022**: System MUST redirect authenticated players away from login and signup pages to `/game/select-role`
-- **FR-009**: System MUST allow any authenticated player to view any other player's profile (display name and avatar)
-- **FR-010**: System MUST restrict profile editing so players can only modify their own profile
-- **FR-011**: System MUST allow authenticated players to update their display name (subject to format validation)
-- **FR-012**: System MUST allow authenticated players to set or clear an optional avatar URL (validated as a proper URL if provided)
-- **FR-013**: System MUST provide a "Forgot password" flow that sends a password reset email
-- **FR-014**: System MUST NOT reveal whether an email address is registered when login fails or password reset is requested (prevent information leakage)
-- **FR-015**: System MUST handle email verification requirements gracefully, showing clear guidance when a player's email is not yet verified
-- **FR-016**: System MUST handle the auth callback route for email verification and password reset links, redirecting on success or showing errors on failure
-- **FR-017**: System MUST make the authenticated player's ID and display name available to the game engine without requiring the game engine to depend on the authentication system directly
-- **FR-018**: System MUST provide a sign-out function that clears the session and redirects to the landing page
-- **FR-019**: System MUST refresh sessions automatically to prevent expiry during long play sessions
-- **FR-020**: System MUST cascade profile deletion when a user account is deleted
-- **FR-021**: System MUST return a clear "not found" error if a player's profile is missing (rather than crashing), to handle edge cases where automatic profile creation may have failed
+- **FR-009**: System MUST redirect authenticated players away from login and signup pages to `/game/select-role`
+- **FR-010**: System MUST allow any authenticated player to view any other player's profile (display name and avatar)
+- **FR-011**: System MUST restrict profile editing so players can only modify their own profile
+- **FR-012**: System MUST allow authenticated players to update their display name (subject to format validation)
+- **FR-013**: System MUST allow authenticated players to set or clear an optional avatar URL (validated as a proper URL if provided)
+- **FR-014**: System MUST provide a "Forgot password" flow that sends a password reset email
+- **FR-015**: System MUST NOT reveal whether an email address is registered when login fails or password reset is requested (prevent information leakage)
+- **FR-016**: System MUST handle email verification requirements gracefully, showing clear guidance when a player's email is not yet verified
+- **FR-017**: System MUST handle the auth callback route for email verification and password reset links, redirecting on success or showing errors on failure
+- **FR-018**: System MUST make the authenticated player's ID and display name available to the game engine without requiring the game engine to depend on the authentication system directly
+- **FR-019**: System MUST provide a sign-out function that clears the session and redirects to the landing page
+- **FR-020**: System MUST refresh sessions automatically to prevent expiry during long play sessions
+- **FR-021**: System MUST cascade profile deletion when a user account is deleted
+- **FR-022**: System MUST return a clear "not found" error if a player's profile is missing (rather than crashing), to handle edge cases where automatic profile creation may have failed
+- **FR-023**: System MUST keep the player's display name in sync between the profile database and the authentication metadata so the game engine always has the current display name
 
 ### Key Entities
 
