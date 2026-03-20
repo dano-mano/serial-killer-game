@@ -5,6 +5,13 @@
 **Status**: Draft
 **Input**: User description: "Integrate Supabase Auth with email/password login and signup. Create the user profile system with database table, RLS policies, Data Access Layer, and Server Action for profile mutations."
 
+## Clarifications
+
+### Session 2026-03-20
+
+- Q: What happens when an already-authenticated player navigates to `/login` or `/signup`? → A: Redirect authenticated players away from auth pages to `/game/select-role`
+- Q: After route protection redirects to login, where does the player land post-login? → A: Redirect to the originally requested URL after login (fallback: `/game/select-role`)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - New Player Registration (Priority: P1)
@@ -57,10 +64,11 @@ Unauthenticated visitors must not be able to access game or profile areas. When 
 
 **Acceptance Scenarios**:
 
-1. **Given** an unauthenticated visitor, **When** they navigate to any game page, **Then** they are redirected to the login page
-2. **Given** an unauthenticated visitor, **When** they navigate to any profile page, **Then** they are redirected to the login page
+1. **Given** an unauthenticated visitor, **When** they navigate to any game page, **Then** they are redirected to the login page with the original URL preserved
+2. **Given** an unauthenticated visitor, **When** they navigate to any profile page, **Then** they are redirected to the login page with the original URL preserved
 3. **Given** an authenticated player, **When** they navigate to a game page, **Then** they can access it normally
 4. **Given** an unauthenticated visitor, **When** they navigate to the landing page, login, or signup pages, **Then** they can access them normally (public routes)
+5. **Given** an authenticated player, **When** they navigate to the login or signup page, **Then** they are redirected to `/game/select-role`
 
 ---
 
@@ -150,8 +158,9 @@ An authenticated player can sign out of their account. After signing out, they a
 - **FR-004**: System MUST automatically create a player profile upon successful registration with the provided display name (defaulting to "Player" if none provided)
 - **FR-005**: System MUST allow registered players to log in with email and password
 - **FR-006**: System MUST maintain persistent sessions across page refreshes and browser tabs
-- **FR-007**: System MUST redirect unauthenticated visitors away from protected areas (game pages, profile pages) to the login page
+- **FR-007**: System MUST redirect unauthenticated visitors away from protected areas (game pages, profile pages) to the login page, preserving the originally requested URL so the player can be returned there after login (fallback: `/game/select-role`)
 - **FR-008**: System MUST allow public access to landing, login, signup, and auth callback pages without authentication
+- **FR-022**: System MUST redirect authenticated players away from login and signup pages to `/game/select-role`
 - **FR-009**: System MUST allow any authenticated player to view any other player's profile (display name and avatar)
 - **FR-010**: System MUST restrict profile editing so players can only modify their own profile
 - **FR-011**: System MUST allow authenticated players to update their display name (subject to format validation)
