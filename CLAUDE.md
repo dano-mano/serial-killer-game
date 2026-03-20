@@ -165,6 +165,8 @@ Speckit commands are at `.claude/commands/speckit.*.md` and skills at `.claude/s
 ## Active Technologies
 - TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.2.0, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest) (001-project-scaffold)
 - Supabase Cloud (PostgreSQL) -- no database tables in scaffold, connection config only (001-project-scaffold)
+- TypeScript 5.9.3, Node.js 24.14.0 LTS + Next.js 16.2.0, React 19.2.4, @supabase/ssr 0.9.0, @supabase/supabase-js 2.99.3, next-safe-action 8.1.8, neverthrow 8.2.0, Zod 4.3.6, Zustand 5.0.12 (002-supabase-auth-profiles)
+- Supabase Cloud (PostgreSQL) — `user_profiles` table with RLS (002-supabase-auth-profiles)
 
 ## Recent Changes
 - 001-project-scaffold: Added TypeScript 5.9.3 (staying on 5.9.x until 6.0 stability confirmed) + Next.js 16.2.0, React 19.2.4, Phaser 3.90.0, Tailwind CSS 4.2.1, Zustand (latest), Pino 10.x, neverthrow (latest), rate-limiter-flexible 10.0.1, next-safe-action (latest), @sentry/nextjs (latest), Zod (latest)

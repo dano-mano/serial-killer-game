@@ -8,17 +8,20 @@ status: pending
 depends_on:
   - "01: Turborepo structure, packages/shared/src/types/, packages/shared/src/schemas/, apps/web/src/config/env.ts, apps/web/src/lib/ singleton pattern, neverthrow Result utilities, Pino logger"
 produces:
-  - "Supabase browser and server client singletons in apps/web/src/lib/supabase/"
+  - "Supabase browser and server client factories in apps/web/src/lib/supabase/ (per-request, not singletons)"
+  - "Supabase proxy session refresh utility apps/web/src/lib/supabase/proxy.ts"
+  - "Safe-action client with auth middleware apps/web/src/lib/safe-action/client.ts"
   - "Database migration supabase/migrations/001_user_profiles.sql with RLS"
-  - "Shared types packages/shared/src/types/auth.ts (User, UserProfile, AuthSession)"
-  - "Shared schemas packages/shared/src/schemas/auth.ts (Zod validation)"
+  - "Shared types packages/shared/src/types/auth.ts (UserProfile extends BaseDto, AuthUser, UserProfileRow)"
+  - "Shared schemas packages/shared/src/schemas/auth.ts (displayName, updateProfile, login, signup)"
   - "Generated database types packages/shared/src/types/database.ts"
-  - "DAL module apps/web/src/dal/auth/profiles.ts (getProfile, updateProfile) returning Result<T,E>"
-  - "Server Action apps/web/src/app/actions/auth/update-profile.ts (next-safe-action)"
-  - "Auth pages: login/page.tsx, signup/page.tsx, callback/route.ts"
-  - "Proxy session refresh and protected route logic in apps/web/src/proxy.ts"
+  - "DAL module apps/web/src/dal/auth/profiles.ts (getProfile, updateProfile) returning Result<T, AppError>"
+  - "Server Action apps/web/src/app/actions/auth/update-profile.ts (authActionClient with .use() middleware)"
+  - "Auth pages: login/page.tsx, signup/page.tsx, auth/callback/route.ts"
+  - "Proxy session refresh, route protection, and auth redirect logic in apps/web/src/proxy.ts"
   - "Auth config apps/web/src/config/auth/supabase.ts"
   - "Auth provider component apps/web/src/components/app/auth/auth-provider.tsx"
+  - "Zustand auth store apps/web/src/stores/auth.ts (game engine bridge)"
 created: 2026-03-17
 last_aligned: 2026-03-20
 ---
@@ -125,6 +128,8 @@ Auth state must flow into the Phaser game world without Phaser importing any Rea
 - **Session expiry during gameplay**: The proxy refreshes sessions on page loads. For long in-game sessions, the Supabase SSR library handles background token refresh automatically.
 - **Avatar URL**: Optional, nullable, no file upload in this piece. File upload to blob storage is a future enhancement.
 - **Email verification**: Supabase may require email verification before login depending on project settings. The app must handle the `email_not_confirmed` error gracefully with a friendly, actionable message.
+- **Authenticated users on auth pages**: If an already-authenticated player navigates to `/login` or `/signup`, redirect them to `/game/select-role`.
+- **Post-login redirect**: When route protection redirects an unauthenticated visitor to `/login`, preserve the originally requested URL. After login, redirect to that URL (fallback: `/game/select-role`).
 
 ----
 
@@ -183,20 +188,18 @@ create policy "profiles_update_own"
 ### Shared Types — `packages/shared/src/types/auth.ts`
 
 ```typescript
-import type { ID, Timestamp } from './common'
+import type { BaseDto } from './common'
 
-export interface UserProfile {
-  id: ID
+// Application DTO — camelCase, extends BaseDto
+export interface UserProfile extends BaseDto {
   displayName: string
   avatarUrl: string | null
-  createdAt: Timestamp
-  updatedAt: Timestamp
 }
 
-export interface AuthSession {
-  userId: ID
+// Auth state for React context and Zustand store
+export interface AuthUser {
+  userId: string
   email: string
-  profile: UserProfile | null
 }
 
 // Raw database row shape (snake_case, matches Supabase generated types)
@@ -218,16 +221,33 @@ export const displayNameSchema = z
   .string()
   .min(2, 'Display name must be at least 2 characters')
   .max(32, 'Display name must be at most 32 characters')
-  .regex(/^[a-zA-Z0-9_\- ]+$/, 'Display name may only contain letters, numbers, spaces, hyphens, and underscores')
+  .regex(/^[a-zA-Z0-9 _-]+$/, 'Only letters, numbers, spaces, hyphens, and underscores')
 
-export const avatarUrlSchema = z.string().url().nullable().optional()
+export const avatarUrlSchema = z.url().nullable().optional()  // Zod v4: z.url() not z.string().url()
 
 export const updateProfileSchema = z.object({
   displayName: displayNameSchema,
   avatarUrl: avatarUrlSchema,
 })
 
+export const loginSchema = z.object({
+  email: z.email('Please enter a valid email address'),  // Zod v4: z.email() not z.string().email()
+  password: z.string().min(1, 'Password is required'),
+})
+
+export const signupSchema = z.object({
+  email: z.email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+  displayName: displayNameSchema.optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+})
+
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
+export type LoginInput = z.infer<typeof loginSchema>
+export type SignupInput = z.infer<typeof signupSchema>
 ```
 
 ### Generated Database Types
@@ -284,9 +304,14 @@ export async function createSupabaseServerClient() {
       cookies: {
         getAll() { return cookieStore.getAll() },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // setAll called from Server Component — safe to ignore.
+            // Server Components cannot set cookies; the proxy handles refresh.
+          }
         },
       },
     }
@@ -300,13 +325,13 @@ Note: These are factory functions (not singletons) because Next.js Server Compon
 
 ```typescript
 import 'server-only'
-import { ok, err } from 'neverthrow'
-import type { Result } from 'neverthrow'
+import { ok } from '@repo/shared/utils/result'
+import type { Result } from '@repo/shared/utils/result'
+import { AppError } from '@repo/shared/utils/result'
 import { createSupabaseServerClient } from '../../lib/supabase/server'
 import { logger } from '../../lib/logger/pino'
-import type { UserProfile } from '@repo/shared/types/auth'
+import type { UserProfile, UserProfileRow } from '@repo/shared/types/auth'
 import type { UpdateProfileInput } from '@repo/shared/schemas/auth'
-import type { DatabaseError, NotFoundError } from '@repo/shared/utils/result'
 
 function rowToDto(row: UserProfileRow): UserProfile {
   return {
@@ -318,7 +343,7 @@ function rowToDto(row: UserProfileRow): UserProfile {
   }
 }
 
-export async function getProfile(userId: string): Promise<Result<UserProfile, NotFoundError | DatabaseError>> {
+export async function getProfile(userId: string): Promise<Result<UserProfile, AppError>> {
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase
     .from('user_profiles')
@@ -328,10 +353,10 @@ export async function getProfile(userId: string): Promise<Result<UserProfile, No
 
   if (error) {
     if (error.code === 'PGRST116') {
-      return err({ type: 'NOT_FOUND', message: `Profile not found for user ${userId}` })
+      return AppError.notFound(`Profile not found for user ${userId}`)
     }
     logger.error({ userId, error }, 'Failed to fetch user profile')
-    return err({ type: 'DATABASE_ERROR', message: error.message })
+    return AppError.database(error.message, error)
   }
   return ok(rowToDto(data))
 }
@@ -339,7 +364,7 @@ export async function getProfile(userId: string): Promise<Result<UserProfile, No
 export async function updateProfile(
   userId: string,
   input: UpdateProfileInput
-): Promise<Result<UserProfile, DatabaseError>> {
+): Promise<Result<UserProfile, AppError>> {
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase
     .from('user_profiles')
@@ -354,7 +379,7 @@ export async function updateProfile(
 
   if (error) {
     logger.error({ userId, error }, 'Failed to update user profile')
-    return err({ type: 'DATABASE_ERROR', message: error.message })
+    return AppError.database(error.message, error)
   }
   return ok(rowToDto(data))
 }
@@ -364,25 +389,21 @@ export async function updateProfile(
 
 ```typescript
 'use server'
-import { createSafeActionClient } from 'next-safe-action'
 import { updateProfileSchema } from '@repo/shared/schemas/auth'
 import { updateProfile } from '../../../dal/auth/profiles'
-import { createSupabaseServerClient } from '../../../lib/supabase/server'
+import { authActionClient } from '../../../lib/safe-action/client'
 
-const actionClient = createSafeActionClient()
-
-export const updateProfileAction = actionClient
-  .schema(updateProfileSchema)
-  .action(async ({ parsedInput }) => {
-    const supabase = await createSupabaseServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
-    const result = await updateProfile(user.id, parsedInput)
+export const updateProfileAction = authActionClient
+  .inputSchema(updateProfileSchema)       // .inputSchema() not deprecated .schema()
+  .action(async ({ parsedInput, ctx }) => {
+    // ctx.user provided by authActionClient .use() middleware (already called getUser())
+    const result = await updateProfile(ctx.user.id, parsedInput)
     if (result.isErr()) throw new Error(result.error.message)
     return result.value
   })
 ```
+
+> **Note**: `authActionClient` is defined in `apps/web/src/lib/safe-action/client.ts` with a `.use()` middleware that calls `getUser()` and passes `{ ctx: { user, supabase } }` to all actions. This centralizes auth checks so individual actions don't repeat the pattern.
 
 ### Auth Provider — `apps/web/src/components/app/auth/auth-provider.tsx`
 
@@ -400,27 +421,33 @@ Wrap `apps/web/src/app/layout.tsx` with this provider.
 
 | Library | Version | Notes |
 |---------|---------|-------|
-| @supabase/ssr | latest | Cookie-based auth for Next.js App Router |
-| @supabase/supabase-js | latest | Core Supabase client (peer dep of @supabase/ssr) |
-| next-safe-action | latest | Server Action validation with Zod |
-| neverthrow | latest | Result<T,E> pattern (from project scaffold) |
-| zod | latest | Schema validation |
+| @supabase/ssr | 0.9.0 | Cookie-based auth for Next.js App Router |
+| @supabase/supabase-js | 2.99.3 | Core Supabase client (peer dep ^2.97.0 of @supabase/ssr) |
+| next-safe-action | 8.1.8 | Server Action validation with Zod (already installed) |
+| neverthrow | 8.2.0 | Result<T,E> pattern (from project scaffold) |
+| zod | 4.3.6 | Schema validation (use v4 top-level validators: z.url(), z.email()) |
 
 ### Implementation Order
 
-1. Install `@supabase/ssr` and `@supabase/supabase-js`
-2. Add env vars to centralized config (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
-3. Create auth config module (`apps/web/src/config/auth/supabase.ts`)
-4. Create Supabase browser client factory (`apps/web/src/lib/supabase/client.ts`)
-5. Create Supabase server client factory (`apps/web/src/lib/supabase/server.ts`)
-6. Write and run database migration (`supabase/migrations/001_user_profiles.sql`)
-7. Generate TypeScript types (`npm run db:types`)
-8. Create DAL module (`apps/web/src/dal/auth/profiles.ts`)
-9. Create Server Action (`apps/web/src/app/actions/auth/update-profile.ts`)
-10. Update proxy.ts for session refresh and route protection
-11. Create AuthProvider component
-12. Create auth pages (login, signup, callback)
-13. Write tests
+1. Install `@supabase/ssr@0.9.0` and `@supabase/supabase-js@2.99.3` in `apps/web`
+2. Add `@repo/shared` package exports for new auth types/schemas
+3. Create shared types (`packages/shared/src/types/auth.ts` — UserProfile extends BaseDto, AuthUser)
+4. Create shared schemas (`packages/shared/src/schemas/auth.ts` — Zod v4 validators)
+5. Create auth config module (`apps/web/src/config/auth/supabase.ts`)
+6. Create Supabase browser client factory (`apps/web/src/lib/supabase/client.ts`)
+7. Create Supabase server client factory (`apps/web/src/lib/supabase/server.ts` — setAll with try/catch)
+8. Create Supabase proxy utility (`apps/web/src/lib/supabase/proxy.ts`)
+9. Create safe-action client with auth middleware (`apps/web/src/lib/safe-action/client.ts`)
+10. Write database migration (`supabase/migrations/001_user_profiles.sql`)
+11. Create DAL module (`apps/web/src/dal/auth/profiles.ts` — AppError factory pattern)
+12. Create Server Action (`apps/web/src/app/actions/auth/update-profile.ts` — authActionClient + .inputSchema())
+13. Create Zustand auth store (`apps/web/src/stores/auth.ts` — game engine bridge)
+14. Create AuthProvider component (`apps/web/src/components/app/auth/auth-provider.tsx`)
+15. Create login/signup form components
+16. Create auth pages (login, signup, auth layout, auth callback)
+17. Extend proxy.ts (session refresh + route protection + auth redirect for logged-in users)
+18. Wrap root layout with AuthProvider
+19. Write tests
 
 ### Testing Strategy
 
@@ -474,19 +501,24 @@ Wrap `apps/web/src/app/layout.tsx` with this provider.
 When this piece is fully implemented, it should produce:
 
 - `supabase/migrations/001_user_profiles.sql` — table definition, trigger, RLS policies
-- `packages/shared/src/types/auth.ts` — `UserProfile`, `AuthSession`, `UserProfileRow`
+- `packages/shared/src/types/auth.ts` — `UserProfile` (extends BaseDto), `AuthUser`, `UserProfileRow`
 - `packages/shared/src/types/database.ts` — generated Supabase TypeScript types
-- `packages/shared/src/schemas/auth.ts` — `displayNameSchema`, `updateProfileSchema`
+- `packages/shared/src/schemas/auth.ts` — `displayNameSchema`, `updateProfileSchema`, `loginSchema`, `signupSchema`
 - `apps/web/src/config/auth/supabase.ts` — reads URL + anon key from env config
-- `apps/web/src/lib/supabase/client.ts` — browser client factory
-- `apps/web/src/lib/supabase/server.ts` — server client factory
-- `apps/web/src/dal/auth/profiles.ts` — `getProfile`, `updateProfile`
-- `apps/web/src/app/actions/auth/update-profile.ts` — safe action
-- `apps/web/src/proxy.ts` — updated with session refresh + route protection
-- `apps/web/src/components/app/auth/auth-provider.tsx` — auth context
+- `apps/web/src/lib/supabase/client.ts` — browser client factory (`'use client'`)
+- `apps/web/src/lib/supabase/server.ts` — server client factory (`'server-only'`, setAll with try/catch)
+- `apps/web/src/lib/supabase/proxy.ts` — session refresh utility for proxy.ts
+- `apps/web/src/lib/safe-action/client.ts` — `actionClient` + `authActionClient` with `.use()` auth middleware
+- `apps/web/src/dal/auth/profiles.ts` — `getProfile`, `updateProfile` (AppError factory pattern)
+- `apps/web/src/app/actions/auth/update-profile.ts` — uses `authActionClient.inputSchema()`
+- `apps/web/src/stores/auth.ts` — Zustand auth store (game engine bridge)
+- `apps/web/src/proxy.ts` — extended with session refresh + route protection + auth page redirect
+- `apps/web/src/components/app/auth/auth-provider.tsx` — auth context + Zustand bridge
+- `apps/web/src/components/app/auth/login-form.tsx` — login form component
+- `apps/web/src/components/app/auth/signup-form.tsx` — signup form component
 - `apps/web/src/app/(auth)/login/page.tsx`
 - `apps/web/src/app/(auth)/signup/page.tsx`
-- `apps/web/src/app/(auth)/callback/route.ts`
+- `apps/web/src/app/auth/callback/route.ts`
 
 ### Dependencies Consumed (from Project Scaffold)
 
@@ -505,10 +537,12 @@ All of the following are produced by piece 01 and must be in place before this p
 
 Downstream pieces consume these outputs:
 
-- **`AuthSession`** and **`UserProfile`** types — piece 07 (player-and-roles) reads user profile to populate player display name and avatar
+- **`AuthUser`** and **`UserProfile`** types — piece 07 (player-and-roles) reads user profile to populate player display name and avatar
 - **`createSupabaseServerClient`** — every subsequent piece with a DAL imports this factory
 - **`createSupabaseBrowserClient`** — any client component needing auth state imports this
+- **`authActionClient`** — every protected Server Action uses this pre-authenticated action client
 - **`AuthProvider`** — wraps the app layout; downstream pieces can access auth context
+- **Zustand auth store** (`stores/auth.ts`) — game engine reads `userId`/`displayName` without importing React
 - **`user_profiles` table** — piece 16 (progression-infrastructure) joins against this table for player stats
 - **`getProfile` DAL function** — piece 07 calls this to load player profile before a run
 - **Protected route logic in `proxy.ts`** — extended by later pieces as new protected routes are added
@@ -532,3 +566,17 @@ This piece runs in parallel with design-system (piece 03) and game-engine-bootst
 The `proxy.ts` established in piece 01 is a stub. This piece extends it with real session refresh logic. Later pieces do NOT need to modify `proxy.ts` unless they introduce new route protection requirements.
 
 The `display_name` field is intentionally minimal — no avatar file upload, no social features. Persistent progression (piece 16) will extend the profile concept with game stats.
+
+### Planning Adjustments (2026-03-20)
+
+The following adjustments were discovered during `/speckit.plan` and `/speckit.clarify` and have been backfilled into the prompts above:
+
+- **Error handling**: DAL uses `AppError.notFound()` / `AppError.database()` factory methods (project pattern), not raw `err({ type })` objects
+- **next-safe-action API**: `.inputSchema()` replaces deprecated `.schema()`. Centralized `authActionClient` with `.use()` middleware replaces inline `getUser()` in each action.
+- **Zod v4 validators**: `z.url()`, `z.email()` (not `z.string().url()`, `z.string().email()`)
+- **UserProfile extends BaseDto**: Aligns with existing `packages/shared/src/types/common.ts` pattern
+- **AuthSession renamed to AuthUser**: Simpler interface without embedded profile (profile fetched separately via DAL)
+- **Server client setAll try/catch**: Required because Server Components cannot set cookies; proxy handles refresh
+- **Pinned library versions**: @supabase/ssr 0.9.0, @supabase/supabase-js 2.99.3 (not "latest")
+- **New files**: `lib/supabase/proxy.ts` (session refresh utility), `lib/safe-action/client.ts` (centralized action client), `stores/auth.ts` (Zustand game engine bridge), `login-form.tsx`, `signup-form.tsx`
+- **Spec clarifications**: Authenticated users on auth pages redirect to `/game/select-role`; post-login redirect preserves originally requested URL
