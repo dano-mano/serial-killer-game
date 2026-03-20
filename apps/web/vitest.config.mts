@@ -1,11 +1,16 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { sharedConfig } from '../../vitest.shared.mts'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [react(), tsconfigPaths()],
+  plugins: [react()],
+  resolve: {
+    tsconfigPaths: true,
+    alias: {
+      'server-only': new URL('./vitest.server-only-stub.ts', import.meta.url).pathname,
+    },
+  },
   test: {
     ...sharedConfig.test,
     environment: 'jsdom',

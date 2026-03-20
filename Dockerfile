@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: deps — install all node_modules
 # =============================================================================
-FROM node:24-alpine AS deps
+FROM node:24.14.0-alpine AS deps
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN npm ci
 # =============================================================================
 # Stage 2: builder — compile the Next.js app
 # =============================================================================
-FROM node:24-alpine AS builder
+FROM node:24.14.0-alpine AS builder
 
 WORKDIR /app
 
@@ -50,7 +50,7 @@ RUN npx turbo run build --filter=web
 # =============================================================================
 # Stage 3: runner — minimal production image
 # =============================================================================
-FROM node:24-alpine AS runner
+FROM node:24.14.0-alpine AS runner
 
 WORKDIR /app
 

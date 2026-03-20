@@ -35,7 +35,6 @@
     "eslint": "latest",
     "playwright": "1.58.2",
     "typescript": "5.9.3",
-    "vite-tsconfig-paths": "latest",
     "vitest": "4.1.0"
   }
 }

@@ -200,7 +200,7 @@ const config = [
   // proxy.ts cannot import from config/env.ts (circular dependency risk and
   // startup-time execution order). NODE_ENV is a well-known runtime constant,
   // not an application secret. This is the one allowed process.env access
-  // outside the config/ directory, as documented in T048.
+  // outside the config/ directory.
   {
     files: ['**/proxy.ts'],
     rules: {
